@@ -450,9 +450,9 @@ The annotation plugin has been sponsored by a fond Italian TED volunteer transcr
 
 ## Books
 
-Currently writing: [Mastering Tone.js](https://leanpub.com/masteringtonejs). Get notified by Leanpub when I publish.
+Currently writing: [Mastering Tone.js](https://leanpub.com/masteringtonejs). 20% Complete.
 
-<img src="https://naomiaro.github.io/img/masteringtonejs.png" title="Mastering Tone.js Cover" width="240">
+<img src="https://masteringtonejs.com/title_page.png" title="Mastering Tone.js Cover" width="360">
 
 ## License
 
