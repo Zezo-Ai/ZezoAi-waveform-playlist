@@ -69,6 +69,18 @@ const config: Config = {
   tagline: 'Multitrack Web Audio editor and player with canvas waveform visualizations',
   favicon: 'img/favicon.ico',
 
+  // GoatCounter analytics
+  headTags: [
+    {
+      tagName: 'script',
+      attributes: {
+        'data-goatcounter': 'https://waveformplaylist.goatcounter.com/count',
+        async: 'true',
+        src: '//gc.zgo.at/count.js',
+      },
+    },
+  ],
+
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
   future: {
     v4: true, // Improve compatibility with the upcoming Docusaurus v4
