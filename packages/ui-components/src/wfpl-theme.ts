@@ -213,7 +213,7 @@ export const darkTheme: WaveformPlaylistTheme = {
   timeColor: '#d8c0a8', // Warm amber for timescale text
   timescaleBackgroundColor: '#1a1612', // Dark warm brown background
   playheadColor: '#3a8838', // Darker Ampelmännchen green playhead
-  selectionColor: 'rgba(224, 160, 100, 0.5)', // Warm amber selection
+  selectionColor: 'rgba(60, 140, 58, 0.6)', // Darker Ampelmännchen green selection - visible on dark backgrounds
   clipHeaderBackgroundColor: 'rgba(20, 16, 12, 0.85)', // Dark background for clip headers
   clipHeaderBorderColor: 'rgba(200, 160, 120, 0.25)',
   clipHeaderTextColor: '#d8c0a8', // Warm amber text

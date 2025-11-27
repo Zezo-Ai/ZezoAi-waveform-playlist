@@ -80,5 +80,5 @@ export const AnimatedPlayhead: React.FC<AnimatedPlayheadProps> = ({
     }
   });
 
-  return <PlayheadLine ref={playheadRef} $color={color} $width={progressBarWidth} />;
+  return <PlayheadLine ref={playheadRef} $color={color} $width={progressBarWidth} data-playhead />;
 };

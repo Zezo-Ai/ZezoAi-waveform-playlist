@@ -281,6 +281,28 @@ test.describe('Multi-Clip Example', () => {
     });
   });
 
+  test.describe('Selection', () => {
+    test('clip z-index is lower than playhead z-index', async ({ page }) => {
+      // Selection should render above clips but below playhead
+      // We verify clips have lower z-index than playhead as a proxy for correct layering
+      const clipContainer = page.locator('[data-clip-container]').first();
+      const playhead = page.locator('[data-playhead]');
+
+      const clipZIndex = await clipContainer.evaluate((el) => {
+        return window.getComputedStyle(el).zIndex;
+      });
+      const playheadZIndex = await playhead.evaluate((el) => {
+        return window.getComputedStyle(el).zIndex;
+      });
+
+      const clipZ = parseInt(clipZIndex) || 0;
+      const playheadZ = parseInt(playheadZIndex) || 0;
+
+      // Clips should have lower z-index than playhead (and by extension, selection)
+      expect(clipZ).toBeLessThan(playheadZ);
+    });
+  });
+
   test.describe('Drag Interactions', () => {
     test('dragging clip header moves the clip', async ({ page }) => {
       // Get the first clip header (use data-clip-id selector)

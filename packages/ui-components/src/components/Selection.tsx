@@ -17,7 +17,7 @@ const SelectionOverlay = styled.div.attrs<SelectionOverlayProps>((props) => ({
   top: 0;
   background: ${(props) => props.$color};
   height: 100%;
-  z-index: 5;
+  z-index: 60; /* Above clips (z-index: 10) and fades (z-index: 50), below playhead (z-index: 100) */
   pointer-events: none;
   opacity: 0.3;
 `;
@@ -39,5 +39,5 @@ export const Selection: React.FC<SelectionProps> = ({
     return null;
   }
 
-  return <SelectionOverlay $left={startPosition} $width={width} $color={color} />;
+  return <SelectionOverlay $left={startPosition} $width={width} $color={color} data-selection />;
 };
