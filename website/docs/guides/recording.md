@@ -591,6 +591,80 @@ function RecordingExample() {
 export default RecordingExample;
 ```
 
+## AudioWorklet Setup
+
+Recording uses an [AudioWorklet](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorklet) for low-latency, sample-accurate audio capture. The worklet file needs to be served as a separate JavaScript file that the browser loads at runtime.
+
+### How It Works
+
+The `@waveform-playlist/recording` package includes a pre-built worklet file at:
+```
+node_modules/@waveform-playlist/recording/dist/worklet/recording-processor.worklet.js
+```
+
+The `useRecording` hook automatically resolves this file using `import.meta.url`, which works out of the box with modern bundlers that support ES modules.
+
+### Bundler Configuration
+
+#### Vite
+
+Vite handles `import.meta.url` natively. No additional configuration needed.
+
+#### Webpack 5
+
+Add the worklet to your asset configuration:
+
+```js
+// webpack.config.js
+module.exports = {
+  module: {
+    rules: [
+      {
+        test: /\.worklet\.(js|mjs)$/,
+        type: 'asset/resource',
+        generator: {
+          filename: 'worklets/[name][ext]',
+        },
+      },
+    ],
+  },
+};
+```
+
+#### Next.js
+
+Next.js uses Webpack under the hood. Add to `next.config.js`:
+
+```js
+// next.config.js
+module.exports = {
+  webpack: (config) => {
+    config.module.rules.push({
+      test: /\.worklet\.(js|mjs)$/,
+      type: 'asset/resource',
+      generator: {
+        filename: 'static/worklets/[name][ext]',
+      },
+    });
+    return config;
+  },
+};
+```
+
+### Troubleshooting
+
+**"Failed to load recording processor" error:**
+
+This usually means the worklet file couldn't be loaded. Check:
+
+1. **Network tab**: Look for a 404 on `recording-processor.worklet.js`
+2. **CORS**: The worklet must be served from the same origin or with proper CORS headers
+3. **HTTPS**: AudioWorklet requires a secure context (HTTPS or localhost)
+
+**"Module already registered" warning:**
+
+This is harmless and occurs when the worklet is loaded multiple times (e.g., hot reloading during development). The hook handles this gracefully.
+
 ## Browser Compatibility
 
 Recording requires:

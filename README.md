@@ -106,7 +106,7 @@ All v5 packages are published under the `next` tag (install with `@next`):
 | `@waveform-playlist/ui-components` | Styled UI components (buttons, sliders, etc.) |
 | `@waveform-playlist/playout` | Tone.js audio engine |
 | `@waveform-playlist/annotations` | Optional annotation support |
-| `@waveform-playlist/recording` | Optional recording support |
+| `@waveform-playlist/recording` | Optional recording support (requires [AudioWorklet setup](https://naomiaro.github.io/waveform-playlist/docs/guides/recording#audioworklet-setup)) |
 
 ## Key Hooks
 
