@@ -10,14 +10,113 @@ React hooks for accessing playlist state and controls.
 
 ```tsx
 import {
+  // Core context hooks
   usePlaylistState,
   usePlaylistControls,
-  usePlaybackControls,
+  usePlaylistData,
+  usePlaybackAnimation,
+
+  // Specialized hooks
   useAudioTracks,
-  useTrackControls,
   useZoomControls,
   useTimeFormat,
+  useMasterVolume,
+
+  // Drag & drop
+  useClipDragHandlers,
+  useDragSensors,
+
+  // Clip editing
+  useClipSplitting,
+
+  // Effects
+  useDynamicEffects,
+  useTrackDynamicEffects,
+
+  // Recording (integrated)
+  useIntegratedRecording,
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts,
+  usePlaybackShortcuts,
+
+  // Export
+  useExportWav,
 } from '@waveform-playlist/browser';
+```
+
+---
+
+## Core Context Hooks
+
+These hooks access the playlist context provided by `WaveformPlaylistProvider`.
+
+### usePlaylistData
+
+Access static playlist configuration and refs.
+
+```typescript
+function usePlaylistData(): {
+  // Audio data
+  sampleRate: number;
+  duration: number;
+  audioBuffers: AudioBuffer[];
+
+  // Display settings
+  samplesPerPixel: number;
+  waveHeight: number;
+  mono: boolean;
+  controls: { show: boolean; width: number };
+
+  // Refs for direct access
+  playoutRef: RefObject<TonePlayout>;
+  scrollContainerRef: RefObject<HTMLDivElement>;
+};
+```
+
+### usePlaybackAnimation
+
+Access playback state and timing refs for smooth animations.
+
+```typescript
+function usePlaybackAnimation(): {
+  isPlaying: boolean;
+  currentTime: number;
+
+  // Refs for 60fps animation loops
+  currentTimeRef: RefObject<number>;
+  playbackStartTimeRef: RefObject<number>;
+  audioStartPositionRef: RefObject<number>;
+};
+```
+
+#### Example
+
+```tsx
+function AnimatedPlayhead() {
+  const { isPlaying, currentTimeRef, playbackStartTimeRef, audioStartPositionRef } = usePlaybackAnimation();
+  const { samplesPerPixel, sampleRate } = usePlaylistData();
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let frameId: number;
+
+    const animate = () => {
+      if (ref.current && isPlaying) {
+        const elapsed = getContext().currentTime - (playbackStartTimeRef.current ?? 0);
+        const time = (audioStartPositionRef.current ?? 0) + elapsed;
+        const pixels = (time * sampleRate) / samplesPerPixel;
+        ref.current.style.transform = `translateX(${pixels}px)`;
+      }
+      frameId = requestAnimationFrame(animate);
+    };
+
+    if (isPlaying) frameId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frameId);
+  }, [isPlaying]);
+
+  return <div ref={ref} className="playhead" />;
+}
 ```
 
 ---
@@ -375,6 +474,286 @@ function TimeDisplay() {
       </select>
     </div>
   );
+}
+```
+
+---
+
+## Integrated Recording
+
+### useIntegratedRecording
+
+Full-featured recording hook that integrates with the playlist - handles microphone access, recording, live peaks, and automatic track/clip creation.
+
+```typescript
+function useIntegratedRecording(
+  tracks: ClipTrack[],
+  setTracks: (tracks: ClipTrack[]) => void,
+  selectedTrackId: string | null,
+  options?: IntegratedRecordingOptions
+): UseIntegratedRecordingReturn;
+```
+
+#### Options
+
+```typescript
+interface IntegratedRecordingOptions {
+  currentTime?: number;  // Current playhead position for recording start
+}
+```
+
+#### Returns
+
+```typescript
+interface UseIntegratedRecordingReturn {
+  // Recording state
+  isRecording: boolean;
+  duration: number;
+
+  // Microphone levels
+  level: number;      // Current RMS level (0-1)
+  peakLevel: number;  // Peak level with decay (0-1)
+
+  // Device management
+  devices: MediaDeviceInfo[];
+  hasPermission: boolean;
+  selectedDevice: string | null;
+
+  // Controls
+  startRecording: () => Promise<void>;
+  stopRecording: () => void;
+  requestMicAccess: () => Promise<void>;
+  changeDevice: (deviceId: string) => void;
+
+  // Live waveform data
+  recordingPeaks: number[];
+
+  // Error handling
+  error: Error | null;
+}
+```
+
+#### Example
+
+```tsx
+function RecordingControls() {
+  const [tracks, setTracks] = useState<ClipTrack[]>([]);
+  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
+  const { currentTime } = usePlaybackAnimation();
+
+  const {
+    isRecording,
+    duration,
+    level,
+    peakLevel,
+    devices,
+    hasPermission,
+    startRecording,
+    stopRecording,
+    requestMicAccess,
+    changeDevice,
+    recordingPeaks,
+    error,
+  } = useIntegratedRecording(tracks, setTracks, selectedTrackId, { currentTime });
+
+  if (!hasPermission) {
+    return <button onClick={requestMicAccess}>Enable Microphone</button>;
+  }
+
+  return (
+    <div>
+      <select onChange={(e) => changeDevice(e.target.value)}>
+        {devices.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label}</option>)}
+      </select>
+      <button onClick={isRecording ? stopRecording : startRecording}>
+        {isRecording ? 'Stop' : 'Record'}
+      </button>
+      {isRecording && <span>Recording: {duration.toFixed(1)}s</span>}
+      <VUMeter level={level} peakLevel={peakLevel} />
+    </div>
+  );
+}
+```
+
+---
+
+## Drag & Drop Hooks
+
+### useClipDragHandlers
+
+Handles clip dragging (move) and boundary trimming with collision detection.
+
+```typescript
+function useClipDragHandlers(options: UseClipDragHandlersOptions): {
+  onDragStart: (event: DragStartEvent) => void;
+  onDragMove: (event: DragMoveEvent) => void;
+  onDragEnd: (event: DragEndEvent) => void;
+  collisionModifier: Modifier;
+};
+```
+
+#### Options
+
+```typescript
+interface UseClipDragHandlersOptions {
+  tracks: ClipTrack[];
+  onTracksChange: (tracks: ClipTrack[]) => void;
+  samplesPerPixel: number;
+  sampleRate: number;
+}
+```
+
+#### Example
+
+```tsx
+import { DndContext } from '@dnd-kit/core';
+import { restrictToHorizontalAxis } from '@dnd-kit/modifiers';
+
+function EditablePlaylist() {
+  const [tracks, setTracks] = useState<ClipTrack[]>(initialTracks);
+  const { samplesPerPixel, sampleRate } = usePlaylistData();
+  const sensors = useDragSensors();
+
+  const { onDragStart, onDragMove, onDragEnd, collisionModifier } = useClipDragHandlers({
+    tracks,
+    onTracksChange: setTracks,
+    samplesPerPixel,
+    sampleRate,
+  });
+
+  return (
+    <DndContext
+      sensors={sensors}
+      onDragStart={onDragStart}
+      onDragMove={onDragMove}
+      onDragEnd={onDragEnd}
+      modifiers={[restrictToHorizontalAxis, collisionModifier]}
+    >
+      <Waveform interactiveClips showClipHeaders />
+    </DndContext>
+  );
+}
+```
+
+### useDragSensors
+
+Pre-configured drag sensors for clip editing.
+
+```typescript
+function useDragSensors(): SensorDescriptor<any>[];
+```
+
+### useAnnotationDragHandlers
+
+Similar to `useClipDragHandlers` but for annotation boxes.
+
+---
+
+## Clip Editing Hooks
+
+### useClipSplitting
+
+Split clips at the playhead position.
+
+```typescript
+function useClipSplitting(options: UseClipSplittingOptions): UseClipSplittingResult;
+```
+
+#### Options
+
+```typescript
+interface UseClipSplittingOptions {
+  tracks: ClipTrack[];
+  onTracksChange: (tracks: ClipTrack[]) => void;
+  selectedTrackId?: string | null;
+  selectedClipId?: string | null;
+}
+```
+
+#### Returns
+
+```typescript
+interface UseClipSplittingResult {
+  splitClipAtPlayhead: () => void;
+  canSplit: boolean;
+}
+```
+
+#### Example
+
+```tsx
+function SplitButton() {
+  const { tracks, selectedTrackId, selectedClipId } = usePlaylistState();
+  const [localTracks, setLocalTracks] = useState(tracks);
+
+  const { splitClipAtPlayhead, canSplit } = useClipSplitting({
+    tracks: localTracks,
+    onTracksChange: setLocalTracks,
+    selectedTrackId,
+    selectedClipId,
+  });
+
+  return (
+    <button onClick={splitClipAtPlayhead} disabled={!canSplit}>
+      Split Clip (S)
+    </button>
+  );
+}
+```
+
+---
+
+## Effects Hooks
+
+### useDynamicEffects
+
+Manage master effects chain with real-time parameter updates.
+
+```typescript
+function useDynamicEffects(): UseDynamicEffectsReturn;
+```
+
+#### Returns
+
+```typescript
+interface UseDynamicEffectsReturn {
+  activeEffects: ActiveEffect[];
+  addEffect: (effectId: string) => void;
+  removeEffect: (instanceId: string) => void;
+  updateParameter: (instanceId: string, paramId: string, value: number) => void;
+  toggleBypass: (instanceId: string) => void;
+  reorderEffects: (fromIndex: number, toIndex: number) => void;
+  createEffectsFunction: () => EffectsFunction;
+  createOfflineEffectsFunction: () => EffectsFunction;
+}
+
+interface ActiveEffect {
+  instanceId: string;
+  effectId: string;
+  parameters: Record<string, number>;
+  bypassed: boolean;
+}
+```
+
+### useTrackDynamicEffects
+
+Per-track effects management.
+
+```typescript
+function useTrackDynamicEffects(): UseTrackDynamicEffectsReturn;
+```
+
+#### Returns
+
+```typescript
+interface UseTrackDynamicEffectsReturn {
+  trackEffects: Map<string, TrackActiveEffect[]>;
+  addTrackEffect: (trackId: string, effectId: string) => void;
+  removeTrackEffect: (trackId: string, instanceId: string) => void;
+  updateTrackParameter: (trackId: string, instanceId: string, paramId: string, value: number) => void;
+  toggleTrackBypass: (trackId: string, instanceId: string) => void;
+  createTrackEffectsFunction: (trackId: string) => TrackEffectsFunction;
+  createOfflineTrackEffectsFunction: (trackId: string) => TrackEffectsFunction;
 }
 ```
 
