@@ -9,7 +9,7 @@
  * - Full theming customization
  */
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { getContext } from 'tone';
 import styled from 'styled-components';
 import { Theme, Button, Flex, Card, Text, Separator, Slider, Select, Switch, TextField } from '@radix-ui/themes';
@@ -36,8 +36,15 @@ import {
   usePlaylistData,
   usePlaylistState,
   useWaveformPlaylist,
+  usePlaybackShortcuts,
+  useClipSplitting,
+  useClipDragHandlers,
+  useDragSensors,
   type TimeFormat,
+  type ClipTrack,
 } from '@waveform-playlist/browser';
+import { DndContext } from '@dnd-kit/core';
+import { restrictToHorizontalAxis } from '@dnd-kit/modifiers';
 import { CLIP_HEADER_HEIGHT, PlayheadWithMarker, formatTime, parseTime } from '@waveform-playlist/ui-components';
 import { useDocusaurusTheme } from '../../hooks/useDocusaurusTheme';
 
@@ -125,16 +132,17 @@ const VolumeDisplay = styled.div`
   text-align: right;
 `;
 
-// Styled components for custom track controls
+// Styled components for custom track controls - compact horizontal layout
 const TrackControlsContainer = styled.div`
-  padding: 0.4rem 0.5rem;
+  padding: 0.25rem 0.4rem;
   background: linear-gradient(135deg, #2c3e50 0%, #1a252f 100%);
   color: white;
   display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  width: 120px;
-  height: ${100 + CLIP_HEADER_HEIGHT}px;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  width: 160px;
+  height: ${60 + CLIP_HEADER_HEIGHT}px;
   box-sizing: border-box;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
@@ -145,36 +153,26 @@ const TrackControlsContainer = styled.div`
   }
 `;
 
-const TrackTitle = styled.h4`
-  margin: 0;
-  font-size: 0.7rem;
+const TrackTitle = styled.span`
+  font-size: 0.65rem;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-  text-align: center;
-  padding-bottom: 0.2rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 45px;
+  max-width: 50px;
 `;
 
 const TrackButtonsRow = styled.div`
   display: flex;
-  gap: 0.3rem;
+  gap: 0.2rem;
 `;
 
-const VolumeContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  padding: 0 0.5rem;
-`;
-
-const VolumeLabel = styled.label`
-  font-size: 0.6rem;
-  font-weight: 600;
-  color: #95a5a6;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  text-align: center;
+const VolumeSliderContainer = styled.div`
+  flex: 1;
+  min-width: 40px;
 `;
 
 // Grungy timestamp style for Berlin underground aesthetic
@@ -199,7 +197,7 @@ const GrungyTimestamp = styled.div<{ $left: number }>`
   }
 `;
 
-// Custom Track Controls Component
+// Custom Track Controls Component - compact horizontal layout
 const CustomTrackControls: React.FC<{ trackIndex: number }> = ({ trackIndex }) => {
   const { trackStates, setTrackMute, setTrackSolo, setTrackVolume } = useWaveformPlaylist();
   const trackState = trackStates[trackIndex];
@@ -210,7 +208,7 @@ const CustomTrackControls: React.FC<{ trackIndex: number }> = ({ trackIndex }) =
 
   return (
     <TrackControlsContainer>
-      <TrackTitle>{trackName}</TrackTitle>
+      <TrackTitle title={trackName}>{trackName}</TrackTitle>
       <TrackButtonsRow>
         <Button
           size="1"
@@ -218,9 +216,8 @@ const CustomTrackControls: React.FC<{ trackIndex: number }> = ({ trackIndex }) =
           color={trackState.muted ? "red" : "gray"}
           onClick={() => setTrackMute(trackIndex, !trackState.muted)}
           style={{
-            flex: 1,
+            padding: '0 0.4rem',
             minWidth: 0,
-            // Ensure readable on dark track controls background
             ...(!trackState.muted && { color: 'rgba(255,255,255,0.9)', borderColor: 'rgba(255,255,255,0.4)' })
           }}
         >
@@ -232,17 +229,15 @@ const CustomTrackControls: React.FC<{ trackIndex: number }> = ({ trackIndex }) =
           color={trackState.soloed ? "amber" : "gray"}
           onClick={() => setTrackSolo(trackIndex, !trackState.soloed)}
           style={{
-            flex: 1,
+            padding: '0 0.4rem',
             minWidth: 0,
-            // Ensure readable on dark track controls background
             ...(!trackState.soloed && { color: 'rgba(255,255,255,0.9)', borderColor: 'rgba(255,255,255,0.4)' })
           }}
         >
           S
         </Button>
       </TrackButtonsRow>
-      <VolumeContainer>
-        <VolumeLabel>Volume</VolumeLabel>
+      <VolumeSliderContainer>
         <Slider
           value={[trackState.volume * 100]}
           onValueChange={([v]) => setTrackVolume(trackIndex, v / 100)}
@@ -251,7 +246,7 @@ const CustomTrackControls: React.FC<{ trackIndex: number }> = ({ trackIndex }) =
           step={1}
           size="1"
         />
-      </VolumeContainer>
+      </VolumeSliderContainer>
     </TrackControlsContainer>
   );
 };
@@ -294,13 +289,47 @@ const CustomSelectionInputs: React.FC = () => {
   );
 };
 
+interface FlexibleApiContentProps {
+  tracks: ClipTrack[];
+  onTracksChange: (tracks: ClipTrack[]) => void;
+}
+
 // Main Example Content Component - Using individual hooks with Radix UI
-const FlexibleApiContent: React.FC = () => {
+const FlexibleApiContent: React.FC<FlexibleApiContentProps> = ({ tracks, onTracksChange }) => {
   const { play, pause, stop, seekTo, setMasterVolume, setTimeFormat, setAutomaticScroll, zoomIn, zoomOut } = usePlaylistControls();
   const { currentTimeRef } = usePlaybackAnimation();
-  const { duration, masterVolume, timeFormat } = usePlaylistData();
+  const { duration, masterVolume, timeFormat, sampleRate, samplesPerPixel } = usePlaylistData();
   const { isAutomaticScroll } = usePlaylistState();
   const format = timeFormat as TimeFormat;
+
+  // Setup drag sensors and handlers for clip movement/trimming
+  const sensors = useDragSensors();
+  const { onDragStart, onDragMove, onDragEnd, collisionModifier } = useClipDragHandlers({
+    tracks,
+    onTracksChange,
+    samplesPerPixel,
+    sampleRate,
+  });
+
+  // Enable clip splitting
+  const { splitClipAtPlayhead } = useClipSplitting({
+    tracks,
+    onTracksChange,
+    sampleRate,
+    samplesPerPixel,
+  });
+
+  // Enable keyboard shortcuts (Space=play/pause, Escape=stop, 0=rewind, S=split)
+  usePlaybackShortcuts({
+    additionalShortcuts: [
+      {
+        key: 's',
+        action: splitClipAtPlayhead,
+        description: 'Split clip at playhead',
+        preventDefault: true,
+      },
+    ],
+  });
 
   // Navigation handlers using seekTo
   const handleRewind = () => seekTo(0);
@@ -389,20 +418,29 @@ const FlexibleApiContent: React.FC = () => {
         </Flex>
       </Card>
 
-      <Waveform
-        renderTrackControls={(trackIndex) => (
-          <CustomTrackControls trackIndex={trackIndex} />
-        )}
-        renderPlayhead={(props) => <PlayheadWithMarker {...props} />}
-        renderTimestamp={(timeMs, pixelPosition) => {
-          const seconds = Math.floor(timeMs / 1000);
-          const minutes = Math.floor(seconds / 60);
-          const secs = seconds % 60;
-          const timestamp = `${minutes}:${String(secs).padStart(2, '0')}`;
-          return <GrungyTimestamp $left={pixelPosition}>{timestamp}</GrungyTimestamp>;
-        }}
-        showClipHeaders
-      />
+      <DndContext
+        sensors={sensors}
+        onDragStart={onDragStart}
+        onDragMove={onDragMove}
+        onDragEnd={onDragEnd}
+        modifiers={[restrictToHorizontalAxis, collisionModifier]}
+      >
+        <Waveform
+          renderTrackControls={(trackIndex) => (
+            <CustomTrackControls trackIndex={trackIndex} />
+          )}
+          renderPlayhead={(props) => <PlayheadWithMarker {...props} />}
+          renderTimestamp={(timeMs, pixelPosition) => {
+            const seconds = Math.floor(timeMs / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            const timestamp = `${minutes}:${String(secs).padStart(2, '0')}`;
+            return <GrungyTimestamp $left={pixelPosition}>{timestamp}</GrungyTimestamp>;
+          }}
+          showClipHeaders
+          interactiveClips
+        />
+      </DndContext>
 
       {/* Time Controls Bar */}
       <Card>
@@ -445,7 +483,7 @@ export function FlexibleApiExample() {
   const customTheme = {
     ...theme,
     // Normal mode: waveFillColor draws the bars, waveOutlineColor is background
-    waveformDrawMode: 'inverted',
+    waveformDrawMode: 'inverted' as const,
     // Waveforms - Dark blue background with light blue bars
     waveOutlineColor: '#1e3a5f',
     waveFillColor: '#5dade2',
@@ -472,27 +510,30 @@ export function FlexibleApiExample() {
     timescaleBackgroundColor: '#2c3e50',
   };
 
-  // Albert Kader "Whiptails" minimal techno
+  // Albert Kader "Ubiquitous" - all 11 tracks
   const audioConfigs = React.useMemo(() => [
-    {
-      src: '/waveform-playlist/media/audio/AlbertKader_Whiptails/01_Loop1.opus',
-      name: 'Loop',
-    },
-    {
-      src: '/waveform-playlist/media/audio/AlbertKader_Whiptails/03_Kick.opus',
-      name: 'Kick',
-    },
-    {
-      src: '/waveform-playlist/media/audio/AlbertKader_Whiptails/07_Bass1.opus',
-      name: 'Bass',
-    },
-    {
-      src: '/waveform-playlist/media/audio/AlbertKader_Whiptails/10_Synth2.opus',
-      name: 'Synth',
-    },
+    { src: '/waveform-playlist/media/audio/AlbertKader_Ubiquitous/01_Kick.opus', name: 'Kick' },
+    { src: '/waveform-playlist/media/audio/AlbertKader_Ubiquitous/02_HiHat1.opus', name: 'HiHat 1' },
+    { src: '/waveform-playlist/media/audio/AlbertKader_Ubiquitous/03_HiHat2.opus', name: 'HiHat 2' },
+    { src: '/waveform-playlist/media/audio/AlbertKader_Ubiquitous/04_Claps.opus', name: 'Claps' },
+    { src: '/waveform-playlist/media/audio/AlbertKader_Ubiquitous/05_SFX1.opus', name: 'SFX 1' },
+    { src: '/waveform-playlist/media/audio/AlbertKader_Ubiquitous/06_SFX2.opus', name: 'SFX 2' },
+    { src: '/waveform-playlist/media/audio/AlbertKader_Ubiquitous/07_Shakers.opus', name: 'Shakers' },
+    { src: '/waveform-playlist/media/audio/AlbertKader_Ubiquitous/08_Bass.opus', name: 'Bass' },
+    { src: '/waveform-playlist/media/audio/AlbertKader_Ubiquitous/09_Synth1_Unmodulated.opus', name: 'Synth 1' },
+    { src: '/waveform-playlist/media/audio/AlbertKader_Ubiquitous/10_Synth2_PitchModulated.opus', name: 'Synth 2 Mod' },
+    { src: '/waveform-playlist/media/audio/AlbertKader_Ubiquitous/11_Synth2.opus', name: 'Synth 2' },
   ], []);
 
-  const { tracks, loading, error } = useAudioTracks(audioConfigs);
+  const { tracks: loadedTracks, loading, error } = useAudioTracks(audioConfigs);
+  const [tracks, setTracks] = useState<ClipTrack[]>([]);
+
+  // Initialize tracks state when loading completes
+  useEffect(() => {
+    if (loadedTracks.length > 0 && tracks.length === 0) {
+      setTracks(loadedTracks);
+    }
+  }, [loadedTracks, tracks.length]);
 
   if (loading) {
     return (
@@ -522,6 +563,21 @@ export function FlexibleApiExample() {
     );
   }
 
+  // Wait for tracks state to be initialized
+  if (tracks.length === 0) {
+    return (
+      <Theme appearance={isDark ? 'dark' : 'light'} accentColor="blue" grayColor="slate" radius="medium">
+        <Container>
+          <Card>
+            <Flex justify="center" align="center" style={{ padding: '3rem' }}>
+              <Text size="3">Initializing tracks...</Text>
+            </Flex>
+          </Card>
+        </Container>
+      </Theme>
+    );
+  }
+
   return (
     <Theme appearance={isDark ? 'dark' : 'light'} accentColor="blue" grayColor="slate" radius="medium">
       <Container>
@@ -529,15 +585,15 @@ export function FlexibleApiExample() {
           tracks={tracks}
           samplesPerPixel={512}
           mono
-          waveHeight={100}
+          waveHeight={40}
           barGap={0}
           barWidth={1}
-          automaticScroll={false}
-          controls={{ show: true, width: 120 }}
+          automaticScroll
+          controls={{ show: true, width: 160 }}
           theme={customTheme}
           timescale
         >
-          <FlexibleApiContent />
+          <FlexibleApiContent tracks={tracks} onTracksChange={setTracks} />
         </WaveformPlaylistProvider>
 
         <Card style={{ marginTop: '2rem', background: 'var(--gray-2)' }}>
@@ -560,6 +616,30 @@ export function FlexibleApiExample() {
             <Text size="2" color="gray">
               This gives you maximum flexibility - use any UI library (Radix, Material-UI, Chakra, etc.) and build exactly the interface you want!
             </Text>
+          </Flex>
+        </Card>
+
+        <Card style={{ marginTop: '1rem', background: 'var(--gray-2)' }}>
+          <Flex direction="column" gap="2">
+            <Text size="3" weight="bold">⌨️ Keyboard Shortcuts</Text>
+            <Flex gap="4" wrap="wrap">
+              <Flex direction="column" gap="1">
+                <Text size="2" weight="bold" color="gray">Playback</Text>
+                <Text size="2" color="gray"><code>Space</code> — Play / Pause</Text>
+                <Text size="2" color="gray"><code>Escape</code> — Stop</Text>
+                <Text size="2" color="gray"><code>0</code> — Rewind to start</Text>
+              </Flex>
+              <Flex direction="column" gap="1">
+                <Text size="2" weight="bold" color="gray">Editing</Text>
+                <Text size="2" color="gray"><code>S</code> — Split clip at playhead</Text>
+              </Flex>
+              <Flex direction="column" gap="1">
+                <Text size="2" weight="bold" color="gray">Clip Interactions</Text>
+                <Text size="2" color="gray"><strong>Drag clip header</strong> — Move clip along timeline</Text>
+                <Text size="2" color="gray"><strong>Drag clip edges</strong> — Trim clip boundaries</Text>
+                <Text size="2" color="gray"><strong>Click waveform</strong> — Position playhead</Text>
+              </Flex>
+            </Flex>
           </Flex>
         </Card>
       </Container>

@@ -282,6 +282,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const playStartPositionRef = useRef<number>(0);
   const currentTimeRef = useRef<number>(0);
   const animationFrameRef = useRef<number | null>(null);
+  const trackStatesRef = useRef<TrackState[]>(trackStates);
   const playbackStartTimeRef = useRef<number>(0); // context.currentTime when playback started
   const audioStartPositionRef = useRef<number>(0); // Audio position when playback started
   const playbackEndTimeRef = useRef<number | null>(null); // Audio position where playback should stop (for selections)
@@ -314,6 +315,10 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   useEffect(() => {
     isAutomaticScrollRef.current = isAutomaticScroll;
   }, [isAutomaticScroll]);
+
+  useEffect(() => {
+    trackStatesRef.current = trackStates;
+  }, [trackStates]);
 
   // Adjust scroll position proportionally when zoom changes
   useEffect(() => {
@@ -401,14 +406,25 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         setAudioBuffers(buffers);
         setDuration(maxDuration);
 
-        // Initialize track states from ClipTrack properties
-        setTrackStates(tracks.map((track) => ({
-          name: track.name,
-          muted: track.muted,
-          soloed: track.soloed,
-          volume: track.volume,
-          pan: track.pan,
-        })));
+        // Initialize or update track states, preserving existing UI state (mute/solo/volume/pan)
+        // Only initialize from ClipTrack props when trackStates is empty or track count changes
+        setTrackStates(prevStates => {
+          if (prevStates.length === tracks.length) {
+            // Same number of tracks - preserve existing UI state, just update names
+            return prevStates.map((state, i) => ({
+              ...state,
+              name: tracks[i].name,
+            }));
+          }
+          // Track count changed - reinitialize from ClipTrack properties
+          return tracks.map((track) => ({
+            name: track.name,
+            muted: track.muted,
+            soloed: track.soloed,
+            volume: track.volume,
+            pan: track.pan,
+          }));
+        });
 
         // Dispose old playout before creating new one
         if (playoutRef.current) {
@@ -421,6 +437,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         });
 
         // For each track, create a ToneTrack with all clips
+        // Use trackStatesRef for current UI state (mute/solo/volume/pan) instead of track props
+        const currentTrackStates = trackStatesRef.current;
         tracks.forEach((track, index) => {
           if (track.clips.length > 0) {
             // Calculate track start and end times from clips (converting samples to seconds)
@@ -428,13 +446,15 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
             const startTime = Math.min(...track.clips.map(c => c.startSample / sampleRate));
             const endTime = Math.max(...track.clips.map(c => (c.startSample + c.durationSamples) / sampleRate));
 
+            // Use current UI state if available, otherwise fall back to track props
+            const trackState = currentTrackStates[index];
             const trackObj: Track = {
               id: `track-${index}`, // Use consistent index-based ID for track controls
               name: track.name,
-              gain: track.volume, // Use track-level volume
-              muted: track.muted,
-              soloed: track.soloed,
-              stereoPan: track.pan,
+              gain: trackState?.volume ?? track.volume,
+              muted: trackState?.muted ?? track.muted,
+              soloed: trackState?.soloed ?? track.soloed,
+              stereoPan: trackState?.pan ?? track.pan,
               startTime,
               endTime,
             };
@@ -461,6 +481,9 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
             });
           }
         });
+
+        // Apply solo muting after all tracks are added
+        playout.applyInitialSoloState();
 
         playoutRef.current = playout;
         onReady?.();

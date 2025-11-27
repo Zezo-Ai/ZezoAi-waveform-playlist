@@ -30,7 +30,7 @@ export default function FlexibleApiExamplePage(): React.ReactElement {
           <LazyFlexibleApiExample />
         </div>
 
-        <AudioCredits track="whiptails" />
+        <AudioCredits track="ubiquitous" />
       </main>
     </Layout>
   );

@@ -74,7 +74,19 @@ export class TonePlayout {
     this.tracks.set(toneTrack.id, toneTrack);
     // Initialize manual mute state from track options
     this.manualMuteState.set(toneTrack.id, trackOptions.track.muted ?? false);
+    // Initialize solo state from track options
+    if (trackOptions.track.soloed) {
+      this.soloedTracks.add(toneTrack.id);
+    }
     return toneTrack;
+  }
+
+  /**
+   * Apply solo muting after all tracks have been added.
+   * Call this after adding all tracks to ensure solo logic is applied correctly.
+   */
+  applyInitialSoloState(): void {
+    this.updateSoloMuting();
   }
 
   removeTrack(trackId: string): void {
