@@ -98,6 +98,9 @@ export type { WaveformProps } from './components/Waveform';
 // Re-export TimeFormat type from ui-components for convenience
 export type { TimeFormat } from '@waveform-playlist/ui-components';
 
+// Re-export core types for convenience
+export type { ClipTrack, AudioClip, Fade } from '@waveform-playlist/core';
+
 // Export waveform-data.js utilities
 export {
   loadWaveformData,
