@@ -36,7 +36,7 @@ A multi-track audio editor and player built with React, Tone.js, and the Web Aud
 ## Quick Start
 
 ```bash
-npm install @waveform-playlist/browser@next @waveform-playlist/core@next @waveform-playlist/ui-components@next
+npm install @waveform-playlist/browser @waveform-playlist/core @waveform-playlist/ui-components
 ```
 
 ```tsx
