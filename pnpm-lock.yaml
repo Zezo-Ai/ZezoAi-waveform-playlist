@@ -312,22 +312,22 @@ importers:
         specifier: ^3.2.1
         version: 3.2.1(@types/react@18.3.26)(react-dom@19.2.0)(react@19.2.0)
       '@waveform-playlist/annotations':
-        specifier: workspace:5.0.0-alpha.0
+        specifier: workspace:*
         version: link:../packages/annotations
       '@waveform-playlist/browser':
-        specifier: workspace:5.0.0-alpha.0
+        specifier: workspace:*
         version: link:../packages/browser
       '@waveform-playlist/core':
-        specifier: workspace:5.0.0-alpha.0
+        specifier: workspace:*
         version: link:../packages/core
       '@waveform-playlist/playout':
-        specifier: workspace:5.0.0-alpha.0
+        specifier: workspace:*
         version: link:../packages/playout
       '@waveform-playlist/recording':
-        specifier: workspace:5.0.0-alpha.0
+        specifier: workspace:*
         version: link:../packages/recording
       '@waveform-playlist/ui-components':
-        specifier: workspace:5.0.0-alpha.0
+        specifier: workspace:*
         version: link:../packages/ui-components
       clsx:
         specifier: ^2.0.0
