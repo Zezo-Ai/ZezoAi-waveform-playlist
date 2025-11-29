@@ -101,6 +101,7 @@ export const Waveform: React.FC<WaveformProps> = ({
     selectedTrackId,
     loopStart,
     loopEnd,
+    isLoopEnabled,
   } = usePlaylistState();
   const {
     setAnnotations,
@@ -304,25 +305,27 @@ export const Waveform: React.FC<WaveformProps> = ({
                     secondStep={1000}
                     renderTimestamp={renderTimestamp}
                   />
-                  {/* Draggable loop region in timescale - click to create, drag to resize */}
-                  <TimescaleLoopRegion
-                    startPosition={
-                      (Math.min(loopStart, loopEnd) * sampleRate) / samplesPerPixel
-                    }
-                    endPosition={
-                      (Math.max(loopStart, loopEnd) * sampleRate) / samplesPerPixel
-                    }
-                    markerColor={theme.loopMarkerColor}
-                    regionColor={theme.loopRegionColor}
-                    minPosition={0}
-                    maxPosition={tracksFullWidth}
-                    controlsOffset={controls.show ? controls.width : 0}
-                    onLoopRegionChange={(startPixels, endPixels) => {
-                      const startSeconds = (startPixels * samplesPerPixel) / sampleRate;
-                      const endSeconds = (endPixels * samplesPerPixel) / sampleRate;
-                      setLoopRegion(startSeconds, endSeconds);
-                    }}
-                  />
+                  {/* Draggable loop region in timescale - only shown when looping is enabled */}
+                  {isLoopEnabled && (
+                    <TimescaleLoopRegion
+                      startPosition={
+                        (Math.min(loopStart, loopEnd) * sampleRate) / samplesPerPixel
+                      }
+                      endPosition={
+                        (Math.max(loopStart, loopEnd) * sampleRate) / samplesPerPixel
+                      }
+                      markerColor={theme.loopMarkerColor}
+                      regionColor={theme.loopRegionColor}
+                      minPosition={0}
+                      maxPosition={tracksFullWidth}
+                      controlsOffset={controls.show ? controls.width : 0}
+                      onLoopRegionChange={(startPixels, endPixels) => {
+                        const startSeconds = (startPixels * samplesPerPixel) / sampleRate;
+                        const endSeconds = (endPixels * samplesPerPixel) / sampleRate;
+                        setLoopRegion(startSeconds, endSeconds);
+                      }}
+                    />
+                  )}
                 </>
               ) : undefined
             }
