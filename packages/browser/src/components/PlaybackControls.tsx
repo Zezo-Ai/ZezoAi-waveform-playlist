@@ -4,17 +4,24 @@ import { usePlaybackAnimation, usePlaylistState, usePlaylistControls, usePlaylis
 
 export const PlayButton: React.FC<{ className?: string }> = ({ className }) => {
   const { isPlaying, currentTimeRef } = usePlaybackAnimation();
-  const { selectionStart, selectionEnd } = usePlaylistState();
+  const { selectionStart, selectionEnd, isLoopEnabled } = usePlaylistState();
   const { play } = usePlaylistControls();
 
   const handleClick = async () => {
-    // Check if there's a selection
-    if (selectionStart !== selectionEnd && selectionEnd > selectionStart) {
-      // Play only the selected region
-      const duration = selectionEnd - selectionStart;
-      await play(selectionStart, duration);
+    const hasSelection = selectionStart !== selectionEnd && selectionEnd > selectionStart;
+
+    if (hasSelection) {
+      if (isLoopEnabled) {
+        // With loop: Start from selection start, let loop logic handle boundaries
+        // Playback continues until it gets trapped in loop or reaches end
+        await play(selectionStart);
+      } else {
+        // Without loop: Play selection region only, then stop
+        const duration = selectionEnd - selectionStart;
+        await play(selectionStart, duration);
+      }
     } else {
-      // Play from current position to the end
+      // No selection: Play from current position to the end
       await play(currentTimeRef.current ?? 0);
     }
   };
