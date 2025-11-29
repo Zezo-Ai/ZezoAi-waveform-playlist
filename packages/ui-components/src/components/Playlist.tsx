@@ -51,6 +51,7 @@ const TracksContainer = styled.div.attrs<TracksContainerProps>((props) => ({
 
 interface ClickOverlayProps {
   readonly $controlsWidth?: number;
+  readonly $isSelecting?: boolean;
 }
 
 const ClickOverlay = styled.div<ClickOverlayProps>`
@@ -60,7 +61,8 @@ const ClickOverlay = styled.div<ClickOverlayProps>`
   right: 0;
   bottom: 0;
   cursor: crosshair;
-  z-index: 1; /* Low z-index - clip headers and boundaries have higher z-index */
+  /* When selecting, raise z-index above clip boundaries (z-index: 105) to prevent interference */
+  z-index: ${props => props.$isSelecting ? 110 : 1};
 `;
 
 export interface PlaylistProps {
@@ -78,6 +80,8 @@ export interface PlaylistProps {
   readonly onTracksMouseMove?: (e: React.MouseEvent<HTMLDivElement>) => void;
   readonly onTracksMouseUp?: (e: React.MouseEvent<HTMLDivElement>) => void;
   readonly scrollContainerRef?: (el: HTMLDivElement | null) => void;
+  /** When true, selection is in progress - raises z-index to prevent clip boundary interference */
+  readonly isSelecting?: boolean;
 }
 export const Playlist: FunctionComponent<PlaylistProps> = ({
   children,
@@ -92,7 +96,8 @@ export const Playlist: FunctionComponent<PlaylistProps> = ({
   onTracksMouseDown,
   onTracksMouseMove,
   onTracksMouseUp,
-  scrollContainerRef
+  scrollContainerRef,
+  isSelecting,
 }) => {
   return (
     <Wrapper data-scroll-container="true" ref={scrollContainerRef}>
@@ -106,6 +111,7 @@ export const Playlist: FunctionComponent<PlaylistProps> = ({
           {(onTracksClick || onTracksMouseDown) && (
             <ClickOverlay
               $controlsWidth={controlsWidth}
+              $isSelecting={isSelecting}
               onClick={onTracksClick}
               onMouseDown={onTracksMouseDown}
               onMouseMove={onTracksMouseMove}

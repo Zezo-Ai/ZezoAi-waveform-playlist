@@ -295,6 +295,7 @@ export const Waveform: React.FC<WaveformProps> = ({
             onTracksMouseMove={handleMouseMove}
             onTracksMouseUp={handleMouseUp}
             scrollContainerRef={handleScrollContainerRef}
+            isSelecting={isSelecting}
             timescale={
               timeScaleHeight > 0 ? (
                 <>
