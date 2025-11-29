@@ -126,6 +126,7 @@ export interface PlaylistStateContextValue {
   linkEndpoints: boolean;
   annotationsEditable: boolean;
   isAutomaticScroll: boolean;
+  isLoopEnabled: boolean;
   annotations: AnnotationData[];
   activeAnnotationId: string | null;
   selectionStart: number;
@@ -173,6 +174,9 @@ export interface PlaylistControlsContextValue {
   setAnnotationsEditable: (enabled: boolean) => void;
   setAnnotations: (annotations: AnnotationData[]) => void;
   setActiveAnnotationId: (id: string | null) => void;
+
+  // Loop controls
+  setLoopEnabled: (enabled: boolean) => void;
 }
 
 export interface PlaylistDataContextValue {
@@ -276,6 +280,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const [continuousPlay, setContinuousPlayState] = useState(annotationList?.isContinuousPlay ?? false);
   const [linkEndpoints, setLinkEndpoints] = useState(annotationList?.linkEndpoints ?? true);
   const [annotationsEditable, setAnnotationsEditable] = useState(annotationList?.editable ?? false);
+  const [isLoopEnabled, setIsLoopEnabledState] = useState(false);
 
   // Refs
   const playoutRef = useRef<TonePlayout | null>(null);
@@ -291,6 +296,9 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const continuousPlayRef = useRef<boolean>(annotationList?.isContinuousPlay ?? false);
   const activeAnnotationIdRef = useRef<string | null>(null);
   const samplesPerPixelRef = useRef<number>(initialSamplesPerPixel);
+  const isLoopEnabledRef = useRef<boolean>(false);
+  const selectionStartRef = useRef<number>(0);
+  const selectionEndRef = useRef<number>(0);
 
   // Custom hooks
   const { timeFormat, setTimeFormat, formatTime } = useTimeFormat();
@@ -311,6 +319,12 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     setActiveAnnotationIdState(value);       // Update state (triggers re-render)
   }, []);
 
+  // Custom setter for isLoopEnabled that updates BOTH state and ref synchronously
+  const setLoopEnabled = useCallback((value: boolean) => {
+    isLoopEnabledRef.current = value;  // Update ref synchronously
+    setIsLoopEnabledState(value);       // Update state (triggers re-render)
+  }, []);
+
   // Keep refs in sync with state
   useEffect(() => {
     isAutomaticScrollRef.current = isAutomaticScroll;
@@ -319,6 +333,12 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   useEffect(() => {
     trackStatesRef.current = trackStates;
   }, [trackStates]);
+
+  // Keep selection refs in sync for animation loop access
+  useEffect(() => {
+    selectionStartRef.current = selectionStart;
+    selectionEndRef.current = selectionEnd;
+  }, [selectionStart, selectionEnd]);
 
   // Adjust scroll position proportionally when zoom changes
   useEffect(() => {
@@ -640,15 +660,38 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
       // Check if we've reached the playback end time (for selection playback)
       if (playbackEndTimeRef.current !== null && time >= playbackEndTimeRef.current) {
-        // Stop playback at selection end
-        if (playoutRef.current) {
-          playoutRef.current.stop();
+        const hasValidSelection = selectionStartRef.current !== selectionEndRef.current &&
+                                   selectionEndRef.current > selectionStartRef.current;
+
+        if (isLoopEnabledRef.current && hasValidSelection) {
+          // Loop: restart from selection start
+          playoutRef.current?.stop();
+
+          const context = getContext();
+          const timeNow = context.currentTime;
+          playbackStartTimeRef.current = timeNow;
+          audioStartPositionRef.current = selectionStartRef.current;
+          currentTimeRef.current = selectionStartRef.current;
+
+          // Restart playback with same duration
+          const loopDuration = selectionEndRef.current - selectionStartRef.current;
+          playbackEndTimeRef.current = selectionStartRef.current + loopDuration;
+          playoutRef.current?.play(timeNow, selectionStartRef.current, loopDuration);
+
+          // Continue animation loop
+          animationFrameRef.current = requestAnimationFrame(updateTime);
+          return;
+        } else {
+          // Stop playback at selection end
+          if (playoutRef.current) {
+            playoutRef.current.stop();
+          }
+          setIsPlaying(false);
+          currentTimeRef.current = playbackEndTimeRef.current;
+          setCurrentTime(playbackEndTimeRef.current);
+          playbackEndTimeRef.current = null; // Clear the end time
+          return;
         }
-        setIsPlaying(false);
-        currentTimeRef.current = playbackEndTimeRef.current;
-        setCurrentTime(playbackEndTimeRef.current);
-        playbackEndTimeRef.current = null; // Clear the end time
-        return;
       }
 
       if (time >= duration) {
@@ -916,6 +959,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     linkEndpoints,
     annotationsEditable,
     isAutomaticScroll,
+    isLoopEnabled,
     annotations,
     activeAnnotationId,
     selectionStart,
@@ -968,6 +1012,9 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     setAnnotationsEditable,
     setAnnotations,
     setActiveAnnotationId,
+
+    // Loop controls
+    setLoopEnabled,
   };
 
   const dataValue: PlaylistDataContextValue = {

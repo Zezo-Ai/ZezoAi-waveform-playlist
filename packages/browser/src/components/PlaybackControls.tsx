@@ -139,3 +139,25 @@ export const SkipForwardButton: React.FC<{ skipAmount?: number; className?: stri
     </BaseControlButton>
   );
 };
+
+export const LoopButton: React.FC<{ className?: string }> = ({ className }) => {
+  const { isLoopEnabled, selectionStart, selectionEnd } = usePlaylistState();
+  const { setLoopEnabled } = usePlaylistControls();
+
+  const hasValidSelection = selectionStart !== selectionEnd && selectionEnd > selectionStart;
+
+  const handleClick = () => {
+    setLoopEnabled(!isLoopEnabled);
+  };
+
+  return (
+    <BaseControlButton
+      onClick={handleClick}
+      disabled={!hasValidSelection}
+      className={className}
+      title={hasValidSelection ? (isLoopEnabled ? 'Disable loop' : 'Enable loop') : 'Create a selection to enable looping'}
+    >
+      {isLoopEnabled ? 'Loop On' : 'Loop Off'}
+    </BaseControlButton>
+  );
+};

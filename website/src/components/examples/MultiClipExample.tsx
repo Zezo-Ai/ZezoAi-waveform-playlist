@@ -16,6 +16,7 @@ import {
   PlayButton,
   PauseButton,
   StopButton,
+  LoopButton,
   ZoomInButton,
   ZoomOutButton,
   AudioPosition,
@@ -165,6 +166,7 @@ const PlaylistWithDrag: React.FC<PlaylistWithDragProps> = ({ tracks, onTracksCha
           <PlayButton />
           <PauseButton />
           <StopButton />
+          <LoopButton />
         </ControlGroup>
         <ControlGroup>
           <ZoomInButton />

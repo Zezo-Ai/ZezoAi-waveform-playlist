@@ -196,6 +196,85 @@ function ScrollControl() {
 }
 ```
 
+## Loop Playback
+
+Loop playback between selection start and end points. First create a selection by clicking and dragging on the waveform, then enable loop mode.
+
+### LoopButton Component
+
+```tsx
+import { LoopButton } from '@waveform-playlist/browser';
+
+function LoopControl() {
+  return <LoopButton />;
+}
+```
+
+**Behavior:**
+- Disabled when no selection exists
+- Shows "Loop Off" when disabled, "Loop On" when enabled
+- When enabled, playback loops between selection start and end
+
+### Programmatic Control
+
+```tsx
+import { usePlaylistState, usePlaylistControls } from '@waveform-playlist/browser';
+
+function CustomLoopToggle() {
+  const { isLoopEnabled, selectionStart, selectionEnd } = usePlaylistState();
+  const { setLoopEnabled } = usePlaylistControls();
+
+  const hasSelection = selectionStart !== selectionEnd;
+
+  return (
+    <button
+      onClick={() => setLoopEnabled(!isLoopEnabled)}
+      disabled={!hasSelection}
+    >
+      {isLoopEnabled ? 'Loop On' : 'Loop Off'}
+    </button>
+  );
+}
+```
+
+### Complete Loop Example
+
+```tsx
+import {
+  WaveformPlaylistProvider,
+  Waveform,
+  PlayButton,
+  PauseButton,
+  StopButton,
+  LoopButton,
+  SelectionTimeInputs,
+  useAudioTracks,
+} from '@waveform-playlist/browser';
+
+function LoopExample() {
+  const { tracks, loading } = useAudioTracks([
+    { src: '/audio/track.mp3', name: 'Track' },
+  ]);
+
+  if (loading) return <div>Loading...</div>;
+
+  return (
+    <WaveformPlaylistProvider tracks={tracks}>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+        <PlayButton />
+        <PauseButton />
+        <StopButton />
+        <LoopButton />
+      </div>
+      <SelectionTimeInputs />
+      <Waveform />
+    </WaveformPlaylistProvider>
+  );
+}
+```
+
+**Tip:** Use `SelectionTimeInputs` to precisely set selection boundaries for looping, or click and drag on the waveform to create a selection.
+
 ## Selection Playback
 
 Play only the selected region:
@@ -276,6 +355,7 @@ import {
   StopButton,
   RewindButton,
   FastForwardButton,
+  LoopButton,
   MasterVolumeControl,
   AudioPosition,
   TimeFormatSelect,
@@ -299,6 +379,7 @@ function FullPlaybackExample() {
         <PauseButton />
         <StopButton />
         <FastForwardButton />
+        <LoopButton />
         <MasterVolumeControl />
         <TimeFormatSelect />
         <AudioPosition />

@@ -196,6 +196,20 @@ Jumps forward by a fixed amount.
 
 **Default:** 5 seconds
 
+### LoopButton
+
+Toggles loop mode for the current selection.
+
+```tsx
+<LoopButton />
+```
+
+**Behavior:**
+- Disabled when no selection exists
+- Shows "Loop Off" when disabled, "Loop On" when enabled
+- When enabled, playback loops between selection start and end
+- Create a selection by clicking and dragging on the waveform
+
 ---
 
 ## Zoom Controls
@@ -438,6 +452,7 @@ import {
   StopButton,
   RewindButton,
   FastForwardButton,
+  LoopButton,
   ZoomInButton,
   ZoomOutButton,
   MasterVolumeControl,
@@ -473,6 +488,7 @@ function FullFeaturedPlaylist() {
         <PauseButton />
         <StopButton />
         <FastForwardButton />
+        <LoopButton />
       </div>
 
       {/* Zoom Controls */}

@@ -9,6 +9,7 @@ import {
   PlayButton,
   PauseButton,
   StopButton,
+  LoopButton,
   MasterVolumeControl,
   TimeFormatSelect,
   SelectionTimeInputs,
@@ -656,6 +657,7 @@ const EffectsControls: React.FC<EffectsControlsProps> = ({
           <PlayButton />
           <PauseButton />
           <StopButton />
+          <LoopButton />
           <ZoomInButton />
           <ZoomOutButton />
           <MasterVolumeControl />
