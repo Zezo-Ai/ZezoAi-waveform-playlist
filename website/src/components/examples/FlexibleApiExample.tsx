@@ -24,7 +24,8 @@ import {
   SkipForwardIcon,
   CaretDoubleLeftIcon,
   CaretDoubleRightIcon,
-  LightbulbIcon
+  LightbulbIcon,
+  ArrowsClockwiseIcon
 } from '@phosphor-icons/react';
 import '@radix-ui/themes/styles.css';
 import {
@@ -296,10 +297,10 @@ interface FlexibleApiContentProps {
 
 // Main Example Content Component - Using individual hooks with Radix UI
 const FlexibleApiContent: React.FC<FlexibleApiContentProps> = ({ tracks, onTracksChange }) => {
-  const { play, pause, stop, seekTo, setMasterVolume, setTimeFormat, setAutomaticScroll, zoomIn, zoomOut } = usePlaylistControls();
+  const { play, pause, stop, seekTo, setMasterVolume, setTimeFormat, setAutomaticScroll, setLoopEnabled, zoomIn, zoomOut } = usePlaylistControls();
   const { currentTimeRef } = usePlaybackAnimation();
   const { duration, masterVolume, timeFormat, sampleRate, samplesPerPixel } = usePlaylistData();
-  const { isAutomaticScroll, selectionStart, selectionEnd } = usePlaylistState();
+  const { isAutomaticScroll, selectionStart, selectionEnd, isLoopEnabled } = usePlaylistState();
   const format = timeFormat as TimeFormat;
 
   // Setup drag sensors and handlers for clip movement/trimming
@@ -382,6 +383,17 @@ const FlexibleApiContent: React.FC<FlexibleApiContentProps> = ({ tracks, onTrack
             <Button onClick={handleFastForward} variant="soft" size="2">
               <CaretDoubleRightIcon size={16} weight="light" />
               Fast Forward
+            </Button>
+            <Button
+              onClick={() => setLoopEnabled(!isLoopEnabled)}
+              variant={isLoopEnabled ? "solid" : "soft"}
+              color={isLoopEnabled ? "blue" : "gray"}
+              size="2"
+              disabled={selectionStart === selectionEnd}
+              title={selectionStart !== selectionEnd ? (isLoopEnabled ? 'Disable loop' : 'Enable loop') : 'Create a selection to enable looping'}
+            >
+              <ArrowsClockwiseIcon size={16} weight={isLoopEnabled ? "fill" : "light"} />
+              {isLoopEnabled ? 'Loop On' : 'Loop Off'}
             </Button>
           </Flex>
         </Flex>
@@ -640,6 +652,7 @@ export function FlexibleApiExample() {
                 <Text size="2" color="gray"><code>Space</code> — Play / Pause</Text>
                 <Text size="2" color="gray"><code>Escape</code> — Stop</Text>
                 <Text size="2" color="gray"><code>0</code> — Rewind to start</Text>
+                <Text size="2" color="gray"><strong>Loop</strong> — Toggle loop for selection</Text>
               </Flex>
               <Flex direction="column" gap="1">
                 <Text size="2" weight="bold" color="gray">Editing</Text>
