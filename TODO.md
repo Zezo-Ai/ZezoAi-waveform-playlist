@@ -2,7 +2,7 @@
 
 Multi-track audio editor roadmap for waveform-playlist.
 
-**Branch:** `tonejs-overhaul` | **Last Updated:** 2025-11-28
+**Branch:** `main` | **Last Updated:** 2025-11-28
 
 ---
 
