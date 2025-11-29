@@ -100,10 +100,13 @@ export const useClipSplitting = (options: UseClipSplittingOptions): UseClipSplit
         startSample: firstClipStartSample,
         durationSamples: firstClipDurationSamples,
         offsetSamples: clip.offsetSamples,
+        sampleRate: clip.sampleRate,
+        sourceDurationSamples: clip.sourceDurationSamples,
         gain: clip.gain,
         name: clip.name ? `${clip.name} (1)` : undefined,
         color: clip.color,
         fadeIn: clip.fadeIn,
+        waveformData: clip.waveformData, // Share waveformData - slicing happens at render time
         // Note: fadeOut removed for first clip since it's cut
       });
 
@@ -113,9 +116,12 @@ export const useClipSplitting = (options: UseClipSplittingOptions): UseClipSplit
         startSample: secondClipStartSample,
         durationSamples: secondClipDurationSamples,
         offsetSamples: clip.offsetSamples + offsetIncrement,
+        sampleRate: clip.sampleRate,
+        sourceDurationSamples: clip.sourceDurationSamples,
         gain: clip.gain,
         name: clip.name ? `${clip.name} (2)` : undefined,
         color: clip.color,
+        waveformData: clip.waveformData, // Share waveformData - slicing happens at render time
         // Note: fadeIn removed for second clip since it's cut
         fadeOut: clip.fadeOut,
       });

@@ -190,7 +190,8 @@ export function useClipDragHandlers({
         const newClips = track.clips.map((clip, cIdx) => {
           if (cIdx !== clipIndex) return clip;
 
-          const audioBufferDurationSamples = Math.floor(clip.audioBuffer.duration * sampleRate);
+          // Use sourceDurationSamples (works for both audio and peaks-only clips)
+          const audioBufferDurationSamples = clip.sourceDurationSamples;
 
           if (boundary === 'left') {
             // Left boundary drag: moving left (negative delta) expands clip, moving right shrinks it

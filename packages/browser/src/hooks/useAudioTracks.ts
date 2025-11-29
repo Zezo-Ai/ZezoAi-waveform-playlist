@@ -1,12 +1,23 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { ClipTrack, createTrack, createClipFromSeconds, type Fade, type TrackEffectsFunction, type WaveformDataObject } from '@waveform-playlist/core';
 import * as Tone from 'tone';
 
 /**
  * Configuration for a single audio track to load
+ *
+ * Audio can be provided in three ways:
+ * 1. `src` - URL to fetch and decode (standard loading)
+ * 2. `audioBuffer` - Pre-loaded AudioBuffer (skip fetch/decode)
+ * 3. `waveformData` only - Peaks-first rendering (audio loads later)
+ *
+ * For peaks-first rendering, just provide `waveformData` - the sample rate
+ * and duration are derived from the waveform data automatically.
  */
 export interface AudioTrackConfig {
-  src: string;  // URL to audio file
+  /** URL to audio file - used if audioBuffer not provided */
+  src?: string;
+  /** Pre-loaded AudioBuffer - skips fetch/decode if provided */
+  audioBuffer?: AudioBuffer;
   name?: string;
   muted?: boolean;
   soloed?: boolean;
@@ -22,7 +33,21 @@ export interface AudioTrackConfig {
   fadeIn?: Fade;       // Fade in configuration
   fadeOut?: Fade;      // Fade out configuration
   // Pre-computed waveform data (BBC audiowaveform format)
-  waveformData?: WaveformDataObject;  // Use instead of computing peaks from audio
+  // For peaks-first rendering, provide this without audioBuffer/src
+  // Sample rate and duration are derived from waveformData.sample_rate and waveformData.duration
+  waveformData?: WaveformDataObject;
+}
+
+/**
+ * Options for useAudioTracks hook
+ */
+export interface UseAudioTracksOptions {
+  /**
+   * When true, tracks are added to the playlist progressively as they load,
+   * rather than waiting for all tracks to finish loading.
+   * Default: false (wait for all tracks)
+   */
+  progressive?: boolean;
 }
 
 /**
@@ -32,7 +57,8 @@ export interface AudioTrackConfig {
  * with a single clip per track. Supports custom positioning for multi-clip arrangements.
  *
  * @param configs - Array of audio track configurations
- * @returns Object with tracks array and loading state
+ * @param options - Optional configuration for loading behavior
+ * @returns Object with tracks array, loading state, and progress info
  *
  * @example
  * ```typescript
@@ -42,42 +68,154 @@ export interface AudioTrackConfig {
  *   { src: 'audio/drums.mp3', name: 'Drums' },
  * ]);
  *
- * // Multi-clip positioning (clips at different times with gaps)
- * const { tracks, loading, error } = useAudioTracks([
- *   { src: 'audio/guitar.mp3', name: 'Guitar Clip 1', startTime: 0, duration: 3 },
- *   { src: 'audio/guitar.mp3', name: 'Guitar Clip 2', startTime: 5, duration: 3, offset: 5 },
- *   { src: 'audio/vocals.mp3', name: 'Vocals', startTime: 2, duration: 4 },
+ * // Progressive loading (tracks appear as they load)
+ * const { tracks, loading, loadedCount, totalCount } = useAudioTracks(
+ *   [{ src: 'audio/vocals.mp3' }, { src: 'audio/drums.mp3' }],
+ *   { progressive: true }
+ * );
+ *
+ * // Pre-loaded AudioBuffer (skip fetch/decode)
+ * const { tracks } = useAudioTracks([
+ *   { audioBuffer: myPreloadedBuffer, name: 'Pre-loaded' },
  * ]);
  *
- * if (loading) return <div>Loading...</div>;
+ * // Peaks-first rendering (instant visual, audio loads later)
+ * const { tracks } = useAudioTracks([
+ *   { waveformData: preloadedPeaks, name: 'Peaks Only' },  // Renders immediately
+ * ]);
+ *
+ * if (loading) return <div>Loading {loadedCount}/{totalCount}...</div>;
  * if (error) return <div>Error: {error}</div>;
  *
  * return <WaveformPlaylistProvider tracks={tracks}>...</WaveformPlaylistProvider>;
  * ```
  */
-export function useAudioTracks(configs: AudioTrackConfig[]) {
+export function useAudioTracks(
+  configs: AudioTrackConfig[],
+  options: UseAudioTracksOptions = {}
+) {
+  const { progressive = false } = options;
   const [tracks, setTracks] = useState<ClipTrack[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadedCount, setLoadedCount] = useState(0);
+
+  // Track which configs need audio loading vs already have data
+  const totalCount = configs.length;
 
   useEffect(() => {
     if (configs.length === 0) {
       setTracks([]);
       setLoading(false);
+      setLoadedCount(0);
       return;
     }
 
     let cancelled = false;
+    // Track loaded tracks by their config index for progressive mode
+    const loadedTracksMap = new Map<number, ClipTrack>();
+
+    const createTrackFromConfig = (
+      config: AudioTrackConfig,
+      index: number,
+      audioBuffer?: AudioBuffer
+    ): ClipTrack => {
+      // Use provided audioBuffer, config's audioBuffer, or undefined for peaks-only
+      const buffer = audioBuffer ?? config.audioBuffer;
+
+      // For peaks-first rendering, we need waveformData if no buffer
+      if (!buffer && !config.waveformData) {
+        throw new Error(
+          `Track ${index + 1}: Must provide src, audioBuffer, or waveformData`
+        );
+      }
+
+      // Determine source duration for clip creation
+      const sourceDuration = buffer?.duration ?? config.waveformData?.duration;
+
+      // Create clip - createClipFromSeconds handles deriving sampleRate from waveformData
+      const clip = createClipFromSeconds({
+        audioBuffer: buffer,
+        startTime: config.startTime ?? 0,
+        duration: config.duration ?? sourceDuration,
+        offset: config.offset ?? 0,
+        name: config.name || `Track ${index + 1}`,
+        fadeIn: config.fadeIn,
+        fadeOut: config.fadeOut,
+        waveformData: config.waveformData,
+      });
+
+      // Validate clip values
+      if (isNaN(clip.startSample) || isNaN(clip.durationSamples) || isNaN(clip.offsetSamples)) {
+        console.error('Invalid clip values:', clip);
+        throw new Error(`Invalid clip values for track ${index + 1}`);
+      }
+
+      // Create the track with the single clip
+      const track: ClipTrack = {
+        ...createTrack({
+          name: config.name || `Track ${index + 1}`,
+          clips: [clip],
+          muted: config.muted ?? false,
+          soloed: config.soloed ?? false,
+          volume: config.volume ?? 1.0,
+          pan: config.pan ?? 0,
+          color: config.color,
+        }),
+        effects: config.effects,
+      };
+
+      return track;
+    };
 
     const loadTracks = async () => {
       try {
         setLoading(true);
         setError(null);
+        setLoadedCount(0);
 
         const audioContext = Tone.getContext().rawContext as AudioContext;
 
-        // Fetch and decode all audio files
+        // Process each config
         const loadPromises = configs.map(async (config, index) => {
+          // Case 1: Already have audioBuffer - no loading needed
+          if (config.audioBuffer) {
+            const track = createTrackFromConfig(config, index, config.audioBuffer);
+
+            if (progressive && !cancelled) {
+              loadedTracksMap.set(index, track);
+              setLoadedCount(prev => prev + 1);
+              // Update tracks maintaining order
+              setTracks(
+                Array.from({ length: configs.length }, (_, i) => loadedTracksMap.get(i))
+                  .filter((t): t is ClipTrack => t !== undefined)
+              );
+            }
+
+            return track;
+          }
+
+          // Case 2: Have waveformData but no src - peaks-only (no audio to load)
+          if (!config.src && config.waveformData) {
+            const track = createTrackFromConfig(config, index);
+
+            if (progressive && !cancelled) {
+              loadedTracksMap.set(index, track);
+              setLoadedCount(prev => prev + 1);
+              setTracks(
+                Array.from({ length: configs.length }, (_, i) => loadedTracksMap.get(i))
+                  .filter((t): t is ClipTrack => t !== undefined)
+              );
+            }
+
+            return track;
+          }
+
+          // Case 3: Need to fetch and decode audio from src
+          if (!config.src) {
+            throw new Error(`Track ${index + 1}: Must provide src, audioBuffer, or waveformData`);
+          }
+
           const response = await fetch(config.src);
           if (!response.ok) {
             throw new Error(`Failed to fetch ${config.src}: ${response.statusText}`);
@@ -91,41 +229,17 @@ export function useAudioTracks(configs: AudioTrackConfig[]) {
             throw new Error(`Invalid audio buffer for ${config.src}`);
           }
 
-          // Calculate clip duration
-          const clipDuration = config.duration ?? audioBuffer.duration;
+          const track = createTrackFromConfig(config, index, audioBuffer);
 
-          // Create a single clip for this track (using createClipFromSeconds for backwards compatibility)
-          // Fades now use simple duration-based API: { duration: number, type?: FadeType }
-          const clip = createClipFromSeconds({
-            audioBuffer,
-            startTime: config.startTime ?? 0,  // Use config or default to 0
-            duration: clipDuration,
-            offset: config.offset ?? 0,  // Use config or no trim
-            name: config.name || `Track ${index + 1}`,
-            fadeIn: config.fadeIn,
-            fadeOut: config.fadeOut,
-            waveformData: config.waveformData,  // Pre-computed BBC peaks
-          });
-
-          // Validate clip values
-          if (isNaN(clip.startSample) || isNaN(clip.durationSamples) || isNaN(clip.offsetSamples)) {
-            console.error('Invalid clip values:', clip);
-            throw new Error(`Invalid clip values for ${config.src}`);
+          if (progressive && !cancelled) {
+            loadedTracksMap.set(index, track);
+            setLoadedCount(prev => prev + 1);
+            // Update tracks maintaining original config order
+            setTracks(
+              Array.from({ length: configs.length }, (_, i) => loadedTracksMap.get(i))
+                .filter((t): t is ClipTrack => t !== undefined)
+            );
           }
-
-          // Create the track with the single clip
-          const track: ClipTrack = {
-            ...createTrack({
-              name: config.name || `Track ${index + 1}`,
-              clips: [clip],
-              muted: config.muted ?? false,
-              soloed: config.soloed ?? false,
-              volume: config.volume ?? 1.0,
-              pan: config.pan ?? 0,
-              color: config.color,
-            }),
-            effects: config.effects, // Add effects if provided
-          };
 
           return track;
         });
@@ -133,7 +247,11 @@ export function useAudioTracks(configs: AudioTrackConfig[]) {
         const loadedTracks = await Promise.all(loadPromises);
 
         if (!cancelled) {
-          setTracks(loadedTracks);
+          // For non-progressive mode, set all tracks at once
+          if (!progressive) {
+            setTracks(loadedTracks);
+            setLoadedCount(loadedTracks.length);
+          }
           setLoading(false);
         }
       } catch (err) {
@@ -152,7 +270,7 @@ export function useAudioTracks(configs: AudioTrackConfig[]) {
     return () => {
       cancelled = true;
     };
-  }, [configs]);
+  }, [configs, progressive]);
 
-  return { tracks, loading, error };
+  return { tracks, loading, error, loadedCount, totalCount };
 }

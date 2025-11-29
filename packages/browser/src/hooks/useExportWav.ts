@@ -99,8 +99,8 @@ export function useExportWav(): UseExportWavReturn {
         throw new Error('Invalid track index for individual export');
       }
 
-      // Get sample rate from first clip
-      const sampleRate = tracks[0].clips[0]?.audioBuffer.sampleRate || 44100;
+      // Get sample rate from first clip (use clip.sampleRate which is always defined)
+      const sampleRate = tracks[0].clips[0]?.sampleRate || 44100;
 
       // Calculate total duration from all clips (in samples)
       let totalDurationSamples = 0;
@@ -367,6 +367,12 @@ async function scheduleClip(
   applyEffects: boolean
 ): Promise<void> {
   const { audioBuffer, startSample, durationSamples, offsetSamples, gain: clipGain, fadeIn, fadeOut } = clip;
+
+  // Skip clips without audioBuffer (peaks-only clips can't be exported)
+  if (!audioBuffer) {
+    console.warn(`Skipping clip "${clip.name || clip.id}" - no audioBuffer for export`);
+    return;
+  }
 
   // Convert samples to seconds for Web Audio API
   const startTime = startSample / sampleRate;

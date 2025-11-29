@@ -432,22 +432,23 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
     const loadAudio = async () => {
       try {
-        // Extract all audio buffers from clips
+        // Extract all audio buffers from clips (only those that have audioBuffer)
         // For now, collect the first clip's buffer from each track
         const buffers: AudioBuffer[] = [];
 
         tracks.forEach((track) => {
-          if (track.clips.length > 0) {
+          if (track.clips.length > 0 && track.clips[0].audioBuffer) {
             // Use first clip's buffer for now (full multi-clip support comes in next phase)
             buffers.push(track.clips[0].audioBuffer);
           }
         });
 
         // Calculate total timeline duration from all clips across all tracks
+        // Use clip.sampleRate which is always defined (works for peaks-only clips too)
         let maxDuration = 0;
         tracks.forEach((track) => {
           track.clips.forEach((clip) => {
-            const sampleRate = clip.audioBuffer.sampleRate;
+            const sampleRate = clip.sampleRate;
             const clipEndSample = clip.startSample + clip.durationSamples;
             const clipEnd = clipEndSample / sampleRate;
             maxDuration = Math.max(maxDuration, clipEnd);
@@ -491,11 +492,15 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         // Use trackStatesRef for current UI state (mute/solo/volume/pan) instead of track props
         const currentTrackStates = trackStatesRef.current;
         tracks.forEach((track, index) => {
-          if (track.clips.length > 0) {
+          // Filter to only clips with audioBuffer (peaks-only clips can't be played)
+          const playableClips = track.clips.filter(clip => clip.audioBuffer);
+
+          if (playableClips.length > 0) {
             // Calculate track start and end times from clips (converting samples to seconds)
-            const sampleRate = track.clips[0].audioBuffer.sampleRate;
-            const startTime = Math.min(...track.clips.map(c => c.startSample / sampleRate));
-            const endTime = Math.max(...track.clips.map(c => (c.startSample + c.durationSamples) / sampleRate));
+            // Use clip.sampleRate which is always defined
+            const sampleRate = playableClips[0].sampleRate;
+            const startTime = Math.min(...playableClips.map(c => c.startSample / sampleRate));
+            const endTime = Math.max(...playableClips.map(c => (c.startSample + c.durationSamples) / sampleRate));
 
             // Use current UI state if available, otherwise fall back to track props
             const trackState = currentTrackStates[index];
@@ -512,13 +517,13 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
             // Convert ClipTrack clips to ToneTrack ClipInfo format
             // Note: ClipInfo.startTime is relative to track start, not absolute timeline
-            const clipInfos = track.clips.map(clip => {
-              const sampleRate = clip.audioBuffer.sampleRate;
+            const clipInfos = playableClips.map(clip => {
+              const clipSampleRate = clip.sampleRate;
               return {
-                buffer: clip.audioBuffer,
-                startTime: (clip.startSample / sampleRate) - startTime, // Make relative to track start
-                duration: clip.durationSamples / sampleRate,
-                offset: clip.offsetSamples / sampleRate,
+                buffer: clip.audioBuffer!, // We filtered for audioBuffer above
+                startTime: (clip.startSample / clipSampleRate) - startTime, // Make relative to track start
+                duration: clip.durationSamples / clipSampleRate,
+                offset: clip.offsetSamples / clipSampleRate,
                 fadeIn: clip.fadeIn,
                 fadeOut: clip.fadeOut,
                 gain: clip.gain,
@@ -592,6 +597,24 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         }
 
         // Fall back to generating peaks from audioBuffer
+        // If no audioBuffer either, return empty peaks (clip has no visual data)
+        if (!clip.audioBuffer) {
+          console.warn(`Clip "${clip.name || clip.id}" has neither waveformData nor audioBuffer - rendering empty`);
+          return {
+            clipId: clip.id,
+            trackName: track.name,
+            peaks: {
+              length: 0,
+              data: [],
+              bits: bits,
+            },
+            startSample: clip.startSample,
+            durationSamples: clip.durationSamples,
+            fadeIn: clip.fadeIn,
+            fadeOut: clip.fadeOut,
+          };
+        }
+
         const peaks = generatePeaks(
           clip.audioBuffer,
           samplesPerPixel,

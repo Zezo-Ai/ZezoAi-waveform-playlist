@@ -76,13 +76,20 @@ export type TrackEffectsFunction = (
  * IMPORTANT: All positions/durations are stored as SAMPLE COUNTS (integers)
  * to avoid floating-point precision errors. Convert to seconds only when
  * needed for playback using: seconds = samples / sampleRate
+ *
+ * Clips can be created with just waveformData (for instant visual rendering)
+ * and have audioBuffer added later when audio finishes loading.
  */
 export interface AudioClip {
   /** Unique identifier for this clip */
   id: string;
 
-  /** The audio buffer containing the audio data */
-  audioBuffer: AudioBuffer;
+  /**
+   * The audio buffer containing the audio data.
+   * Optional for peaks-first rendering - can be added later.
+   * Required for playback and editing operations.
+   */
+  audioBuffer?: AudioBuffer;
 
   /** Position on timeline where this clip starts (in samples at timeline sampleRate) */
   startSample: number;
@@ -92,6 +99,20 @@ export interface AudioClip {
 
   /** Offset into the audio buffer where playback starts (in samples) - the "trim start" point */
   offsetSamples: number;
+
+  /**
+   * Sample rate for this clip's audio.
+   * Required when audioBuffer is not provided (for peaks-first rendering).
+   * When audioBuffer is present, this should match audioBuffer.sampleRate.
+   */
+  sampleRate: number;
+
+  /**
+   * Total duration of the source audio in samples.
+   * Required when audioBuffer is not provided (for trim bounds calculation).
+   * When audioBuffer is present, this should equal audioBuffer.length.
+   */
+  sourceDurationSamples: number;
 
   /** Optional fade in effect */
   fadeIn?: Fade;
@@ -180,11 +201,15 @@ export interface Timeline {
 
 /**
  * Options for creating a new audio clip (using sample counts)
+ *
+ * Either audioBuffer OR (sampleRate + sourceDurationSamples + waveformData) must be provided.
+ * Providing waveformData without audioBuffer enables peaks-first rendering.
  */
 export interface CreateClipOptions {
-  audioBuffer: AudioBuffer;
+  /** Audio buffer - optional for peaks-first rendering */
+  audioBuffer?: AudioBuffer;
   startSample: number;           // Position on timeline (in samples)
-  durationSamples?: number;      // Defaults to full buffer duration (in samples)
+  durationSamples?: number;      // Defaults to full buffer/source duration (in samples)
   offsetSamples?: number;        // Defaults to 0
   gain?: number;                 // Defaults to 1.0
   name?: string;
@@ -193,15 +218,23 @@ export interface CreateClipOptions {
   fadeOut?: Fade;
   /** Pre-computed waveform data from waveform-data.js (e.g., from BBC audiowaveform) */
   waveformData?: WaveformDataObject;
+  /** Sample rate - required if audioBuffer not provided */
+  sampleRate?: number;
+  /** Total source audio duration in samples - required if audioBuffer not provided */
+  sourceDurationSamples?: number;
 }
 
 /**
  * Options for creating a new audio clip (using seconds for convenience)
+ *
+ * Either audioBuffer OR (sampleRate + sourceDuration + waveformData) must be provided.
+ * Providing waveformData without audioBuffer enables peaks-first rendering.
  */
 export interface CreateClipOptionsSeconds {
-  audioBuffer: AudioBuffer;
+  /** Audio buffer - optional for peaks-first rendering */
+  audioBuffer?: AudioBuffer;
   startTime: number;        // Position on timeline (in seconds)
-  duration?: number;        // Defaults to full buffer duration (in seconds)
+  duration?: number;        // Defaults to full buffer/source duration (in seconds)
   offset?: number;          // Defaults to 0 (in seconds)
   gain?: number;            // Defaults to 1.0
   name?: string;
@@ -210,6 +243,10 @@ export interface CreateClipOptionsSeconds {
   fadeOut?: Fade;
   /** Pre-computed waveform data from waveform-data.js (e.g., from BBC audiowaveform) */
   waveformData?: WaveformDataObject;
+  /** Sample rate - required if audioBuffer not provided */
+  sampleRate?: number;
+  /** Total source audio duration in seconds - required if audioBuffer not provided */
+  sourceDuration?: number;
 }
 
 /**
@@ -228,12 +265,15 @@ export interface CreateTrackOptions {
 
 /**
  * Creates a new AudioClip with sensible defaults (using sample counts)
+ *
+ * For peaks-first rendering (no audioBuffer), sampleRate and sourceDurationSamples can be:
+ * - Provided explicitly via options
+ * - Derived from waveformData (sample_rate and duration properties)
  */
 export function createClip(options: CreateClipOptions): AudioClip {
   const {
     audioBuffer,
     startSample,
-    durationSamples = audioBuffer.length, // Full buffer by default
     offsetSamples = 0,
     gain = 1.0,
     name,
@@ -243,12 +283,40 @@ export function createClip(options: CreateClipOptions): AudioClip {
     waveformData,
   } = options;
 
+  // Determine sample rate: audioBuffer > explicit option > waveformData
+  const sampleRate = audioBuffer?.sampleRate ?? options.sampleRate ?? waveformData?.sample_rate;
+
+  // Determine source duration: audioBuffer > explicit option > waveformData (converted to samples)
+  const sourceDurationSamples = audioBuffer?.length
+    ?? options.sourceDurationSamples
+    ?? (waveformData && sampleRate ? Math.ceil(waveformData.duration * sampleRate) : undefined);
+
+  if (sampleRate === undefined) {
+    throw new Error('createClip: sampleRate is required when audioBuffer is not provided (can use waveformData.sample_rate)');
+  }
+  if (sourceDurationSamples === undefined) {
+    throw new Error('createClip: sourceDurationSamples is required when audioBuffer is not provided (can use waveformData.duration)');
+  }
+
+  // Warn if sample rates don't match
+  if (audioBuffer && waveformData && audioBuffer.sampleRate !== waveformData.sample_rate) {
+    console.warn(
+      `Sample rate mismatch: audioBuffer (${audioBuffer.sampleRate}) vs waveformData (${waveformData.sample_rate}). ` +
+      `Using audioBuffer sample rate. Waveform visualization may be slightly off.`
+    );
+  }
+
+  // Default duration to full source duration
+  const durationSamples = options.durationSamples ?? sourceDurationSamples;
+
   return {
     id: generateId(),
     audioBuffer,
     startSample,
     durationSamples,
     offsetSamples,
+    sampleRate,
+    sourceDurationSamples,
     gain,
     name,
     color,
@@ -260,13 +328,16 @@ export function createClip(options: CreateClipOptions): AudioClip {
 
 /**
  * Creates a new AudioClip from time-based values (convenience function)
- * Converts seconds to samples using the audioBuffer's sampleRate
+ * Converts seconds to samples using the audioBuffer's sampleRate or explicit sampleRate
+ *
+ * For peaks-first rendering (no audioBuffer), sampleRate and sourceDuration can be:
+ * - Provided explicitly via options
+ * - Derived from waveformData (sample_rate and duration properties)
  */
 export function createClipFromSeconds(options: CreateClipOptionsSeconds): AudioClip {
   const {
     audioBuffer,
     startTime,
-    duration = audioBuffer.duration,
     offset = 0,
     gain = 1.0,
     name,
@@ -276,13 +347,36 @@ export function createClipFromSeconds(options: CreateClipOptionsSeconds): AudioC
     waveformData,
   } = options;
 
-  const sampleRate = audioBuffer.sampleRate;
+  // Determine sample rate: audioBuffer > explicit option > waveformData
+  const sampleRate = audioBuffer?.sampleRate ?? options.sampleRate ?? waveformData?.sample_rate;
+  if (sampleRate === undefined) {
+    throw new Error('createClipFromSeconds: sampleRate is required when audioBuffer is not provided (can use waveformData.sample_rate)');
+  }
+
+  // Determine source duration: audioBuffer > explicit option > waveformData
+  const sourceDuration = audioBuffer?.duration ?? options.sourceDuration ?? waveformData?.duration;
+  if (sourceDuration === undefined) {
+    throw new Error('createClipFromSeconds: sourceDuration is required when audioBuffer is not provided (can use waveformData.duration)');
+  }
+
+  // Warn if sample rates don't match (could cause visual/audio sync issues)
+  if (audioBuffer && waveformData && audioBuffer.sampleRate !== waveformData.sample_rate) {
+    console.warn(
+      `Sample rate mismatch: audioBuffer (${audioBuffer.sampleRate}) vs waveformData (${waveformData.sample_rate}). ` +
+      `Using audioBuffer sample rate. Waveform visualization may be slightly off.`
+    );
+  }
+
+  // Default clip duration to full source duration
+  const duration = options.duration ?? sourceDuration;
 
   return createClip({
     audioBuffer,
     startSample: Math.round(startTime * sampleRate),
     durationSamples: Math.round(duration * sampleRate),
     offsetSamples: Math.round(offset * sampleRate),
+    sampleRate,
+    sourceDurationSamples: Math.ceil(sourceDuration * sampleRate),
     gain,
     name,
     color,

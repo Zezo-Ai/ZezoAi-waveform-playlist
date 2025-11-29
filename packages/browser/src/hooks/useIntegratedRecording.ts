@@ -153,6 +153,8 @@ export function useIntegratedRecording(
         startSample,
         durationSamples: buffer.length,
         offsetSamples: 0,
+        sampleRate: buffer.sampleRate,
+        sourceDurationSamples: buffer.length,
         gain: 1.0,
         name: `Recording ${new Date().toLocaleTimeString()}`,
       };

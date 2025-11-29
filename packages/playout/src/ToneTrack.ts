@@ -217,14 +217,35 @@ export class ToneTrack {
   }
 
   play(when?: number, offset: number = 0, duration?: number): void {
-    // Evaluate now() inside function body, not in parameter default (which is evaluated at module load time)
-    const startWhen = when ?? now();
+    // Recreate all players to avoid Tone.js StateTimeline issues when seeking
+    // See: https://github.com/Tonejs/Tone.js/issues/1076
+    // The Player's internal StateTimeline doesn't properly clear on stop(),
+    // so we need fresh Player instances when rescheduling
+    this.clips.forEach(clipPlayer => {
+      // Dispose old player
+      clipPlayer.player.stop();
+      clipPlayer.player.disconnect();
+      clipPlayer.player.dispose();
 
-    // Stop any existing playback before starting new playback
-    // This handles cases where play is called while still playing (e.g., selection replay)
-    if (this.isPlaying) {
-      this.stop();
-    }
+      // Create new player with same buffer
+      const newPlayer = new Player({
+        url: clipPlayer.clipInfo.buffer,
+        loop: false,
+        onstop: () => {
+          this.activePlayers--;
+          if (this.activePlayers === 0 && this.onStopCallback) {
+            this.onStopCallback();
+          }
+        },
+      });
+
+      // Reconnect to audio graph
+      newPlayer.connect(clipPlayer.fadeGain);
+
+      // Update reference
+      clipPlayer.player = newPlayer;
+      clipPlayer.pausedPosition = 0;
+    });
 
     this.activePlayers = 0;
 
@@ -242,7 +263,11 @@ export class ToneTrack {
       if (playbackPosition < clipEnd) {
         // This clip should play
         this.activePlayers++;
-        clipPlayer.playStartTime = now();
+
+        // Get fresh now() for each clip to avoid "time in the past" errors
+        // This is important when seeking during playback - time passes between scheduling clips
+        const currentTime = when ?? now();
+        clipPlayer.playStartTime = currentTime;
 
         if (playbackPosition >= clipStart) {
           // We're starting in the middle of this clip
@@ -252,8 +277,8 @@ export class ToneTrack {
 
           clipPlayer.pausedPosition = clipOffset;
           // Schedule fades at the actual playback start time
-          this.scheduleFades(clipPlayer, startWhen, clipOffset);
-          player.start(startWhen, clipOffset, clipDuration);
+          this.scheduleFades(clipPlayer, currentTime, clipOffset);
+          player.start(currentTime, clipOffset, clipDuration);
         } else {
           // This clip starts later - schedule it
           const delay = clipStart - playbackPosition;
@@ -262,8 +287,8 @@ export class ToneTrack {
           if (delay < (duration ?? Infinity)) {
             clipPlayer.pausedPosition = clipInfo.offset;
             // Schedule fades at the delayed start time
-            this.scheduleFades(clipPlayer, startWhen + delay, clipInfo.offset);
-            player.start(startWhen + delay, clipInfo.offset, clipDuration);
+            this.scheduleFades(clipPlayer, currentTime + delay, clipInfo.offset);
+            player.start(currentTime + delay, clipInfo.offset, clipDuration);
           } else {
             this.activePlayers--;
           }

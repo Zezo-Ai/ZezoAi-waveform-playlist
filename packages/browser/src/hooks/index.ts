@@ -10,7 +10,7 @@ export type { MasterVolumeControls, UseMasterVolumeProps } from './useMasterVolu
 export { useMasterAnalyser } from './useAudioEffects';
 
 export { useAudioTracks } from './useAudioTracks';
-export type { AudioTrackConfig } from './useAudioTracks';
+export type { AudioTrackConfig, UseAudioTracksOptions } from './useAudioTracks';
 
 export { useClipDragHandlers } from './useClipDragHandlers';
 
