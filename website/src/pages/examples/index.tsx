@@ -112,6 +112,13 @@ const examples = [
     category: 'mobile',
     icon: <DeviceMobileIcon weight="light" />,
   },
+  {
+    title: 'Mobile Annotations',
+    description: 'Tap to play. Hold to resize boundaries.',
+    path: 'mobile-annotations',
+    category: 'mobile',
+    icon: <TextAaIcon weight="light" />,
+  },
 ];
 
 // Floating particle component

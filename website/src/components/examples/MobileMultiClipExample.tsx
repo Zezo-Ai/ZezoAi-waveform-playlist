@@ -68,27 +68,33 @@ const ControlGroup = styled.div`
 `;
 
 const Instructions = styled.div`
-  background: var(--ifm-color-primary-lightest, #e8f4fd);
-  border: 1px solid var(--ifm-color-primary-light, #b3d9f7);
+  background: var(--ifm-background-surface-color, #f8f9fa);
+  border: 1px solid var(--ifm-color-emphasis-300, #dadde1);
   border-radius: 8px;
   padding: 12px 16px;
   margin-bottom: 16px;
   font-size: 14px;
   line-height: 1.5;
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--ifm-color-primary-darkest, #0d3d5f);
-    border-color: var(--ifm-color-primary-dark, #1a5a8a);
-  }
+  color: var(--ifm-font-color-base);
 
   strong {
     display: block;
     margin-bottom: 4px;
+    color: var(--ifm-color-primary);
   }
 
   ul {
     margin: 8px 0 0 0;
     padding-left: 20px;
+  }
+
+  li {
+    margin-bottom: 4px;
+  }
+
+  li strong {
+    display: inline;
+    margin-bottom: 0;
   }
 `;
 
