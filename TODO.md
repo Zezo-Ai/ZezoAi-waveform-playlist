@@ -2,7 +2,7 @@
 
 Multi-track audio editor roadmap for waveform-playlist.
 
-**Branch:** `tonejs-overhaul` | **Last Updated:** 2025-11-25
+**Branch:** `tonejs-overhaul` | **Last Updated:** 2025-11-28
 
 ---
 
@@ -99,6 +99,7 @@ Multi-track audio editor roadmap for waveform-playlist.
 - Custom playhead component (`renderPlayhead` prop)
 - Annotation keyboard navigation
 - Simplified Fade API (`{duration, type?}`)
+- Audacity-style loop playback (separate loop region from selection, timescale-only UI)
 
 ---
 
