@@ -141,10 +141,10 @@ export const SkipForwardButton: React.FC<{ skipAmount?: number; className?: stri
 };
 
 export const LoopButton: React.FC<{ className?: string }> = ({ className }) => {
-  const { isLoopEnabled, selectionStart, selectionEnd } = usePlaylistState();
+  const { isLoopEnabled, loopStart, loopEnd } = usePlaylistState();
   const { setLoopEnabled } = usePlaylistControls();
 
-  const hasValidSelection = selectionStart !== selectionEnd && selectionEnd > selectionStart;
+  const hasValidLoopRegion = loopStart !== loopEnd && loopEnd > loopStart;
 
   const handleClick = () => {
     setLoopEnabled(!isLoopEnabled);
@@ -153,11 +153,38 @@ export const LoopButton: React.FC<{ className?: string }> = ({ className }) => {
   return (
     <BaseControlButton
       onClick={handleClick}
-      disabled={!hasValidSelection}
+      disabled={!hasValidLoopRegion}
       className={className}
-      title={hasValidSelection ? (isLoopEnabled ? 'Disable loop' : 'Enable loop') : 'Create a selection to enable looping'}
+      title={hasValidLoopRegion ? (isLoopEnabled ? 'Disable loop' : 'Enable loop') : 'Set a loop region first'}
     >
       {isLoopEnabled ? 'Loop On' : 'Loop Off'}
+    </BaseControlButton>
+  );
+};
+
+export const SetLoopRegionButton: React.FC<{ className?: string }> = ({ className }) => {
+  const { selectionStart, selectionEnd, loopStart, loopEnd } = usePlaylistState();
+  const { setLoopRegionFromSelection, clearLoopRegion } = usePlaylistControls();
+
+  const hasValidSelection = selectionStart !== selectionEnd && selectionEnd > selectionStart;
+  const hasLoopRegion = loopStart !== loopEnd && loopEnd > loopStart;
+
+  const handleClick = () => {
+    if (hasLoopRegion) {
+      clearLoopRegion();
+    } else {
+      setLoopRegionFromSelection();
+    }
+  };
+
+  return (
+    <BaseControlButton
+      onClick={handleClick}
+      disabled={!hasValidSelection && !hasLoopRegion}
+      className={className}
+      title={hasLoopRegion ? 'Clear loop region' : (hasValidSelection ? 'Set loop region from selection' : 'Create a selection first')}
+    >
+      {hasLoopRegion ? 'Clear Loop' : 'Set Loop'}
     </BaseControlButton>
   );
 };

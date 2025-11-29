@@ -81,6 +81,10 @@ export interface WaveformPlaylistTheme {
   playheadColor: string;
   selectionColor: string;
 
+  // Loop region colors (Audacity-style loop markers)
+  loopRegionColor: string;
+  loopMarkerColor: string;
+
   // Clip header colors (for multi-clip editing)
   clipHeaderBackgroundColor: string;
   clipHeaderBorderColor: string;
@@ -148,6 +152,8 @@ export const defaultTheme: WaveformPlaylistTheme = {
   timescaleBackgroundColor: '#fff',
   playheadColor: '#f00',
   selectionColor: 'rgba(255, 105, 180, 0.7)', // hot pink - high contrast on light backgrounds
+  loopRegionColor: 'rgba(59, 130, 246, 0.3)', // Blue - distinct from pink selection
+  loopMarkerColor: '#3b82f6', // Blue marker triangles
   clipHeaderBackgroundColor: 'rgba(0, 0, 0, 0.1)',
   clipHeaderBorderColor: 'rgba(0, 0, 0, 0.2)',
   clipHeaderTextColor: '#333',
@@ -214,6 +220,8 @@ export const darkTheme: WaveformPlaylistTheme = {
   timescaleBackgroundColor: '#1a1612', // Dark warm brown background
   playheadColor: '#3a8838', // Darker Ampelmännchen green playhead
   selectionColor: 'rgba(60, 140, 58, 0.6)', // Darker Ampelmännchen green selection - visible on dark backgrounds
+  loopRegionColor: 'rgba(96, 165, 250, 0.35)', // Light blue - distinct from green selection
+  loopMarkerColor: '#60a5fa', // Light blue marker triangles
   clipHeaderBackgroundColor: 'rgba(20, 16, 12, 0.85)', // Dark background for clip headers
   clipHeaderBorderColor: 'rgba(200, 160, 120, 0.25)',
   clipHeaderTextColor: '#d8c0a8', // Warm amber text

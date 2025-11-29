@@ -79,6 +79,7 @@ export {
   SkipBackwardButton,
   SkipForwardButton,
   LoopButton,
+  SetLoopRegionButton,
   ZoomInButton,
   ZoomOutButton,
   MasterVolumeControl,

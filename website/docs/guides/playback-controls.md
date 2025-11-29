@@ -198,41 +198,85 @@ function ScrollControl() {
 
 ## Loop Playback
 
-Loop playback between selection start and end points. First create a selection by clicking and dragging on the waveform, then enable loop mode.
+Waveform Playlist uses an Audacity-style loop system with a separate loop region from the selection. This allows you to:
 
-### LoopButton Component
+- Define a loop region independently from your playback selection
+- Start playback before the loop region - it will loop when the cursor enters and reaches the end of the region
+- Keep the loop region visible even when looping is disabled
+- Toggle looping on/off without losing the loop region
+
+### Two-Button Workflow
+
+1. **SetLoopRegionButton** - Creates a loop region from the current selection (or clears it)
+2. **LoopButton** - Enables/disables the looping behavior
 
 ```tsx
-import { LoopButton } from '@waveform-playlist/browser';
+import { SetLoopRegionButton, LoopButton } from '@waveform-playlist/browser';
 
-function LoopControl() {
-  return <LoopButton />;
+function LoopControls() {
+  return (
+    <div>
+      <SetLoopRegionButton />
+      <LoopButton />
+    </div>
+  );
 }
 ```
 
+### SetLoopRegionButton
+
+Creates a loop region from the current selection.
+
+```tsx
+<SetLoopRegionButton />
+```
+
 **Behavior:**
-- Disabled when no selection exists
+- Disabled when no selection exists and no loop region is set
+- Shows "Set Loop" when no loop region exists
+- Shows "Clear Loop" when a loop region is set
+- Click to set loop region from selection, or clear existing loop region
+
+### LoopButton
+
+Toggles the looping behavior.
+
+```tsx
+<LoopButton />
+```
+
+**Behavior:**
+- Disabled when no loop region exists
 - Shows "Loop Off" when disabled, "Loop On" when enabled
-- When enabled, playback loops between selection start and end
+- When enabled, playback loops when the cursor enters and reaches the end of the loop region
 
 ### Programmatic Control
 
 ```tsx
 import { usePlaylistState, usePlaylistControls } from '@waveform-playlist/browser';
 
-function CustomLoopToggle() {
-  const { isLoopEnabled, selectionStart, selectionEnd } = usePlaylistState();
-  const { setLoopEnabled } = usePlaylistControls();
+function CustomLoopControls() {
+  const { isLoopEnabled, loopStart, loopEnd, selectionStart, selectionEnd } = usePlaylistState();
+  const { setLoopEnabled, setLoopRegionFromSelection, clearLoopRegion } = usePlaylistControls();
 
-  const hasSelection = selectionStart !== selectionEnd;
+  const hasSelection = selectionStart !== selectionEnd && selectionEnd > selectionStart;
+  const hasLoopRegion = loopStart !== loopEnd && loopEnd > loopStart;
 
   return (
-    <button
-      onClick={() => setLoopEnabled(!isLoopEnabled)}
-      disabled={!hasSelection}
-    >
-      {isLoopEnabled ? 'Loop On' : 'Loop Off'}
-    </button>
+    <div>
+      <button
+        onClick={hasLoopRegion ? clearLoopRegion : setLoopRegionFromSelection}
+        disabled={!hasSelection && !hasLoopRegion}
+      >
+        {hasLoopRegion ? 'Clear Loop' : 'Set Loop'}
+      </button>
+      <button
+        onClick={() => setLoopEnabled(!isLoopEnabled)}
+        disabled={!hasLoopRegion}
+      >
+        {isLoopEnabled ? 'Loop On' : 'Loop Off'}
+      </button>
+    </div>
   );
 }
 ```
@@ -246,6 +290,7 @@ import {
   PlayButton,
   PauseButton,
   StopButton,
+  SetLoopRegionButton,
   LoopButton,
   SelectionTimeInputs,
   useAudioTracks,
@@ -264,6 +309,7 @@ function LoopExample() {
         <PlayButton />
         <PauseButton />
         <StopButton />
+        <SetLoopRegionButton />
         <LoopButton />
       </div>
       <SelectionTimeInputs />
@@ -273,7 +319,11 @@ function LoopExample() {
 }
 ```
 
-**Tip:** Use `SelectionTimeInputs` to precisely set selection boundaries for looping, or click and drag on the waveform to create a selection.
+**Workflow:**
+1. Click and drag on the waveform to create a selection
+2. Click "Set Loop" to create a loop region from the selection
+3. Click "Loop On" to enable looping
+4. Press Play - when the cursor reaches the loop region, it will loop
 
 ## Selection Playback
 
@@ -355,6 +405,7 @@ import {
   StopButton,
   RewindButton,
   FastForwardButton,
+  SetLoopRegionButton,
   LoopButton,
   MasterVolumeControl,
   AudioPosition,
@@ -379,6 +430,7 @@ function FullPlaybackExample() {
         <PauseButton />
         <StopButton />
         <FastForwardButton />
+        <SetLoopRegionButton />
         <LoopButton />
         <MasterVolumeControl />
         <TimeFormatSelect />

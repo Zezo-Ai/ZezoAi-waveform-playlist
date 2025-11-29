@@ -6,6 +6,7 @@ import {
   Clip,
   Playhead,
   Selection,
+  LoopRegion,
   PlaylistInfoContext,
   TrackControlsContext,
   DevicePixelRatioProvider,
@@ -98,6 +99,8 @@ export const Waveform: React.FC<WaveformProps> = ({
     linkEndpoints,
     continuousPlay,
     selectedTrackId,
+    loopStart,
+    loopEnd,
   } = usePlaylistState();
   const {
     setAnnotations,
@@ -490,6 +493,21 @@ export const Waveform: React.FC<WaveformProps> = ({
                     );
                   })}
                 </AnnotationBoxesWrapper>
+              )}
+              {/* Loop region overlay - render before selection so selection appears on top */}
+              {loopStart !== loopEnd && (
+                <LoopRegion
+                  startPosition={
+                    (Math.min(loopStart, loopEnd) * sampleRate) / samplesPerPixel +
+                    (controls.show ? controls.width : 0)
+                  }
+                  endPosition={
+                    (Math.max(loopStart, loopEnd) * sampleRate) / samplesPerPixel +
+                    (controls.show ? controls.width : 0)
+                  }
+                  regionColor={theme.loopRegionColor}
+                  markerColor={theme.loopMarkerColor}
+                />
               )}
               {selectionStart !== selectionEnd && (
                 <Selection

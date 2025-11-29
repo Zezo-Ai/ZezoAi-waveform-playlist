@@ -196,19 +196,38 @@ Jumps forward by a fixed amount.
 
 **Default:** 5 seconds
 
+### SetLoopRegionButton
+
+Creates a loop region from the current selection, or clears an existing loop region.
+
+```tsx
+<SetLoopRegionButton />
+```
+
+**Behavior:**
+- Disabled when no selection exists and no loop region is set
+- Shows "Set Loop" when no loop region exists
+- Shows "Clear Loop" when a loop region is set
+- Click to toggle between setting and clearing the loop region
+
 ### LoopButton
 
-Toggles loop mode for the current selection.
+Toggles loop mode for the loop region.
 
 ```tsx
 <LoopButton />
 ```
 
 **Behavior:**
-- Disabled when no selection exists
+- Disabled when no loop region exists (use SetLoopRegionButton first)
 - Shows "Loop Off" when disabled, "Loop On" when enabled
-- When enabled, playback loops between selection start and end
-- Create a selection by clicking and dragging on the waveform
+- When enabled, playback loops when the cursor enters and reaches the end of the loop region
+
+**Workflow:**
+1. Create a selection by clicking and dragging on the waveform
+2. Click SetLoopRegionButton to create a loop region from the selection
+3. Click LoopButton to enable looping
+4. Play - when the cursor reaches the loop region, it will loop
 
 ---
 
@@ -452,6 +471,7 @@ import {
   StopButton,
   RewindButton,
   FastForwardButton,
+  SetLoopRegionButton,
   LoopButton,
   ZoomInButton,
   ZoomOutButton,
@@ -488,6 +508,7 @@ function FullFeaturedPlaylist() {
         <PauseButton />
         <StopButton />
         <FastForwardButton />
+        <SetLoopRegionButton />
         <LoopButton />
       </div>
 

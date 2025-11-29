@@ -10,6 +10,7 @@ export * from './MasterVolumeControl';
 export * from './Playhead';
 export * from './Playlist';
 export * from './Selection';
+export * from './LoopRegion';
 export * from './SelectionTimeInputs';
 export * from './SmartChannel';
 export * from './SmartScale';

@@ -132,6 +132,9 @@ export interface PlaylistStateContextValue {
   selectionStart: number;
   selectionEnd: number;
   selectedTrackId: string | null; // ID of currently selected track for editing operations
+  // Loop region (separate from selection) - Audacity-style loop points
+  loopStart: number;
+  loopEnd: number;
 }
 
 export interface PlaylistControlsContextValue {
@@ -177,6 +180,9 @@ export interface PlaylistControlsContextValue {
 
   // Loop controls
   setLoopEnabled: (enabled: boolean) => void;
+  setLoopRegion: (start: number, end: number) => void;
+  setLoopRegionFromSelection: () => void;
+  clearLoopRegion: () => void;
 }
 
 export interface PlaylistDataContextValue {
@@ -281,6 +287,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const [linkEndpoints, setLinkEndpoints] = useState(annotationList?.linkEndpoints ?? true);
   const [annotationsEditable, setAnnotationsEditable] = useState(annotationList?.editable ?? false);
   const [isLoopEnabled, setIsLoopEnabledState] = useState(false);
+  const [loopStart, setLoopStartState] = useState(0);
+  const [loopEnd, setLoopEndState] = useState(0);
 
   // Refs
   const playoutRef = useRef<TonePlayout | null>(null);
@@ -299,6 +307,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const isLoopEnabledRef = useRef<boolean>(false);
   const selectionStartRef = useRef<number>(0);
   const selectionEndRef = useRef<number>(0);
+  const loopStartRef = useRef<number>(0);
+  const loopEndRef = useRef<number>(0);
 
   // Custom hooks
   const { timeFormat, setTimeFormat, formatTime } = useTimeFormat();
@@ -324,6 +334,26 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     isLoopEnabledRef.current = value;  // Update ref synchronously
     setIsLoopEnabledState(value);       // Update state (triggers re-render)
   }, []);
+
+  // Loop region setters - Audacity-style separate loop points
+  const setLoopRegion = useCallback((start: number, end: number) => {
+    loopStartRef.current = start;
+    loopEndRef.current = end;
+    setLoopStartState(start);
+    setLoopEndState(end);
+  }, []);
+
+  const setLoopRegionFromSelection = useCallback(() => {
+    const start = selectionStartRef.current;
+    const end = selectionEndRef.current;
+    if (start !== end && end > start) {
+      setLoopRegion(start, end);
+    }
+  }, [setLoopRegion]);
+
+  const clearLoopRegion = useCallback(() => {
+    setLoopRegion(0, 0);
+  }, [setLoopRegion]);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -660,36 +690,38 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
       // Check if we've reached the playback end time (for selection playback)
       if (playbackEndTimeRef.current !== null && time >= playbackEndTimeRef.current) {
-        const hasValidSelection = selectionStartRef.current !== selectionEndRef.current &&
-                                   selectionEndRef.current > selectionStartRef.current;
+        // Stop playback at selection end (selection playback is separate from looping)
+        if (playoutRef.current) {
+          playoutRef.current.stop();
+        }
+        setIsPlaying(false);
+        currentTimeRef.current = playbackEndTimeRef.current;
+        setCurrentTime(playbackEndTimeRef.current);
+        playbackEndTimeRef.current = null; // Clear the end time
+        return;
+      }
 
-        if (isLoopEnabledRef.current && hasValidSelection) {
-          // Loop: restart from selection start
+      // Audacity-style loop region: loop when cursor enters and reaches end of loop region
+      const hasValidLoopRegion = loopStartRef.current !== loopEndRef.current &&
+                                  loopEndRef.current > loopStartRef.current;
+
+      if (isLoopEnabledRef.current && hasValidLoopRegion) {
+        // Check if we've reached or passed the loop end point
+        if (time >= loopEndRef.current) {
+          // Loop: restart from loop start
           playoutRef.current?.stop();
 
           const context = getContext();
           const timeNow = context.currentTime;
           playbackStartTimeRef.current = timeNow;
-          audioStartPositionRef.current = selectionStartRef.current;
-          currentTimeRef.current = selectionStartRef.current;
+          audioStartPositionRef.current = loopStartRef.current;
+          currentTimeRef.current = loopStartRef.current;
 
-          // Restart playback with same duration
-          const loopDuration = selectionEndRef.current - selectionStartRef.current;
-          playbackEndTimeRef.current = selectionStartRef.current + loopDuration;
-          playoutRef.current?.play(timeNow, selectionStartRef.current, loopDuration);
+          // Restart playback from loop start (no duration limit - will loop again when reaching loop end)
+          playoutRef.current?.play(timeNow, loopStartRef.current);
 
           // Continue animation loop
           animationFrameRef.current = requestAnimationFrame(updateTime);
-          return;
-        } else {
-          // Stop playback at selection end
-          if (playoutRef.current) {
-            playoutRef.current.stop();
-          }
-          setIsPlaying(false);
-          currentTimeRef.current = playbackEndTimeRef.current;
-          setCurrentTime(playbackEndTimeRef.current);
-          playbackEndTimeRef.current = null; // Clear the end time
           return;
         }
       }
@@ -965,6 +997,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     selectionStart,
     selectionEnd,
     selectedTrackId,
+    loopStart,
+    loopEnd,
   };
 
   const controlsValue: PlaylistControlsContextValue = {
@@ -1015,6 +1049,9 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
     // Loop controls
     setLoopEnabled,
+    setLoopRegion,
+    setLoopRegionFromSelection,
+    clearLoopRegion,
   };
 
   const dataValue: PlaylistDataContextValue = {
