@@ -95,11 +95,12 @@ Multi-track audio editor roadmap for waveform-playlist.
 ### Other ✅
 
 - Annotations package (optional)
-- BBC waveform-data.js support
+- BBC waveform-data.js support (clip-level `waveformData` prop with resample/slice)
 - Custom playhead component (`renderPlayhead` prop)
 - Annotation keyboard navigation
 - Simplified Fade API (`{duration, type?}`)
 - Audacity-style loop playback (separate loop region from selection, timescale-only UI)
+- Sample-based peaks generation (no floating-point precision errors)
 
 ---
 

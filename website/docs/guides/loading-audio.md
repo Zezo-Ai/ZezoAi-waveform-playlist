@@ -40,12 +40,14 @@ function MyPlaylist() {
 Each track configuration supports these options:
 
 ```tsx
-interface AudioConfig {
+interface AudioTrackConfig {
   src: string;              // URL to audio file (required)
-  name: string;             // Display name (required)
+  name?: string;            // Display name
   startTime?: number;       // Start position in seconds (default: 0)
-  waveformDataUrl?: string; // URL to pre-computed waveform data
-  gain?: number;            // Initial volume 0-1 (default: 1)
+  duration?: number;        // Clip duration in seconds (default: full audio)
+  offset?: number;          // Offset into source audio in seconds (default: 0)
+  waveformData?: WaveformDataObject; // Pre-computed waveform data from BBC audiowaveform
+  volume?: number;          // Initial volume 0-1 (default: 1)
   muted?: boolean;          // Start muted (default: false)
   soloed?: boolean;         // Start soloed (default: false)
   pan?: number;             // Pan position -1 to 1 (default: 0)
@@ -95,20 +97,43 @@ The `--pixels-per-second` option controls resolution. Higher values = more detai
 
 ### Using Pre-computed Waveforms
 
+Load the waveform data first, then pass it to `useAudioTracks`:
+
 ```tsx
-const { tracks, loading } = useAudioTracks([
-  {
-    src: '/audio/podcast.mp3',
-    name: 'Podcast Episode',
-    waveformDataUrl: '/audio/podcast.json', // Pre-computed waveform
-  },
-]);
+import { useAudioTracks, loadWaveformData } from '@waveform-playlist/browser';
+
+function MyPlaylist() {
+  const [waveformData, setWaveformData] = useState(null);
+
+  // 1. Load BBC peaks first (fast - ~50KB)
+  useEffect(() => {
+    loadWaveformData('/audio/podcast.dat').then(setWaveformData);
+  }, []);
+
+  // 2. Load audio with waveformData attached (slower - full audio file)
+  const { tracks, loading } = useAudioTracks(
+    waveformData ? [{
+      src: '/audio/podcast.mp3',
+      name: 'Podcast Episode',
+      waveformData, // Attach pre-computed peaks!
+    }] : []
+  );
+
+  // Waveform uses BBC peaks instead of computing from audio buffer
+  // Supports zoom via resample() and trim via slice()
+  return (
+    <WaveformPlaylistProvider tracks={tracks}>
+      <Waveform />
+    </WaveformPlaylistProvider>
+  );
+}
 ```
 
-When `waveformDataUrl` is provided:
-1. The waveform data is loaded first (very fast)
-2. The audio file is loaded in the background
-3. Waveform displays immediately while audio loads
+When `waveformData` is provided:
+1. The library uses BBC peaks instead of computing from audio
+2. Zoom is supported via `resample()` at different samples-per-pixel
+3. Clip trimming (offset/duration) is handled via `slice()`
+4. All operations use sample-based precision (no floating-point errors)
 
 ### Waveform Data Format
 
