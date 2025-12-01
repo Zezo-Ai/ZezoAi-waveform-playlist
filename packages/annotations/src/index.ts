@@ -24,7 +24,7 @@ export { AnnotationsTrack } from './components/AnnotationsTrack';
 export type { AnnotationsTrackProps } from './components/AnnotationsTrack';
 
 export { AnnotationText } from './components/AnnotationText';
-export type { AnnotationTextProps } from './components/AnnotationText';
+export type { AnnotationTextProps, RenderAnnotationItemProps } from './components/AnnotationText';
 
 export { ContinuousPlayCheckbox } from './components/ContinuousPlayCheckbox';
 export type { ContinuousPlayCheckboxProps } from './components/ContinuousPlayCheckbox';

@@ -114,6 +114,17 @@ const AnnotationTextContent = styled.div<{ $isEditable?: boolean }>`
   }
 `;
 
+/**
+ * Props passed to the renderAnnotationItem function for custom rendering
+ */
+export interface RenderAnnotationItemProps {
+  annotation: AnnotationData;
+  index: number;
+  isActive: boolean;
+  onClick: () => void;
+  formatTime: (seconds: number) => string;
+}
+
 export interface AnnotationTextProps {
   annotations: AnnotationData[];
   activeAnnotationId?: string;
@@ -124,6 +135,12 @@ export interface AnnotationTextProps {
   height?: number;
   onAnnotationClick?: (annotation: AnnotationData) => void;
   onAnnotationUpdate?: (updatedAnnotations: AnnotationData[]) => void;
+  /**
+   * Custom render function for annotation items.
+   * When provided, completely replaces the default annotation item rendering.
+   * Use this to customize the appearance of each annotation in the list.
+   */
+  renderAnnotationItem?: (props: RenderAnnotationItemProps) => React.ReactNode;
 }
 
 const AnnotationTextComponent: FunctionComponent<AnnotationTextProps> = ({
@@ -136,6 +153,7 @@ const AnnotationTextComponent: FunctionComponent<AnnotationTextProps> = ({
   height,
   onAnnotationClick,
   onAnnotationUpdate,
+  renderAnnotationItem,
 }) => {
   const activeAnnotationRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -222,12 +240,33 @@ const AnnotationTextComponent: FunctionComponent<AnnotationTextProps> = ({
     <Container ref={containerRef} $height={height}>
       {annotations.map((annotation, index) => {
         const isActive = annotation.id === activeAnnotationId;
+        const handleClick = () => onAnnotationClick?.(annotation);
+
+        // Use custom render function if provided
+        if (renderAnnotationItem) {
+          return (
+            <div
+              key={annotation.id}
+              ref={isActive ? activeAnnotationRef : null}
+            >
+              {renderAnnotationItem({
+                annotation,
+                index,
+                isActive,
+                onClick: handleClick,
+                formatTime,
+              })}
+            </div>
+          );
+        }
+
+        // Default rendering
         return (
         <AnnotationItem
           key={annotation.id}
           ref={isActive ? activeAnnotationRef : null}
           $isActive={isActive}
-          onClick={() => onAnnotationClick?.(annotation)}
+          onClick={handleClick}
         >
           <AnnotationHeader>
             <AnnotationInfo>

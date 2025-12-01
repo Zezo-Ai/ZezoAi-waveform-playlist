@@ -103,6 +103,9 @@ export type { TimeFormat } from '@waveform-playlist/ui-components';
 // Re-export core types for convenience
 export type { ClipTrack, AudioClip, Fade } from '@waveform-playlist/core';
 
+// Re-export annotation types for custom rendering
+export type { RenderAnnotationItemProps, AnnotationData } from '@waveform-playlist/annotations';
+
 // Export waveform-data.js utilities
 export {
   loadWaveformData,

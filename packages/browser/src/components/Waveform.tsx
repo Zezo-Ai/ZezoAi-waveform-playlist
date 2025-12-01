@@ -28,7 +28,7 @@ import {
   AnnotationBox,
   AnnotationText,
 } from '@waveform-playlist/annotations';
-import type { AnnotationAction, AnnotationActionOptions } from '@waveform-playlist/annotations';
+import type { AnnotationAction, AnnotationActionOptions, RenderAnnotationItemProps } from '@waveform-playlist/annotations';
 import { usePlaybackAnimation, usePlaylistState, usePlaylistControls, usePlaylistData } from '../WaveformPlaylistContext';
 import type { Peaks } from '@waveform-playlist/webaudio-peaks';
 import { AnimatedPlayhead } from './AnimatedPlayhead';
@@ -45,6 +45,17 @@ export interface WaveformProps {
   annotationControls?: AnnotationAction[];
   annotationListConfig?: AnnotationActionOptions;
   annotationTextHeight?: number; // Height in pixels for the annotation text list
+  /**
+   * Custom render function for annotation items in the text list.
+   * Use this to completely customize how each annotation is displayed.
+   */
+  renderAnnotationItem?: (props: RenderAnnotationItemProps) => ReactNode;
+  /**
+   * Custom function to generate the label shown on annotation boxes in the waveform.
+   * Receives the annotation data and should return a string label.
+   * Default: annotation.id
+   */
+  getAnnotationBoxLabel?: (annotation: { id: string; start: number; end: number; lines: string[] }) => string;
   className?: string;
   showClipHeaders?: boolean; // Show headers on clips for visual organization
   interactiveClips?: boolean; // Enable dragging/trimming interactions on clips (requires @dnd-kit setup)
@@ -75,6 +86,8 @@ export const Waveform: React.FC<WaveformProps> = ({
   annotationControls,
   annotationListConfig: _annotationListConfig,
   annotationTextHeight,
+  renderAnnotationItem,
+  getAnnotationBoxLabel,
   className,
   showClipHeaders = false,
   interactiveClips = false,
@@ -503,6 +516,9 @@ export const Waveform: React.FC<WaveformProps> = ({
                   {annotations.map((annotation, index) => {
                     const startPosition = (annotation.start * sampleRate) / samplesPerPixel;
                     const endPosition = (annotation.end * sampleRate) / samplesPerPixel;
+                    const label = getAnnotationBoxLabel
+                      ? getAnnotationBoxLabel(annotation)
+                      : annotation.id;
                     return (
                       <AnnotationBox
                         key={annotation.id}
@@ -510,7 +526,7 @@ export const Waveform: React.FC<WaveformProps> = ({
                         annotationIndex={index}
                         startPosition={startPosition}
                         endPosition={endPosition}
-                        label={annotation.id}
+                        label={label}
                         color="#ff9800"
                         isActive={annotation.id === activeAnnotationId}
                         onClick={() => handleAnnotationClick(annotation)}
@@ -567,6 +583,7 @@ export const Waveform: React.FC<WaveformProps> = ({
               controls={annotationsEditable ? annotationControls : undefined}
               annotationListConfig={{ linkEndpoints, continuousPlay }}
               height={annotationTextHeight}
+              renderAnnotationItem={renderAnnotationItem}
               onAnnotationUpdate={(updatedAnnotations) => {
                 setAnnotations(updatedAnnotations);
               }}
