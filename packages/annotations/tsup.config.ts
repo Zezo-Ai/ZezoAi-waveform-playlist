@@ -7,4 +7,5 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
+  external: ['react', 'react-dom', 'styled-components', '@dnd-kit/core', '@dnd-kit/utilities'],
 });
