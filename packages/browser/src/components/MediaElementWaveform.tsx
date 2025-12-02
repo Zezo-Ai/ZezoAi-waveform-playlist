@@ -30,15 +30,19 @@ import {
 import { useAnnotationDragHandlers } from '../hooks/useAnnotationDragHandlers';
 import { AnimatedMediaElementPlayhead } from './AnimatedMediaElementPlayhead';
 import { ChannelWithMediaElementProgress } from './ChannelWithMediaElementProgress';
+import type { GetAnnotationBoxLabelFn, OnAnnotationUpdateFn, AnnotationData } from '../types/annotations';
 
 // Re-export RenderAnnotationItemProps for convenience
 export type { RenderAnnotationItemProps } from '@waveform-playlist/annotations';
+
+// Re-export annotation types for convenience
+export type { GetAnnotationBoxLabelFn, OnAnnotationUpdateFn, AnnotationData } from '../types/annotations';
 
 export interface MediaElementWaveformProps {
   /** Height in pixels for the annotation text list */
   annotationTextHeight?: number;
   /** Custom function to generate the label shown on annotation boxes */
-  getAnnotationBoxLabel?: (annotation: { id: string; start: number; end: number; lines: string[] }) => string;
+  getAnnotationBoxLabel?: GetAnnotationBoxLabelFn;
   /**
    * Custom render function for annotation items in the text list.
    * When provided, completely replaces the default annotation item rendering.
@@ -51,7 +55,7 @@ export interface MediaElementWaveformProps {
    * Callback when annotations are updated (e.g., boundaries dragged).
    * Called with the full updated annotations array.
    */
-  onAnnotationUpdate?: (annotations: { id: string; start: number; end: number; lines: string[] }[]) => void;
+  onAnnotationUpdate?: OnAnnotationUpdateFn;
   className?: string;
 }
 
@@ -293,7 +297,7 @@ export const MediaElementWaveform: React.FC<MediaElementWaveformProps> = ({
                     const startPosition = (annotation.start * sampleRate) / samplesPerPixel;
                     const endPosition = (annotation.end * sampleRate) / samplesPerPixel;
                     const label = getAnnotationBoxLabel
-                      ? getAnnotationBoxLabel(annotation)
+                      ? getAnnotationBoxLabel(annotation, index)
                       : annotation.id;
                     return (
                       <AnnotationBox

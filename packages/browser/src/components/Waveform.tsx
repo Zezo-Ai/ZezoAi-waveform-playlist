@@ -33,6 +33,7 @@ import { usePlaybackAnimation, usePlaylistState, usePlaylistControls, usePlaylis
 import type { Peaks } from '@waveform-playlist/webaudio-peaks';
 import { AnimatedPlayhead } from './AnimatedPlayhead';
 import { ChannelWithProgress } from './ChannelWithProgress';
+import type { GetAnnotationBoxLabelFn } from '../types/annotations';
 
 // Default duration in seconds for empty tracks (used for recording workflow)
 const DEFAULT_EMPTY_TRACK_DURATION = 60;
@@ -52,10 +53,10 @@ export interface WaveformProps {
   renderAnnotationItem?: (props: RenderAnnotationItemProps) => ReactNode;
   /**
    * Custom function to generate the label shown on annotation boxes in the waveform.
-   * Receives the annotation data and should return a string label.
+   * Receives the annotation data and its index, returns a string label.
    * Default: annotation.id
    */
-  getAnnotationBoxLabel?: (annotation: { id: string; start: number; end: number; lines: string[] }) => string;
+  getAnnotationBoxLabel?: GetAnnotationBoxLabelFn;
   className?: string;
   showClipHeaders?: boolean; // Show headers on clips for visual organization
   interactiveClips?: boolean; // Enable dragging/trimming interactions on clips (requires @dnd-kit setup)
@@ -517,7 +518,7 @@ export const Waveform: React.FC<WaveformProps> = ({
                     const startPosition = (annotation.start * sampleRate) / samplesPerPixel;
                     const endPosition = (annotation.end * sampleRate) / samplesPerPixel;
                     const label = getAnnotationBoxLabel
-                      ? getAnnotationBoxLabel(annotation)
+                      ? getAnnotationBoxLabel(annotation, index)
                       : annotation.id;
                     return (
                       <AnnotationBox

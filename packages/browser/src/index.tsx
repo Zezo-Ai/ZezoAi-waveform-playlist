@@ -124,6 +124,9 @@ export type { ClipTrack, AudioClip, Fade } from '@waveform-playlist/core';
 // Re-export annotation types for custom rendering
 export type { RenderAnnotationItemProps, AnnotationData } from '@waveform-playlist/annotations';
 
+// Export annotation callback types for Waveform components
+export type { GetAnnotationBoxLabelFn, OnAnnotationUpdateFn } from './types/annotations';
+
 // Export waveform-data.js utilities
 export {
   loadWaveformData,
