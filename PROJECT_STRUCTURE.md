@@ -18,6 +18,7 @@ waveform-playlist/
 │   ├── browser/           # React apps & webpack bundles
 │   ├── core/              # Core types and interfaces
 │   ├── loaders/           # Audio file loaders
+│   ├── media-element-playout/  # Audio playback (HTMLAudioElement, no Tone.js)
 │   ├── playout/           # Audio playback (Tone.js wrapper)
 │   ├── recording/         # 📦 OPTIONAL: Audio recording with AudioWorklet
 │   ├── ui-components/     # Reusable React UI components
@@ -34,7 +35,8 @@ waveform-playlist/
     │   │   ├── AnnotationsExample.tsx
     │   │   ├── RecordingExample.tsx
     │   │   ├── FlexibleApiExample.tsx
-    │   │   └── WaveformDataExample.tsx  # BBC peaks demo
+    │   │   ├── WaveformDataExample.tsx  # BBC peaks demo
+    │   │   └── MediaElementExample.tsx  # HTMLAudioElement streaming
     │   ├── pages/examples/       # Example page wrappers
     │   ├── hooks/                # Docusaurus-specific hooks
     │   │   └── useDocusaurusTheme.ts
@@ -233,6 +235,31 @@ const clip = createClipFromSeconds({
   - Track mixing
 - **Dependencies:** Tone.js, Core
 - **Location:** `packages/playout/src/audioContext.ts`
+
+#### `@waveform-playlist/media-element-playout`
+
+- **Purpose:** Lightweight audio playback using HTMLAudioElement (no Tone.js dependency)
+- **Key class:** `MediaElementPlayout`
+- **Use Cases:**
+  - Large audio files - streams without downloading entire file
+  - Pre-computed peaks - use [audiowaveform](https://github.com/bbc/audiowaveform) server-side
+  - Playback rate control - 0.5x to 2.0x with pitch preservation
+  - Single-track playback - simpler API, smaller bundle
+- **Features:**
+  - Play/pause/stop control
+  - Seeking
+  - Playback rate adjustment with pitch preservation
+  - currentTime tracking via animation frame
+- **When to Use:**
+  - Choose `MediaElementPlaylistProvider` for streaming large files with pre-computed peaks
+  - Choose `WaveformPlaylistProvider` (Tone.js) for multi-track mixing, effects, recording
+- **Dependencies:** None (pure HTMLAudioElement)
+- **Location:** `packages/media-element-playout/src/`
+- **Browser Integration:**
+  - `MediaElementPlaylistProvider` - Context provider for media element playback
+  - `MediaElementWaveform` - Single-track waveform component
+  - Hooks: `useMediaElementAnimation`, `useMediaElementControls`, `useMediaElementState`, `useMediaElementData`
+- **Example:** `website/src/pages/examples/media-element.tsx`
 
 #### `@waveform-playlist/loaders`
 
