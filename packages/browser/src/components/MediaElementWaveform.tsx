@@ -58,6 +58,8 @@ export interface MediaElementWaveformProps {
   onAnnotationUpdate?: OnAnnotationUpdateFn;
   /** Where to position the active annotation when auto-scrolling: 'center', 'start', 'end', or 'nearest'. Defaults to 'center'. */
   scrollActivePosition?: ScrollLogicalPosition;
+  /** Which scrollable containers to scroll: 'nearest' (only the annotation list) or 'all' (including viewport). Defaults to 'nearest'. */
+  scrollActiveContainer?: 'nearest' | 'all';
   className?: string;
 }
 
@@ -80,6 +82,7 @@ export const MediaElementWaveform: React.FC<MediaElementWaveformProps> = ({
   editable = false,
   onAnnotationUpdate,
   scrollActivePosition = 'center',
+  scrollActiveContainer = 'nearest',
   className,
 }) => {
   const theme = useTheme() as import('@waveform-playlist/ui-components').WaveformPlaylistTheme;
@@ -351,6 +354,7 @@ export const MediaElementWaveform: React.FC<MediaElementWaveformProps> = ({
             activeAnnotationId={activeAnnotationId ?? undefined}
             shouldScrollToActive={true}
             scrollActivePosition={scrollActivePosition}
+            scrollActiveContainer={scrollActiveContainer}
             editable={editable}
             annotationListConfig={{ linkEndpoints: true, continuousPlay }}
             height={annotationTextHeight}

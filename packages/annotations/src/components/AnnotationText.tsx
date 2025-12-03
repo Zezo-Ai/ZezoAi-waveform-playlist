@@ -131,6 +131,8 @@ export interface AnnotationTextProps {
   shouldScrollToActive?: boolean;
   /** Where to position the active annotation when scrolling: 'center', 'start', 'end', or 'nearest'. Defaults to 'center'. */
   scrollActivePosition?: ScrollLogicalPosition;
+  /** Which scrollable containers to scroll: 'nearest' (only the annotation list) or 'all' (including viewport). Defaults to 'nearest'. */
+  scrollActiveContainer?: 'nearest' | 'all';
   editable?: boolean;
   controls?: AnnotationAction[];
   annotationListConfig?: AnnotationActionOptions;
@@ -150,6 +152,7 @@ const AnnotationTextComponent: FunctionComponent<AnnotationTextProps> = ({
   activeAnnotationId,
   shouldScrollToActive = false,
   scrollActivePosition = 'center',
+  scrollActiveContainer = 'nearest',
   editable = false,
   controls = [],
   annotationListConfig,
@@ -187,11 +190,12 @@ const AnnotationTextComponent: FunctionComponent<AnnotationTextProps> = ({
       activeAnnotationRef.current.scrollIntoView({
         behavior: 'smooth',
         block: scrollActivePosition,
-      });
+        container: scrollActiveContainer,
+      } as ScrollIntoViewOptions);
     }
 
     prevActiveIdRef.current = activeAnnotationId;
-  }, [activeAnnotationId, shouldScrollToActive, scrollActivePosition]);
+  }, [activeAnnotationId, shouldScrollToActive, scrollActivePosition, scrollActiveContainer]);
 
   const formatTime = (seconds: number): string => {
     if (isNaN(seconds) || !isFinite(seconds)) {
