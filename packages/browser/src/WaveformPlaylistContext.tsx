@@ -681,23 +681,13 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         );
 
         if (continuousPlayRef.current) {
-          // Continuous play ON: update active annotation and stop after last annotation
+          // Continuous play ON: update active annotation, let audio play to the end
           if (currentAnnotation && currentAnnotation.id !== activeAnnotationIdRef.current) {
             setActiveAnnotationId(currentAnnotation.id);
           } else if (!currentAnnotation && activeAnnotationIdRef.current !== null) {
-            // We're no longer in any annotation - check if we're past the last one
-            const lastAnnotation = annotations[annotations.length - 1];
-            if (time >= lastAnnotation.end) {
-              // Stop playback - we've finished all annotations
-              if (playoutRef.current) {
-                playoutRef.current.stop();
-              }
-              setIsPlaying(false);
-              currentTimeRef.current = playStartPositionRef.current;
-              setCurrentTime(playStartPositionRef.current);
-              setActiveAnnotationId(null);
-              return;
-            }
+            // Clear the active annotation when we're past it, but don't stop playback
+            // Let playback continue until the audio actually ends (handled by duration check)
+            setActiveAnnotationId(null);
           }
         } else {
           // Continuous play OFF: stop at end of current annotation

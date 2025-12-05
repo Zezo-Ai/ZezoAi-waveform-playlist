@@ -311,13 +311,9 @@ export const MediaElementPlaylistProvider: React.FC<
           ) {
             setActiveAnnotationId(currentAnnotation.id);
           } else if (!currentAnnotation && activeAnnotationIdRef.current !== null) {
-            const lastAnnotation = annotations[annotations.length - 1];
-            if (time >= lastAnnotation.end) {
-              playoutRef.current?.stop();
-              setIsPlaying(false);
-              setActiveAnnotationId(null);
-              return;
-            }
+            // Clear the active annotation when we're past it, but don't stop playback
+            // Let playback continue until the audio actually ends (handled by duration check below)
+            setActiveAnnotationId(null);
           }
         } else {
           if (activeAnnotationIdRef.current) {
