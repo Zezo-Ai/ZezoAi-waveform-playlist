@@ -24,8 +24,8 @@ export default function FooterWrapper(props: Props): React.ReactNode {
   return (
     <>
       <Sponsors />
-      <Footer {...props} />
       <BuyMeACoffee />
+      <Footer {...props} />
     </>
   );
 }
