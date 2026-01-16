@@ -26,6 +26,10 @@ Multi-track audio editor roadmap for waveform-playlist.
 - [ ] Performance benchmarks
 - [ ] Memory leak testing
 
+### API Parity
+
+- [ ] Add `renderPlayhead` prop to `MediaElementWaveform` (already exists in `Waveform`)
+
 ---
 
 ## ✅ Completed Features
