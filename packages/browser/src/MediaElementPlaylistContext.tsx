@@ -57,7 +57,7 @@ export interface MediaElementControlsContextValue {
   seekTo: (time: number) => void;
   setPlaybackRate: (rate: number) => void;
   setContinuousPlay: (enabled: boolean) => void;
-  setAnnotations: (annotations: AnnotationData[]) => void;
+  setAnnotations: React.Dispatch<React.SetStateAction<AnnotationData[]>>;
   setActiveAnnotationId: (id: string | null) => void;
   setAutomaticScroll: (enabled: boolean) => void;
   setScrollContainer: (element: HTMLDivElement | null) => void;

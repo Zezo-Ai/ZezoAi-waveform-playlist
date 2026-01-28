@@ -95,7 +95,7 @@ export interface WaveformPlaylistContextValue {
   setContinuousPlay: (enabled: boolean) => void;
   setLinkEndpoints: (enabled: boolean) => void;
   setAnnotationsEditable: (enabled: boolean) => void;
-  setAnnotations: (annotations: AnnotationData[]) => void;
+  setAnnotations: React.Dispatch<React.SetStateAction<AnnotationData[]>>;
   setActiveAnnotationId: (id: string | null) => void;
 
   // Refs
@@ -176,7 +176,7 @@ export interface PlaylistControlsContextValue {
   setContinuousPlay: (enabled: boolean) => void;
   setLinkEndpoints: (enabled: boolean) => void;
   setAnnotationsEditable: (enabled: boolean) => void;
-  setAnnotations: (annotations: AnnotationData[]) => void;
+  setAnnotations: React.Dispatch<React.SetStateAction<AnnotationData[]>>;
   setActiveAnnotationId: (id: string | null) => void;
 
   // Loop controls
