@@ -6,7 +6,7 @@ import React, {
   useRef,
   useCallback,
   useMemo,
-  ReactNode,
+  type ReactNode,
 } from 'react';
 import { ThemeProvider } from 'styled-components';
 import {
@@ -117,6 +117,8 @@ export interface MediaElementPlaylistProviderProps {
   barGap?: number;
   /** Width of progress bars */
   progressBarWidth?: number;
+  /** Callback when annotations are changed (drag, edit, etc.) */
+  onAnnotationsChange?: (annotations: AnnotationData[]) => void;
   /** Callback when audio is ready */
   onReady?: () => void;
   children: ReactNode;
@@ -153,6 +155,7 @@ export const MediaElementPlaylistProvider: React.FC<
   barWidth = 1,
   barGap = 0,
   progressBarWidth: progressBarWidthProp,
+  onAnnotationsChange,
   onReady,
   children,
 }) => {
@@ -164,7 +167,19 @@ export const MediaElementPlaylistProvider: React.FC<
   const [duration, setDuration] = useState(0);
   const [peaksDataArray, setPeaksDataArray] = useState<TrackClipPeaks[]>([]);
   const [playbackRate, setPlaybackRateState] = useState(initialPlaybackRate);
-  const [annotations, setAnnotations] = useState<AnnotationData[]>([]);
+  // Annotations are derived from prop (single source of truth in parent)
+  const annotations = useMemo(() => {
+    if (!annotationList?.annotations) return [];
+    return annotationList.annotations.map((ann: any) => {
+      if (typeof ann.start === 'number') return ann;
+      return parseAeneas(ann);
+    });
+  }, [annotationList?.annotations]);
+
+  // Ref for animation loop (avoids restarting loop on annotation change)
+  const annotationsRef = useRef<AnnotationData[]>(annotations);
+  annotationsRef.current = annotations;
+
   const [activeAnnotationId, setActiveAnnotationIdState] = useState<
     string | null
   >(null);
@@ -234,7 +249,14 @@ export const MediaElementPlaylistProvider: React.FC<
 
     // Set up playback complete callback
     playout.setOnPlaybackComplete(() => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
       setIsPlaying(false);
+      setActiveAnnotationId(null);
+      currentTimeRef.current = 0;
+      setCurrentTime(0);
     });
 
     playoutRef.current = playout;
@@ -274,19 +296,6 @@ export const MediaElementPlaylistProvider: React.FC<
     setPeaksDataArray([[clipPeaks]]);
   }, [track.waveformData, track.name, samplesPerPixel, sampleRate]);
 
-  // Load annotations
-  useEffect(() => {
-    if (annotationList?.annotations) {
-      const parsedAnnotations = annotationList.annotations.map((ann: any) => {
-        if (typeof ann.start === 'number') {
-          return ann;
-        }
-        return parseAeneas(ann);
-      });
-      setAnnotations(parsedAnnotations);
-    }
-  }, [annotationList]);
-
   // Animation loop
   const startAnimationLoop = useCallback(() => {
     if (animationFrameRef.current) {
@@ -298,9 +307,11 @@ export const MediaElementPlaylistProvider: React.FC<
       currentTimeRef.current = time;
       setCurrentTime(time);
 
+
       // Handle annotation playback
-      if (annotations.length > 0) {
-        const currentAnnotation = annotations.find(
+      const currentAnnotations = annotationsRef.current;
+      if (currentAnnotations.length > 0) {
+        const currentAnnotation = currentAnnotations.find(
           (ann) => time >= ann.start && time < ann.end
         );
 
@@ -312,15 +323,16 @@ export const MediaElementPlaylistProvider: React.FC<
             setActiveAnnotationId(currentAnnotation.id);
           } else if (!currentAnnotation && activeAnnotationIdRef.current !== null) {
             // Clear the active annotation when we're past it, but don't stop playback
-            // Let playback continue until the audio actually ends (handled by duration check below)
+            // Let playback continue until the audio element fires its 'ended' event
             setActiveAnnotationId(null);
           }
         } else {
           if (activeAnnotationIdRef.current) {
-            const activeAnnotation = annotations.find(
+            const activeAnnotation = currentAnnotations.find(
               (ann) => ann.id === activeAnnotationIdRef.current
             );
             if (activeAnnotation && time >= activeAnnotation.end) {
+
               playoutRef.current?.stop();
               setIsPlaying(false);
               return;
@@ -346,18 +358,11 @@ export const MediaElementPlaylistProvider: React.FC<
         container.scrollLeft = targetScrollLeft;
       }
 
-      if (time >= duration) {
-        playoutRef.current?.stop();
-        setIsPlaying(false);
-        setActiveAnnotationId(null);
-        return;
-      }
-
       animationFrameRef.current = requestAnimationFrame(updateTime);
     };
 
     animationFrameRef.current = requestAnimationFrame(updateTime);
-  }, [duration, annotations, setActiveAnnotationId, sampleRate, controls]);
+  }, [setActiveAnnotationId, sampleRate, controls]);
 
   const stopAnimationLoop = useCallback(() => {
     if (animationFrameRef.current) {
@@ -443,6 +448,20 @@ export const MediaElementPlaylistProvider: React.FC<
     [continuousPlay, annotations, activeAnnotationId, playbackRate, isAutomaticScroll]
   );
 
+  // Stable callback ref for onAnnotationsChange to avoid re-creating controls context
+  const onAnnotationsChangeRef = useRef(onAnnotationsChange);
+  onAnnotationsChangeRef.current = onAnnotationsChange;
+
+  const setAnnotations: React.Dispatch<React.SetStateAction<AnnotationData[]>> = useCallback(
+    (action) => {
+      const updated = typeof action === 'function'
+        ? action(annotationsRef.current)
+        : action;
+      onAnnotationsChangeRef.current?.(updated);
+    },
+    []
+  );
+
   const controlsValue: MediaElementControlsContextValue = useMemo(
     () => ({
       play,
@@ -459,7 +478,7 @@ export const MediaElementPlaylistProvider: React.FC<
       setScrollContainer,
       scrollContainerRef,
     }),
-    [play, pause, stop, seekTo, setPlaybackRate, setContinuousPlay, setActiveAnnotationId, setScrollContainer]
+    [play, pause, stop, seekTo, setPlaybackRate, setContinuousPlay, setAnnotations, setActiveAnnotationId, setScrollContainer]
   );
 
   const dataValue: MediaElementDataContextValue = useMemo(
