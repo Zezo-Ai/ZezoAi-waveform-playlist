@@ -110,10 +110,18 @@ export {
   ExportWavButton,
   Waveform,
   MediaElementWaveform,
+  MediaElementPlaylist,
+  MediaElementAnnotationList,
+  PlaylistVisualization,
+  PlaylistAnnotationList,
 } from './components';
 export type { ExportWavButtonProps } from './components/ExportControls';
 export type { WaveformProps } from './components/Waveform';
 export type { MediaElementWaveformProps } from './components/MediaElementWaveform';
+export type { MediaElementPlaylistProps } from './components/MediaElementPlaylist';
+export type { MediaElementAnnotationListProps } from './components/MediaElementAnnotationList';
+export type { PlaylistVisualizationProps } from './components/PlaylistVisualization';
+export type { PlaylistAnnotationListProps } from './components/PlaylistAnnotationList';
 
 // Re-export TimeFormat type from ui-components for convenience
 export type { TimeFormat } from '@waveform-playlist/ui-components';
