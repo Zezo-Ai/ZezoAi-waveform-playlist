@@ -1,0 +1,543 @@
+import React, { useRef, useState, ReactNode, useCallback } from 'react';
+import { getContext } from 'tone';
+import {
+  Playlist,
+  Track as TrackComponent,
+  Clip,
+  Playhead,
+  Selection,
+  TimescaleLoopRegion,
+  PlaylistInfoContext,
+  TrackControlsContext,
+  DevicePixelRatioProvider,
+  StyledTimeScale,
+  Controls,
+  Header,
+  Button,
+  ButtonGroup,
+  Slider,
+  SliderWrapper,
+  VolumeDownIcon,
+  VolumeUpIcon,
+  useTheme,
+  waveformColorToCss,
+  type RenderPlayheadFunction,
+} from '@waveform-playlist/ui-components';
+import {
+  AnnotationBoxesWrapper,
+  AnnotationBox,
+} from '@waveform-playlist/annotations';
+import type { AnnotationAction } from '@waveform-playlist/annotations';
+import { usePlaybackAnimation, usePlaylistState, usePlaylistControls, usePlaylistData } from '../WaveformPlaylistContext';
+import type { Peaks } from '@waveform-playlist/webaudio-peaks';
+import { AnimatedPlayhead } from './AnimatedPlayhead';
+import { ChannelWithProgress } from './ChannelWithProgress';
+import type { GetAnnotationBoxLabelFn } from '../types/annotations';
+
+// Default duration in seconds for empty tracks (used for recording workflow)
+const DEFAULT_EMPTY_TRACK_DURATION = 60;
+
+export interface PlaylistVisualizationProps {
+  renderTrackControls?: (trackIndex: number) => ReactNode;
+  renderTimestamp?: (timeMs: number, pixelPosition: number) => ReactNode;
+  /** Custom playhead render function. Receives position (pixels) and color from theme. */
+  renderPlayhead?: RenderPlayheadFunction;
+  annotationControls?: AnnotationAction[];
+  /**
+   * Custom function to generate the label shown on annotation boxes in the waveform.
+   * Receives the annotation data and its index, returns a string label.
+   * Default: annotation.id
+   */
+  getAnnotationBoxLabel?: GetAnnotationBoxLabelFn;
+  className?: string;
+  showClipHeaders?: boolean;
+  interactiveClips?: boolean;
+  showFades?: boolean;
+  /**
+   * Enable mobile-optimized touch interactions.
+   * When true, increases touch target sizes for clip boundaries.
+   * Use with useDragSensors({ touchOptimized: true }) for best results.
+   */
+  touchOptimized?: boolean;
+  // Live recording state for real-time waveform preview
+  recordingState?: {
+    isRecording: boolean;
+    trackId: string;
+    startSample: number;
+    durationSamples: number;
+    peaks: Int8Array | Int16Array;
+  };
+}
+
+/**
+ * Standalone playlist visualization component (WebAudio version).
+ *
+ * Renders the waveform tracks, timescale, annotations boxes, selection,
+ * playhead, loop regions, and track controls — everything that lives
+ * inside <Playlist> plus wrapping providers.
+ *
+ * Does NOT render AnnotationText (the annotation list below the waveform).
+ * Pair with PlaylistAnnotationList for a full annotation editing UI.
+ */
+export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
+  renderTrackControls,
+  renderTimestamp,
+  renderPlayhead,
+  annotationControls,
+  getAnnotationBoxLabel,
+  className,
+  showClipHeaders = false,
+  interactiveClips = false,
+  showFades = false,
+  touchOptimized = false,
+  recordingState,
+}) => {
+  const theme = useTheme() as import('@waveform-playlist/ui-components').WaveformPlaylistTheme;
+
+  const { isPlaying, currentTimeRef, playbackStartTimeRef, audioStartPositionRef } = usePlaybackAnimation();
+  const {
+    selectionStart,
+    selectionEnd,
+    annotations,
+    activeAnnotationId,
+    annotationsEditable,
+    linkEndpoints,
+    continuousPlay,
+    selectedTrackId,
+    loopStart,
+    loopEnd,
+    isLoopEnabled,
+  } = usePlaylistState();
+  const {
+    setAnnotations,
+    setActiveAnnotationId,
+    setTrackMute,
+    setTrackSolo,
+    setTrackVolume,
+    setTrackPan,
+    setSelection,
+    play,
+    setScrollContainer,
+    setSelectedTrackId,
+    setCurrentTime,
+    setLoopRegion,
+  } = usePlaylistControls();
+  const {
+    audioBuffers,
+    peaksDataArray,
+    trackStates,
+    tracks,
+    duration,
+    samplesPerPixel,
+    sampleRate,
+    waveHeight,
+    timeScaleHeight,
+    controls,
+    playoutRef,
+    barWidth,
+    barGap,
+    isReady,
+  } = usePlaylistData();
+
+  const [isSelecting, setIsSelecting] = useState(false);
+
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const handleScrollContainerRef = useCallback((element: HTMLDivElement | null) => {
+    scrollContainerRef.current = element;
+    setScrollContainer(element);
+  }, [setScrollContainer]);
+
+  // Calculate dimensions
+  let displayDuration = audioBuffers.length > 0 ? duration : DEFAULT_EMPTY_TRACK_DURATION;
+
+  if (recordingState?.isRecording) {
+    const recordingEndSample = recordingState.startSample + recordingState.durationSamples;
+    const recordingEndTime = recordingEndSample / sampleRate;
+    displayDuration = Math.max(displayDuration, recordingEndTime + 10);
+  }
+
+  const tracksFullWidth = Math.floor((displayDuration * sampleRate) / samplesPerPixel);
+
+  const handleAnnotationClick = async (annotation: any) => {
+    console.log('Annotation clicked:', annotation.id);
+    setActiveAnnotationId(annotation.id);
+    const playDuration = !continuousPlay ? annotation.end - annotation.start : undefined;
+    await play(annotation.start, playDuration);
+  };
+
+  const selectTrack = useCallback((trackIndex: number) => {
+    if (trackIndex >= 0 && trackIndex < tracks.length) {
+      const track = tracks[trackIndex];
+      setSelectedTrackId(track.id);
+    }
+  }, [tracks, setSelectedTrackId]);
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    const controlWidth = controls.show ? controls.width : 0;
+    const x = e.clientX - rect.left - controlWidth;
+    const clickTime = (x * samplesPerPixel) / sampleRate;
+
+    const y = e.clientY - rect.top;
+    const trackY = y;
+
+    let cumulativeHeight = 0;
+    let clickedTrackIndex = -1;
+
+    for (let i = 0; i < peaksDataArray.length; i++) {
+      const trackClipPeaks = peaksDataArray[i];
+      const maxChannels = trackClipPeaks.length > 0
+        ? Math.max(...trackClipPeaks.map(clip => clip.peaks.data.length))
+        : 1;
+      const trackHeight = maxChannels * waveHeight + (showClipHeaders ? 22 : 0);
+
+      if (trackY >= cumulativeHeight && trackY < cumulativeHeight + trackHeight) {
+        clickedTrackIndex = i;
+        break;
+      }
+      cumulativeHeight += trackHeight;
+    }
+
+    if (clickedTrackIndex !== -1) {
+      selectTrack(clickedTrackIndex);
+    }
+
+    setIsSelecting(true);
+    setCurrentTime(clickTime);
+    setSelection(clickTime, clickTime);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isSelecting) return;
+
+    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    const controlWidth = controls.show ? controls.width : 0;
+    const x = e.clientX - rect.left - controlWidth;
+    const moveTime = (x * samplesPerPixel) / sampleRate;
+
+    const start = Math.min(selectionStart, moveTime);
+    const end = Math.max(selectionStart, moveTime);
+    setSelection(start, end);
+  };
+
+  const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isSelecting) return;
+
+    setIsSelecting(false);
+
+    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    const controlWidth = controls.show ? controls.width : 0;
+    const x = e.clientX - rect.left - controlWidth;
+    const endTime = (x * samplesPerPixel) / sampleRate;
+
+    const start = Math.min(selectionStart, endTime);
+    const end = Math.max(selectionStart, endTime);
+
+    if (Math.abs(end - start) < 0.1) {
+      setCurrentTime(start);
+
+      if (isPlaying && playoutRef.current) {
+        playoutRef.current.stop();
+        play(start);
+      } else if (playoutRef.current) {
+        playoutRef.current.stop();
+      }
+    } else {
+      setSelection(start, end);
+    }
+  };
+
+  // Only show loading if we have tracks WITH clips but haven't loaded their data yet
+  const hasClips = tracks.some(track => track.clips.length > 0);
+  if (hasClips && (audioBuffers.length === 0 || peaksDataArray.length === 0)) {
+    return <div className={className}>Loading waveform...</div>;
+  }
+
+  return (
+    <DevicePixelRatioProvider>
+      <PlaylistInfoContext.Provider
+        value={{
+          samplesPerPixel,
+          sampleRate,
+          zoomLevels: [samplesPerPixel],
+          waveHeight,
+          timeScaleHeight,
+          duration: displayDuration,
+          controls,
+          barWidth,
+          barGap,
+        }}
+      >
+          <Playlist
+            theme={theme}
+            backgroundColor={waveformColorToCss(theme.waveOutlineColor)}
+            timescaleBackgroundColor={theme.timescaleBackgroundColor}
+            scrollContainerWidth={tracksFullWidth + (controls.show ? controls.width : 0)}
+            timescaleWidth={tracksFullWidth}
+            tracksWidth={tracksFullWidth}
+            controlsWidth={controls.show ? controls.width : 0}
+            onTracksMouseDown={handleMouseDown}
+            onTracksMouseMove={handleMouseMove}
+            onTracksMouseUp={handleMouseUp}
+            scrollContainerRef={handleScrollContainerRef}
+            isSelecting={isSelecting}
+            data-playlist-state={isReady ? 'ready' : 'loading'}
+            timescale={
+              timeScaleHeight > 0 ? (
+                <>
+                  <StyledTimeScale
+                    duration={displayDuration * 1000}
+                    marker={10000}
+                    bigStep={5000}
+                    secondStep={1000}
+                    renderTimestamp={renderTimestamp}
+                  />
+                  {isLoopEnabled && (
+                    <TimescaleLoopRegion
+                      startPosition={
+                        (Math.min(loopStart, loopEnd) * sampleRate) / samplesPerPixel
+                      }
+                      endPosition={
+                        (Math.max(loopStart, loopEnd) * sampleRate) / samplesPerPixel
+                      }
+                      markerColor={theme.loopMarkerColor}
+                      regionColor={theme.loopRegionColor}
+                      minPosition={0}
+                      maxPosition={tracksFullWidth}
+                      controlsOffset={controls.show ? controls.width : 0}
+                      onLoopRegionChange={(startPixels, endPixels) => {
+                        const startSeconds = (startPixels * samplesPerPixel) / sampleRate;
+                        const endSeconds = (endPixels * samplesPerPixel) / sampleRate;
+                        setLoopRegion(startSeconds, endSeconds);
+                      }}
+                    />
+                  )}
+                </>
+              ) : undefined
+            }
+          >
+            <>
+              {peaksDataArray.map((trackClipPeaks, trackIndex) => {
+                const track = tracks[trackIndex];
+                if (!track) return null;
+
+                const trackState = trackStates[trackIndex] || {
+                  name: `Track ${trackIndex + 1}`,
+                  muted: false,
+                  soloed: false,
+                  volume: 1.0,
+                  pan: 0,
+                };
+
+                const trackControls = renderTrackControls ? (
+                  renderTrackControls(trackIndex)
+                ) : (
+                  <Controls onClick={() => selectTrack(trackIndex)}>
+                    <Header style={{ justifyContent: 'center' }}>
+                      {trackState.name || `Track ${trackIndex + 1}`}
+                    </Header>
+                    <ButtonGroup>
+                      <Button
+                        $variant={trackState.muted ? 'danger' : 'outline'}
+                        onClick={() => setTrackMute(trackIndex, !trackState.muted)}
+                      >
+                        Mute
+                      </Button>
+                      <Button
+                        $variant={trackState.soloed ? 'info' : 'outline'}
+                        onClick={() => setTrackSolo(trackIndex, !trackState.soloed)}
+                      >
+                        Solo
+                      </Button>
+                    </ButtonGroup>
+                    <SliderWrapper>
+                      <VolumeDownIcon />
+                      <Slider
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value={trackState.volume}
+                        onChange={(e) =>
+                          setTrackVolume(trackIndex, parseFloat(e.target.value))
+                        }
+                      />
+                      <VolumeUpIcon />
+                    </SliderWrapper>
+                    <SliderWrapper>
+                      <span>L</span>
+                      <Slider
+                        min="-1"
+                        max="1"
+                        step="0.01"
+                        value={trackState.pan}
+                        onChange={(e) =>
+                          setTrackPan(trackIndex, parseFloat(e.target.value))
+                        }
+                      />
+                      <span>R</span>
+                    </SliderWrapper>
+                  </Controls>
+                );
+
+                const maxChannels = trackClipPeaks.length > 0
+                  ? Math.max(...trackClipPeaks.map(clip => clip.peaks.data.length))
+                  : 1;
+
+                return (
+                  <TrackControlsContext.Provider key={track.id} value={trackControls}>
+                    <TrackComponent
+                      numChannels={maxChannels}
+                      backgroundColor={waveformColorToCss(theme.waveOutlineColor)}
+                      offset={0}
+                      width={tracksFullWidth}
+                      hasClipHeaders={showClipHeaders}
+                      trackId={track.id}
+                      isSelected={track.id === selectedTrackId}
+                    >
+                      {trackClipPeaks.map((clip, clipIndex) => {
+                        const peaksData = clip.peaks;
+                        const width = peaksData.length;
+
+                        return (
+                          <Clip
+                            key={`${trackIndex}-${clipIndex}`}
+                            clipId={clip.clipId}
+                            trackIndex={trackIndex}
+                            clipIndex={clipIndex}
+                            trackName={clip.trackName}
+                            startSample={clip.startSample}
+                            durationSamples={clip.durationSamples}
+                            samplesPerPixel={samplesPerPixel}
+                            showHeader={showClipHeaders}
+                            disableHeaderDrag={!interactiveClips}
+                            isSelected={track.id === selectedTrackId}
+                            trackId={track.id}
+                            fadeIn={clip.fadeIn}
+                            fadeOut={clip.fadeOut}
+                            sampleRate={sampleRate}
+                            showFades={showFades}
+                            touchOptimized={touchOptimized}
+                            onMouseDown={(e) => {
+                              const target = e.target as HTMLElement;
+                              const isDraggable = target.closest('[role="button"][aria-roledescription="draggable"]');
+                              if (isDraggable) {
+                                return;
+                              }
+                              selectTrack(trackIndex);
+                            }}
+                          >
+                            {peaksData.data.map((channelPeaks: Peaks, channelIndex: number) => (
+                              <ChannelWithProgress
+                                key={`${trackIndex}-${clipIndex}-${channelIndex}`}
+                                index={channelIndex}
+                                data={channelPeaks}
+                                bits={peaksData.bits}
+                                length={width}
+                                isSelected={track.id === selectedTrackId}
+                                clipStartSample={clip.startSample}
+                                clipDurationSamples={clip.durationSamples}
+                              />
+                            ))}
+                          </Clip>
+                        );
+                      })}
+                      {recordingState?.isRecording &&
+                       recordingState.trackId === track.id &&
+                       recordingState.peaks.length > 0 && (
+                        <Clip
+                          key={`${trackIndex}-recording`}
+                          clipId="recording-preview"
+                          trackIndex={trackIndex}
+                          clipIndex={trackClipPeaks.length}
+                          trackName="Recording..."
+                          startSample={recordingState.startSample}
+                          durationSamples={recordingState.durationSamples}
+                          samplesPerPixel={samplesPerPixel}
+                          showHeader={showClipHeaders}
+                          disableHeaderDrag={true}
+                          isSelected={track.id === selectedTrackId}
+                          trackId={track.id}
+                        >
+                          <ChannelWithProgress
+                            key={`${trackIndex}-recording-0`}
+                            index={0}
+                            data={recordingState.peaks}
+                            bits={16}
+                            length={Math.floor(recordingState.peaks.length / 2)}
+                            isSelected={track.id === selectedTrackId}
+                            clipStartSample={recordingState.startSample}
+                            clipDurationSamples={recordingState.durationSamples}
+                          />
+                        </Clip>
+                      )}
+                    </TrackComponent>
+                  </TrackControlsContext.Provider>
+                );
+              })}
+              {annotations.length > 0 && (
+                <AnnotationBoxesWrapper height={30} width={tracksFullWidth}>
+                  {annotations.map((annotation, index) => {
+                    const startPosition = (annotation.start * sampleRate) / samplesPerPixel;
+                    const endPosition = (annotation.end * sampleRate) / samplesPerPixel;
+                    const label = getAnnotationBoxLabel
+                      ? getAnnotationBoxLabel(annotation, index)
+                      : annotation.id;
+                    return (
+                      <AnnotationBox
+                        key={annotation.id}
+                        annotationId={annotation.id}
+                        annotationIndex={index}
+                        startPosition={startPosition}
+                        endPosition={endPosition}
+                        label={label}
+                        color="#ff9800"
+                        isActive={annotation.id === activeAnnotationId}
+                        onClick={() => handleAnnotationClick(annotation)}
+                        editable={annotationsEditable}
+                      />
+                    );
+                  })}
+                </AnnotationBoxesWrapper>
+              )}
+              {selectionStart !== selectionEnd && (
+                <Selection
+                  startPosition={
+                    (Math.min(selectionStart, selectionEnd) * sampleRate) / samplesPerPixel +
+                    (controls.show ? controls.width : 0)
+                  }
+                  endPosition={
+                    (Math.max(selectionStart, selectionEnd) * sampleRate) / samplesPerPixel +
+                    (controls.show ? controls.width : 0)
+                  }
+                  color={theme.selectionColor}
+                />
+              )}
+              {(isPlaying || selectionStart === selectionEnd) && (
+                renderPlayhead ? (
+                  renderPlayhead({
+                    position: ((currentTimeRef.current ?? 0) * sampleRate) / samplesPerPixel +
+                      (controls.show ? controls.width : 0),
+                    color: theme.playheadColor,
+                    isPlaying,
+                    currentTimeRef,
+                    playbackStartTimeRef,
+                    audioStartPositionRef,
+                    samplesPerPixel,
+                    sampleRate,
+                    controlsOffset: controls.show ? controls.width : 0,
+                    getAudioContextTime: () => getContext().currentTime,
+                  })
+                ) : (
+                  <AnimatedPlayhead
+                    color={theme.playheadColor}
+                    controlsOffset={controls.show ? controls.width : 0}
+                  />
+                )
+              )}
+            </>
+          </Playlist>
+      </PlaylistInfoContext.Provider>
+    </DevicePixelRatioProvider>
+  );
+};
