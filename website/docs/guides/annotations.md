@@ -4,7 +4,7 @@ sidebar_position: 6
 
 # Annotations
 
-Add time-synchronized text annotations to your audio timeline with drag-to-edit functionality. The annotations package provides a flexible, composable architecture that lets you build custom annotation UIs.
+Add time-synchronized text annotations to your audio timeline with drag-to-edit functionality. The annotations system provides two approaches: an **integrated pattern** (recommended) where annotations are managed by the provider, and **composable building blocks** for custom UIs.
 
 ## Installation
 
@@ -14,36 +14,17 @@ Install the annotations package:
 npm install @waveform-playlist/annotations
 ```
 
-## Architecture Overview
+## Quick Start
 
-The annotations package exports composable building blocks:
-
-| Component | Description |
-|-----------|-------------|
-| `AnnotationText` | Scrollable list of annotation text with auto-scroll to active |
-| `AnnotationBox` | Individual draggable box on the timeline |
-| `AnnotationBoxesWrapper` | Container that aligns boxes with the waveform |
-| `AnnotationsTrack` | Complete annotation track (combines wrapper + boxes) |
-| `Annotation` | Legacy overlay-style annotation (text over waveform) |
-
-**Hooks:**
-- `useAnnotationControls` - Manages continuous play, linked endpoints, and boundary updates
-
-**Control Components:**
-- `ContinuousPlayCheckbox` - Toggle continuous playback mode
-- `LinkEndpointsCheckbox` - Toggle linked annotation boundaries
-- `EditableCheckbox` - Toggle edit mode
-- `DownloadAnnotationsButton` - Export annotations
-
-## Basic Usage
+The simplest way to add annotations is through the provider's `annotationList` prop. The `<Waveform />` component renders annotation boxes and text automatically.
 
 ```tsx
+import { useState } from 'react';
 import {
   WaveformPlaylistProvider,
   Waveform,
   useAudioTracks,
 } from '@waveform-playlist/browser';
-import { AnnotationsTrack } from '@waveform-playlist/annotations';
 
 function AnnotatedPlaylist() {
   const { tracks, loading } = useAudioTracks([
@@ -59,16 +40,23 @@ function AnnotatedPlaylist() {
   if (loading) return <div>Loading...</div>;
 
   return (
-    <WaveformPlaylistProvider tracks={tracks} timescale>
+    <WaveformPlaylistProvider
+      tracks={tracks}
+      timescale
+      annotationList={{
+        annotations,
+        editable: true,
+        linkEndpoints: false,
+      }}
+      onAnnotationsChange={setAnnotations}
+    >
       <Waveform />
-      <AnnotationsTrack
-        annotations={annotations}
-        onAnnotationsChange={setAnnotations}
-      />
     </WaveformPlaylistProvider>
   );
 }
 ```
+
+With this pattern, `<Waveform />` internally renders `AnnotationBoxesWrapper`, `AnnotationBox` components, and `AnnotationText` — no manual composition needed.
 
 ## Annotation Structure
 
@@ -84,7 +72,168 @@ interface AnnotationData {
 }
 ```
 
-## Core Components
+## Provider Configuration
+
+### `annotationList` Prop
+
+Pass annotation data and editing options to the provider:
+
+```typescript
+interface AnnotationList {
+  annotations?: AnnotationData[];   // Array of annotations
+  editable?: boolean;               // Enable drag editing
+  isContinuousPlay?: boolean;       // Auto-play next annotation
+  linkEndpoints?: boolean;          // Link adjacent boundaries (default: false)
+  controls?: AnnotationAction[];    // Custom action buttons per annotation
+}
+```
+
+### `onAnnotationsChange` Callback
+
+Called whenever annotations are modified (drag, text edit, boundary change):
+
+```tsx
+<WaveformPlaylistProvider
+  tracks={tracks}
+  annotationList={{ annotations, editable: true }}
+  onAnnotationsChange={(updatedAnnotations) => {
+    setAnnotations(updatedAnnotations);
+  }}
+>
+  <Waveform />
+</WaveformPlaylistProvider>
+```
+
+:::note Naming Convention
+The **provider** uses `onAnnotationsChange` (browser package). The **`AnnotationText` component** uses `onAnnotationUpdate` (annotations package). Both receive the full updated annotations array.
+:::
+
+## Waveform Annotation Props
+
+When using the integrated pattern, `<Waveform />` accepts these annotation-related props:
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `annotationControls` | `AnnotationAction[]` | Custom action buttons for each annotation item |
+| `annotationTextHeight` | `number` | Height in pixels for the annotation text list |
+| `renderAnnotationItem` | `(props: RenderAnnotationItemProps) => ReactNode` | Custom render function for annotation list items |
+| `getAnnotationBoxLabel` | `(annotation, index) => string` | Custom label for annotation boxes on the timeline |
+
+```tsx
+<Waveform
+  annotationTextHeight={200}
+  getAnnotationBoxLabel={(annotation, index) => `${index + 1}. ${annotation.lines[0]}`}
+  renderAnnotationItem={({ annotation, index, isActive, onClick, formatTime }) => (
+    <div onClick={onClick} style={{ background: isActive ? '#ffe0b2' : 'transparent' }}>
+      <strong>{formatTime(annotation.start)} - {formatTime(annotation.end)}</strong>
+      <p>{annotation.lines.join(' ')}</p>
+    </div>
+  )}
+/>
+```
+
+## Browser Hooks
+
+The browser package provides hooks for annotation interactions. These are used internally by `<Waveform />` but can also be used directly for custom UIs.
+
+### useAnnotationDragHandlers
+
+Provides @dnd-kit drag handlers for annotation boundary editing.
+
+```typescript
+import { useAnnotationDragHandlers } from '@waveform-playlist/browser';
+
+const { onDragStart, onDragMove, onDragEnd } = useAnnotationDragHandlers({
+  annotations,           // AnnotationData[]
+  onAnnotationsChange,   // (annotations) => void
+  samplesPerPixel,       // number
+  sampleRate,            // number
+  duration,              // number (total duration in seconds)
+  linkEndpoints,         // boolean
+});
+```
+
+Use with `@dnd-kit`'s `DndContext`:
+
+```tsx
+import { DndContext } from '@dnd-kit/core';
+
+<DndContext onDragStart={onDragStart} onDragMove={onDragMove} onDragEnd={onDragEnd}>
+  {/* annotation boxes */}
+</DndContext>
+```
+
+### useAnnotationKeyboardControls
+
+Keyboard navigation and editing for annotations.
+
+```typescript
+import { useAnnotationKeyboardControls } from '@waveform-playlist/browser';
+
+const {
+  moveStartBoundary,    // (delta: number) => void
+  moveEndBoundary,      // (delta: number) => void
+  selectPrevious,       // () => void
+  selectNext,           // () => void
+  selectFirst,          // () => void
+  selectLast,           // () => void
+  clearSelection,       // () => void
+  scrollToAnnotation,   // (annotationId: string) => void
+  playActiveAnnotation, // () => void
+} = useAnnotationKeyboardControls({
+  annotations,                // AnnotationData[]
+  activeAnnotationId,         // string | null
+  onAnnotationsChange,        // (annotations) => void
+  onActiveAnnotationChange,   // (id: string | null) => void
+  duration,                   // number
+  linkEndpoints,              // boolean
+  continuousPlay,             // boolean (optional)
+  enabled,                    // boolean (optional)
+  scrollContainerRef,         // RefObject<HTMLDivElement> (optional)
+  onPlay,                     // (startTime, duration?) => void (optional)
+});
+```
+
+**Default Keyboard Shortcuts:**
+
+| Key | Action |
+|-----|--------|
+| `←` / `→` | Move start boundary |
+| `Shift+←` / `Shift+→` | Move end boundary |
+| `↑` / `↓` | Select previous / next annotation |
+| `Home` / `End` | Select first / last annotation |
+| `Escape` | Clear selection |
+| `Enter` | Play active annotation |
+
+## Annotation Package Components
+
+The `@waveform-playlist/annotations` package exports composable building blocks for custom annotation UIs.
+
+### AnnotationsTrack
+
+A layout wrapper for annotation content. Use this when building a custom annotation UI outside the integrated `<Waveform />` pattern.
+
+```typescript
+interface AnnotationsTrackProps {
+  className?: string;
+  children?: React.ReactNode;
+  height?: number;
+  offset?: number;
+  width?: number;
+}
+```
+
+```tsx
+import { AnnotationsTrack } from '@waveform-playlist/annotations';
+
+<AnnotationsTrack height={30}>
+  {/* Custom annotation content */}
+</AnnotationsTrack>
+```
+
+:::tip
+`AnnotationsTrack` is a simple layout container — it does **not** accept `annotations`, `onAnnotationsChange`, or `editable` props. For the common case, use the integrated pattern (pass `annotationList` to the provider and use `<Waveform />`).
+:::
 
 ### AnnotationText
 
@@ -171,21 +320,6 @@ import { AnnotationBoxesWrapper, AnnotationBox } from '@waveform-playlist/annota
     />
   ))}
 </AnnotationBoxesWrapper>
-```
-
-### AnnotationsTrack
-
-Complete annotation track component that combines `AnnotationBoxesWrapper` with `AnnotationBox` components. Best for quick setup.
-
-```tsx
-import { AnnotationsTrack } from '@waveform-playlist/annotations';
-
-<AnnotationsTrack
-  annotations={annotations}
-  onAnnotationsChange={setAnnotations}
-  editable={true}
-  height={30}
-/>
 ```
 
 ## useAnnotationControls Hook
@@ -317,7 +451,6 @@ const theme = {
 
 <WaveformPlaylistProvider tracks={tracks} theme={theme}>
   <Waveform />
-  <AnnotationsTrack annotations={annotations} />
 </WaveformPlaylistProvider>
 ```
 
@@ -404,8 +537,6 @@ import {
   useAudioTracks,
 } from '@waveform-playlist/browser';
 import {
-  AnnotationsTrack,
-  AnnotationText,
   useAnnotationControls,
   ContinuousPlayCheckbox,
   LinkEndpointsCheckbox,
@@ -424,7 +555,6 @@ function AnnotationsExample() {
     { id: '3', start: 30, end: 45, lines: ['Conclusion'] },
   ]);
 
-  const [activeAnnotationId, setActiveAnnotationId] = useState<string>();
   const [editable, setEditable] = useState(true);
 
   const {
@@ -443,6 +573,13 @@ function AnnotationsExample() {
       samplesPerPixel={1024}
       waveHeight={100}
       timescale
+      annotationList={{
+        annotations,
+        editable,
+        isContinuousPlay: continuousPlay,
+        linkEndpoints,
+      }}
+      onAnnotationsChange={setAnnotations}
     >
       {/* Playback controls */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
@@ -459,24 +596,8 @@ function AnnotationsExample() {
         <DownloadAnnotationsButton annotations={annotations} />
       </div>
 
-      {/* Waveform with annotation boxes */}
-      <Waveform />
-      <AnnotationsTrack
-        annotations={annotations}
-        onAnnotationsChange={setAnnotations}
-        activeAnnotationId={activeAnnotationId}
-        editable={editable}
-      />
-
-      {/* Annotation text list */}
-      <AnnotationText
-        annotations={annotations}
-        activeAnnotationId={activeAnnotationId}
-        editable={editable}
-        height={200}
-        onAnnotationClick={(annotation) => setActiveAnnotationId(annotation.id)}
-        onAnnotationUpdate={setAnnotations}
-      />
+      {/* Waveform with integrated annotation boxes and text */}
+      <Waveform annotationTextHeight={200} />
     </WaveformPlaylistProvider>
   );
 }

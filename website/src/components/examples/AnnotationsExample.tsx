@@ -815,6 +815,7 @@ export function AnnotationsExample() {
         linkEndpoints: true,
         isContinuousPlay: true,
       }}
+      onAnnotationsChange={setAnnotations}
     >
       <AnnotationsAppContent
         tracks={tracks}

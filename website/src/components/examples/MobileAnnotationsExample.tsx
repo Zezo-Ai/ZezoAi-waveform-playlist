@@ -425,6 +425,7 @@ export function MobileAnnotationsExample() {
         linkEndpoints: true,
         isContinuousPlay: true,
       }}
+      onAnnotationsChange={setAnnotations}
     >
       <MobileAnnotationsContent tracks={tracks} />
     </WaveformPlaylistProvider>
