@@ -204,7 +204,7 @@ function AnnotationEditor() {
     updateAnnotationBoundaries,
   } = useAnnotationControls({
     initialContinuousPlay: false,
-    initialLinkEndpoints: true,
+    initialLinkEndpoints: false,
   });
 
   // Handle drag updates
@@ -268,7 +268,7 @@ import {
 
 function AnnotationControls({ annotations }) {
   const [continuousPlay, setContinuousPlay] = useState(false);
-  const [linkEndpoints, setLinkEndpoints] = useState(true);
+  const [linkEndpoints, setLinkEndpoints] = useState(false);
   const [editable, setEditable] = useState(true);
 
   return (
