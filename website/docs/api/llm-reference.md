@@ -8,11 +8,11 @@ description: Machine-readable API reference for LLMs and coding agents. All Type
 
 This page contains all TypeScript interfaces extracted from source code. Designed for LLMs and coding agents — no prose, just types.
 
-**Source of truth:** `packages/browser/src/WaveformPlaylistContext.tsx`
+**Source of truth:** `packages/browser/src/WaveformPlaylistContext.tsx`, `packages/browser/src/MediaElementPlaylistContext.tsx`
 
 ---
 
-## Provider Props
+## Provider Props (WaveformPlaylistProvider)
 
 ```typescript
 interface WaveformPlaylistProviderProps {
@@ -44,7 +44,102 @@ interface WaveformPlaylistProviderProps {
 
 ---
 
-## Context Hooks
+## Provider Props (MediaElementPlaylistProvider)
+
+```typescript
+interface MediaElementTrackConfig {
+  source: string;                        // Audio source URL or Blob URL
+  waveformData: WaveformDataObject;      // Pre-computed waveform data (required)
+  name?: string;                         // Track name for display
+}
+
+interface MediaElementPlaylistProviderProps {
+  track: MediaElementTrackConfig;
+  children: ReactNode;
+  samplesPerPixel?: number;              // Default: 1024
+  waveHeight?: number;                   // Default: 100
+  timescale?: boolean;                   // Default: false
+  playbackRate?: number;                 // Default: 1 (range: 0.5–2.0, pitch-preserving)
+  automaticScroll?: boolean;             // Default: false
+  theme?: Partial<WaveformPlaylistTheme>;
+  controls?: { show: boolean; width: number }; // Default: { show: false, width: 0 }
+  annotationList?: {
+    annotations?: any[];
+    isContinuousPlay?: boolean;
+  };
+  onAnnotationsChange?: (annotations: AnnotationData[]) => void;
+  onReady?: () => void;
+  barWidth?: number;                     // Default: 1
+  barGap?: number;                       // Default: 0
+  progressBarWidth?: number;             // Default: barWidth + barGap
+}
+```
+
+---
+
+## MediaElement Context Hooks
+
+### useMediaElementAnimation()
+
+```typescript
+interface MediaElementAnimationContextValue {
+  isPlaying: boolean;
+  currentTime: number;
+  currentTimeRef: RefObject<number>;
+}
+```
+
+### useMediaElementState()
+
+```typescript
+interface MediaElementStateContextValue {
+  continuousPlay: boolean;
+  annotations: AnnotationData[];
+  activeAnnotationId: string | null;
+  playbackRate: number;
+  isAutomaticScroll: boolean;
+}
+```
+
+### useMediaElementControls()
+
+```typescript
+interface MediaElementControlsContextValue {
+  play: (startTime?: number) => void;
+  pause: () => void;
+  stop: () => void;
+  seekTo: (time: number) => void;
+  setPlaybackRate: (rate: number) => void;
+  setContinuousPlay: (enabled: boolean) => void;
+  setAnnotations: Dispatch<SetStateAction<AnnotationData[]>>;
+  setActiveAnnotationId: (id: string | null) => void;
+  setAutomaticScroll: (enabled: boolean) => void;
+  setScrollContainer: (element: HTMLDivElement | null) => void;
+  scrollContainerRef: RefObject<HTMLDivElement | null>;
+}
+```
+
+### useMediaElementData()
+
+```typescript
+interface MediaElementDataContextValue {
+  duration: number;
+  peaksDataArray: TrackClipPeaks[];
+  sampleRate: number;
+  waveHeight: number;
+  timeScaleHeight: number;
+  samplesPerPixel: number;
+  playoutRef: RefObject<MediaElementPlayout | null>;
+  controls: { show: boolean; width: number };
+  barWidth: number;
+  barGap: number;
+  progressBarWidth: number;
+}
+```
+
+---
+
+## WaveformPlaylist Context Hooks
 
 ### usePlaybackAnimation()
 
