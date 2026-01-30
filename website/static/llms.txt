@@ -1,0 +1,84 @@
+# waveform-playlist
+
+> Multitrack Web Audio editor and player with canvas waveform visualization, built with React and Tone.js.
+
+## What It Does
+
+waveform-playlist is a React component library for building browser-based audio editing applications. It provides:
+
+- Multitrack audio playback, mixing, and editing
+- Canvas-based waveform rendering with zoom
+- Click-to-seek, drag-to-select, clip drag/trim/split
+- 20 real-time audio effects (reverb, delay, EQ, compression, etc.) via Tone.js
+- Time-synchronized annotations with drag editing
+- Recording with live waveform preview
+- WAV export with offline rendering
+- BBC audiowaveform support for instant rendering of large files
+- Theming via styled-components
+
+## Packages
+
+- `@waveform-playlist/browser` — Main package: React components, hooks, effects
+- `@waveform-playlist/core` — Data model: ClipTrack, AudioClip, sample-based math
+- `@waveform-playlist/playout` — Audio engine: Tone.js playback, global AudioContext
+- `@waveform-playlist/ui-components` — Styled primitives, theming, playhead components
+- `@waveform-playlist/annotations` — Annotation parsing, rendering, keyboard controls
+- `@waveform-playlist/recording` — Microphone access, AudioWorklet recording, VU meter
+- `@waveform-playlist/webaudio-peaks` — Peak extraction from AudioBuffer
+
+## Quick Start
+
+```tsx
+import { WaveformPlaylistProvider, Waveform, PlayButton, PauseButton, StopButton, useAudioTracks } from '@waveform-playlist/browser';
+
+function App() {
+  const { tracks, loading } = useAudioTracks([
+    { src: '/audio/track1.mp3', name: 'Track 1' },
+    { src: '/audio/track2.mp3', name: 'Track 2' },
+  ]);
+
+  if (loading) return <div>Loading...</div>;
+
+  return (
+    <WaveformPlaylistProvider tracks={tracks} timescale controls={{ show: true, width: 200 }}>
+      <PlayButton /> <PauseButton /> <StopButton />
+      <Waveform />
+    </WaveformPlaylistProvider>
+  );
+}
+```
+
+## Architecture
+
+The library uses React Context with 4 split contexts for performance:
+
+1. **usePlaybackAnimation()** — High-frequency: isPlaying, currentTime, timing refs
+2. **usePlaylistState()** — Medium-frequency: selection, loop, annotations, settings
+3. **usePlaylistControls()** — Stable: play/pause/stop/seekTo, track controls, zoom, settings setters
+4. **usePlaylistData()** — Stable: duration, tracks, trackStates, display config, isReady
+
+## Key Hooks
+
+- `useAudioTracks(configs)` — Load audio files into ClipTrack[] for the provider
+- `useDynamicEffects()` — Master effects chain with runtime add/remove/parameter updates
+- `useTrackDynamicEffects()` — Per-track effects management
+- `useClipDragHandlers(opts)` — Drag-to-move and boundary trimming with collision detection
+- `useClipSplitting(opts)` — Split clips at playhead position
+- `useIntegratedRecording(tracks, setTracks, selectedTrackId, opts)` — Full recording with auto clip creation
+- `useExportWav()` — Offline WAV export with effects support
+- `useKeyboardShortcuts(opts)` — Custom keyboard shortcuts
+- `usePlaybackShortcuts(opts)` — Default playback shortcuts (Space, Escape, 0)
+
+## Key Components
+
+- `WaveformPlaylistProvider` — Root provider (required). Props: tracks, timescale, controls, theme, effects, annotationList, onAnnotationsChange, onReady, barWidth, barGap, waveHeight, samplesPerPixel, zoomLevels
+- `Waveform` — Main visualization. Props: showClipHeaders, interactiveClips, renderPlayhead, renderTrackControls, showFades, touchOptimized
+- Buttons: PlayButton, PauseButton, StopButton, RewindButton, FastForwardButton, LoopButton, SetLoopRegionButton, ZoomInButton, ZoomOutButton, ExportWavButton
+- Controls: MasterVolumeControl, TimeFormatSelect, AudioPosition, SelectionTimeInputs, AutomaticScrollCheckbox, ContinuousPlayCheckbox
+
+## Documentation
+
+- Full docs: https://naomiaro.github.io/waveform-playlist/docs/
+- LLM API reference: https://naomiaro.github.io/waveform-playlist/docs/api/llm-reference
+- Examples: https://naomiaro.github.io/waveform-playlist/docs/examples
+- GitHub: https://github.com/naomiaro/waveform-playlist
