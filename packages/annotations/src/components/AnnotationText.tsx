@@ -282,6 +282,12 @@ const AnnotationTextComponent: FunctionComponent<AnnotationTextProps> = ({
                 contentEditable={editable}
                 suppressContentEditableWarning
                 onBlur={(e) => handleIdEdit(index, e.currentTarget.textContent || '')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    (e.currentTarget as HTMLElement).blur();
+                  }
+                }}
               >
                 {annotation.id}
               </AnnotationIdLabel>
@@ -308,6 +314,12 @@ const AnnotationTextComponent: FunctionComponent<AnnotationTextProps> = ({
             contentEditable={editable}
             suppressContentEditableWarning
             onBlur={(e) => handleTextEdit(index, e.currentTarget.textContent || '')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                (e.currentTarget as HTMLElement).blur();
+              }
+            }}
           >
             {annotation.lines.join('\n')}
           </AnnotationTextContent>
