@@ -1,10 +1,14 @@
 import React, { useCallback } from 'react';
 import { AnnotationText } from '@waveform-playlist/annotations';
-import type { RenderAnnotationItemProps } from '@waveform-playlist/annotations';
+import type {
+  RenderAnnotationItemProps,
+  AnnotationAction,
+  AnnotationActionOptions,
+} from '@waveform-playlist/annotations';
 import { useMediaElementState, useMediaElementControls } from '../MediaElementPlaylistContext';
-import type { OnAnnotationUpdateFn } from '../types/annotations';
+import type { AnnotationData, OnAnnotationUpdateFn } from '../types/annotations';
 
-export type { RenderAnnotationItemProps } from '@waveform-playlist/annotations';
+export type { RenderAnnotationItemProps, AnnotationAction, AnnotationActionOptions } from '@waveform-playlist/annotations';
 export type { OnAnnotationUpdateFn } from '../types/annotations';
 
 export interface MediaElementAnnotationListProps {
@@ -22,10 +26,16 @@ export interface MediaElementAnnotationListProps {
   onAnnotationUpdate?: OnAnnotationUpdateFn;
   /** Whether annotation text can be edited. Defaults to false. */
   editable?: boolean;
-  /** Whether dragging one annotation boundary also moves the adjacent annotation's boundary. Defaults to false. */
-  linkEndpoints?: boolean;
-  /** Override continuousPlay from context. Falls back to context value if not provided. */
-  continuousPlay?: boolean;
+  /**
+   * Action controls to show on each annotation item (e.g., delete, split).
+   * Only rendered when `editable` is true.
+   */
+  controls?: AnnotationAction[];
+  /**
+   * Override annotation list config. Falls back to context values
+   * `{ linkEndpoints: false, continuousPlay }` if not provided.
+   */
+  annotationListConfig?: AnnotationActionOptions;
   /** Where to position the active annotation when auto-scrolling. Defaults to 'center'. */
   scrollActivePosition?: ScrollLogicalPosition;
   /** Which scrollable containers to scroll: 'nearest' or 'all'. Defaults to 'nearest'. */
@@ -43,17 +53,17 @@ export const MediaElementAnnotationList: React.FC<MediaElementAnnotationListProp
   renderAnnotationItem,
   onAnnotationUpdate,
   editable = false,
-  linkEndpoints = false,
-  continuousPlay: continuousPlayProp,
+  controls,
+  annotationListConfig,
   scrollActivePosition = 'center',
   scrollActiveContainer = 'nearest',
 }) => {
-  const { annotations, activeAnnotationId, continuousPlay: contextContinuousPlay } = useMediaElementState();
+  const { annotations, activeAnnotationId, continuousPlay } = useMediaElementState();
   const { setAnnotations } = useMediaElementControls();
 
-  const continuousPlay = continuousPlayProp ?? contextContinuousPlay;
+  const resolvedConfig = annotationListConfig ?? { linkEndpoints: false, continuousPlay };
 
-  const handleAnnotationUpdate = useCallback((updatedAnnotations: any[]) => {
+  const handleAnnotationUpdate = useCallback((updatedAnnotations: AnnotationData[]) => {
     setAnnotations(updatedAnnotations);
     onAnnotationUpdate?.(updatedAnnotations);
   }, [setAnnotations, onAnnotationUpdate]);
@@ -66,7 +76,8 @@ export const MediaElementAnnotationList: React.FC<MediaElementAnnotationListProp
       scrollActivePosition={scrollActivePosition}
       scrollActiveContainer={scrollActiveContainer}
       editable={editable}
-      annotationListConfig={{ linkEndpoints, continuousPlay }}
+      controls={editable ? controls : undefined}
+      annotationListConfig={resolvedConfig}
       height={height}
       onAnnotationUpdate={handleAnnotationUpdate}
       renderAnnotationItem={renderAnnotationItem}

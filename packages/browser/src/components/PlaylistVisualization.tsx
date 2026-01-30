@@ -1,10 +1,9 @@
-import React, { useRef, useState, ReactNode, useCallback } from 'react';
+import React, { useRef, useState, type ReactNode, useCallback } from 'react';
 import { getContext } from 'tone';
 import {
   Playlist,
   Track as TrackComponent,
   Clip,
-  Playhead,
   Selection,
   TimescaleLoopRegion,
   PlaylistInfoContext,
@@ -32,7 +31,7 @@ import { usePlaybackAnimation, usePlaylistState, usePlaylistControls, usePlaylis
 import type { Peaks } from '@waveform-playlist/webaudio-peaks';
 import { AnimatedPlayhead } from './AnimatedPlayhead';
 import { ChannelWithProgress } from './ChannelWithProgress';
-import type { GetAnnotationBoxLabelFn } from '../types/annotations';
+import type { AnnotationData, GetAnnotationBoxLabelFn } from '../types/annotations';
 
 // Default duration in seconds for empty tracks (used for recording workflow)
 const DEFAULT_EMPTY_TRACK_DURATION = 60;
@@ -159,11 +158,14 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
 
   const tracksFullWidth = Math.floor((displayDuration * sampleRate) / samplesPerPixel);
 
-  const handleAnnotationClick = async (annotation: any) => {
-    console.log('Annotation clicked:', annotation.id);
+  const handleAnnotationClick = async (annotation: AnnotationData) => {
     setActiveAnnotationId(annotation.id);
     const playDuration = !continuousPlay ? annotation.end - annotation.start : undefined;
-    await play(annotation.start, playDuration);
+    try {
+      await play(annotation.start, playDuration);
+    } catch (err) {
+      console.error('waveform-playlist: Failed to start playback for annotation', annotation.id, err);
+    }
   };
 
   const selectTrack = useCallback((trackIndex: number) => {

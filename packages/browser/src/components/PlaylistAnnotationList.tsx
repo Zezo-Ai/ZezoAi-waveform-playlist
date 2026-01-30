@@ -6,7 +6,7 @@ import type {
   AnnotationActionOptions,
 } from '@waveform-playlist/annotations';
 import { usePlaylistState, usePlaylistControls } from '../WaveformPlaylistContext';
-import type { OnAnnotationUpdateFn } from '../types/annotations';
+import type { AnnotationData, OnAnnotationUpdateFn } from '../types/annotations';
 
 export type { RenderAnnotationItemProps, AnnotationAction, AnnotationActionOptions } from '@waveform-playlist/annotations';
 export type { OnAnnotationUpdateFn } from '../types/annotations';
@@ -66,7 +66,7 @@ export const PlaylistAnnotationList: React.FC<PlaylistAnnotationListProps> = ({
 
   const resolvedConfig = annotationListConfig ?? { linkEndpoints, continuousPlay };
 
-  const handleAnnotationUpdate = useCallback((updatedAnnotations: any[]) => {
+  const handleAnnotationUpdate = useCallback((updatedAnnotations: AnnotationData[]) => {
     setAnnotations(updatedAnnotations);
     onAnnotationUpdate?.(updatedAnnotations);
   }, [setAnnotations, onAnnotationUpdate]);

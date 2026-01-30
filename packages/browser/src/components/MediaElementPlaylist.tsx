@@ -27,7 +27,7 @@ import {
 import { useAnnotationDragHandlers } from '../hooks/useAnnotationDragHandlers';
 import { AnimatedMediaElementPlayhead } from './AnimatedMediaElementPlayhead';
 import { ChannelWithMediaElementProgress } from './ChannelWithMediaElementProgress';
-import type { GetAnnotationBoxLabelFn, OnAnnotationUpdateFn } from '../types/annotations';
+import type { AnnotationData, GetAnnotationBoxLabelFn, OnAnnotationUpdateFn } from '../types/annotations';
 
 export interface MediaElementPlaylistProps {
   /** Custom function to generate the label shown on annotation boxes */
@@ -99,13 +99,17 @@ export const MediaElementPlaylist: React.FC<MediaElementPlaylistProps> = ({
   const tracksFullWidth = Math.floor((duration * sampleRate) / samplesPerPixel);
 
   // Annotation click handler
-  const handleAnnotationClick = useCallback(async (annotation: any) => {
+  const handleAnnotationClick = useCallback(async (annotation: AnnotationData) => {
     setActiveAnnotationId(annotation.id);
-    play(annotation.start);
+    try {
+      await play(annotation.start);
+    } catch (err) {
+      console.error('waveform-playlist: Failed to start playback for annotation', annotation.id, err);
+    }
   }, [setActiveAnnotationId, play]);
 
   // Handle annotation boundary updates
-  const handleAnnotationUpdate = useCallback((updatedAnnotations: any[]) => {
+  const handleAnnotationUpdate = useCallback((updatedAnnotations: AnnotationData[]) => {
     setAnnotations(updatedAnnotations);
     onAnnotationUpdate?.(updatedAnnotations);
   }, [setAnnotations, onAnnotationUpdate]);

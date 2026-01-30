@@ -1038,7 +1038,16 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       const updated = typeof action === 'function'
         ? action(annotationsRef.current)
         : action;
-      onAnnotationsChangeRef.current?.(updated);
+      if (!onAnnotationsChangeRef.current) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn(
+            'waveform-playlist: setAnnotations was called but no onAnnotationsChange callback is provided. ' +
+            'Annotation edits will not persist. Pass onAnnotationsChange to WaveformPlaylistProvider to handle annotation updates.'
+          );
+        }
+        return;
+      }
+      onAnnotationsChangeRef.current(updated);
     },
     []
   );

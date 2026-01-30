@@ -78,7 +78,7 @@ export const MediaElementWaveform: React.FC<MediaElementWaveformProps> = ({
           renderAnnotationItem={renderAnnotationItem}
           onAnnotationUpdate={onAnnotationUpdate}
           editable={editable}
-          linkEndpoints={linkEndpoints}
+          annotationListConfig={{ linkEndpoints, continuousPlay: false }}
           scrollActivePosition={scrollActivePosition}
           scrollActiveContainer={scrollActiveContainer}
         />
