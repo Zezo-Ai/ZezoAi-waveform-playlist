@@ -85,6 +85,7 @@ sed -i '' 's/"version": "OLD"/"version": "NEW"/g' package.json packages/*/packag
 
 **API Source of Truth:**
 - Context types (hooks, state, controls): `packages/browser/src/WaveformPlaylistContext.tsx`
+- MediaElement context types: `packages/browser/src/MediaElementPlaylistContext.tsx`
 - AudioTrackConfig interface: `packages/browser/src/hooks/useAudioTracks.ts`
 - Effects hooks return types: `packages/browser/src/hooks/useDynamicEffects.ts`, `useTrackDynamicEffects.ts`
 
@@ -92,9 +93,12 @@ sed -i '' 's/"version": "OLD"/"version": "NEW"/g' package.json packages/*/packag
 
 **Verify docs render:** `pnpm --filter website build` (CSS calc warnings are pre-existing, harmless)
 
+**Moving/Renaming Doc Pages:** Run `pnpm --filter website build` after moving docs — Docusaurus broken link checker will find all internal links that need updating.
+
 **LLM-Readable Docs:**
 - `website/static/llms.txt` — Library discovery page, served at `/llms.txt`. Update when packages, architecture, or key APIs change.
 - `website/docs/api/llm-reference.md` — All TypeScript interfaces from source, no prose. Update when any context type, hook signature, or component prop changes.
+- **Keep both in sync** — When adding new providers or components, update both `llms.txt` and `llm-reference.md`.
 - Recently Completed: Summary with key metrics (e.g., "547KB / 161KB gzipped")
 - Focus on what was done, not how (the code is the "how")
 
