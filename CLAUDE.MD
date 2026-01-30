@@ -594,6 +594,14 @@ useEffect(() => {
 
 ---
 
+## Plans & Future Work
+
+**Plans directory:** `plans/` contains future feature specs (waveform service, listening test tool).
+
+**Deployment:** Site deploys automatically via GitHub Actions on push to `main`.
+
+---
+
 ## References
 
 - **Roadmap & Progress:** `TODO.md`
