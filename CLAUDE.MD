@@ -80,6 +80,17 @@ sed -i '' 's/"version": "OLD"/"version": "NEW"/g' package.json packages/*/packag
 **TODO.md Writing Style:**
 - **Keep concise** - Brief task descriptions, avoid verbose explanations
 - Save detailed implementation notes for CLAUDE.md or PROJECT_STRUCTURE.md
+
+### Documentation Maintenance
+
+**API Source of Truth:**
+- Context types (hooks, state, controls): `packages/browser/src/WaveformPlaylistContext.tsx`
+- AudioTrackConfig interface: `packages/browser/src/hooks/useAudioTracks.ts`
+- Effects hooks return types: `packages/browser/src/hooks/useDynamicEffects.ts`, `useTrackDynamicEffects.ts`
+
+**Common Doc Drift:** Non-existent hooks, wrong property names (e.g., `gain` vs `volume`, `seek` vs `seekTo`), properties attributed to wrong context hooks. Always cross-check docs against source interfaces.
+
+**Verify docs render:** `pnpm --filter website build` (CSS calc warnings are pre-existing, harmless)
 - Recently Completed: Summary with key metrics (e.g., "547KB / 161KB gzipped")
 - Focus on what was done, not how (the code is the "how")
 
