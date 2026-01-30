@@ -91,6 +91,10 @@ sed -i '' 's/"version": "OLD"/"version": "NEW"/g' package.json packages/*/packag
 **Common Doc Drift:** Non-existent hooks, wrong property names (e.g., `gain` vs `volume`, `seek` vs `seekTo`), properties attributed to wrong context hooks. Always cross-check docs against source interfaces.
 
 **Verify docs render:** `pnpm --filter website build` (CSS calc warnings are pre-existing, harmless)
+
+**LLM-Readable Docs:**
+- `website/static/llms.txt` — Library discovery page, served at `/llms.txt`. Update when packages, architecture, or key APIs change.
+- `website/docs/api/llm-reference.md` — All TypeScript interfaces from source, no prose. Update when any context type, hook signature, or component prop changes.
 - Recently Completed: Summary with key metrics (e.g., "547KB / 161KB gzipped")
 - Focus on what was done, not how (the code is the "how")
 
