@@ -25,6 +25,7 @@ waveform-playlist is a React component library for building browser-based audio 
 - `@waveform-playlist/annotations` — Annotation parsing, rendering, keyboard controls
 - `@waveform-playlist/recording` — Microphone access, AudioWorklet recording, VU meter
 - `@waveform-playlist/webaudio-peaks` — Peak extraction from AudioBuffer
+- `@waveform-playlist/media-element-playout` — HTMLAudioElement playback with pitch-preserving speed control
 
 ## Quick Start
 
@@ -50,12 +51,19 @@ function App() {
 
 ## Architecture
 
-The library uses React Context with 4 split contexts for performance:
+Both providers use React Context with 4 split contexts for performance.
 
+**WaveformPlaylistProvider** (multi-track, Web Audio API):
 1. **usePlaybackAnimation()** — High-frequency: isPlaying, currentTime, timing refs
 2. **usePlaylistState()** — Medium-frequency: selection, loop, annotations, settings
 3. **usePlaylistControls()** — Stable: play/pause/stop/seekTo, track controls, zoom, settings setters
 4. **usePlaylistData()** — Stable: duration, tracks, trackStates, display config, isReady
+
+**MediaElementPlaylistProvider** (single-track, HTMLAudioElement):
+1. **useMediaElementAnimation()** — isPlaying, currentTime
+2. **useMediaElementState()** — continuousPlay, annotations, playbackRate
+3. **useMediaElementControls()** — play/pause/stop/seekTo, setPlaybackRate
+4. **useMediaElementData()** — duration, peaksDataArray, sampleRate, display config
 
 ## Key Hooks
 
@@ -71,7 +79,8 @@ The library uses React Context with 4 split contexts for performance:
 
 ## Key Components
 
-- `WaveformPlaylistProvider` — Root provider (required). Props: tracks, timescale, controls, theme, effects, annotationList, onAnnotationsChange, onReady, barWidth, barGap, waveHeight, samplesPerPixel, zoomLevels
+- `WaveformPlaylistProvider` — Multi-track provider (Web Audio API / Tone.js). Props: tracks, timescale, controls, theme, effects, annotationList, onAnnotationsChange, onReady, barWidth, barGap, waveHeight, samplesPerPixel, zoomLevels
+- `MediaElementPlaylistProvider` — Single-track provider (HTMLAudioElement). Props: track, playbackRate, timescale, controls, theme, annotationList, onAnnotationsChange, onReady, barWidth, barGap, waveHeight, samplesPerPixel. Use for language learning, podcasts, single-track viewers.
 - `Waveform` — Main visualization. Props: showClipHeaders, interactiveClips, renderPlayhead, renderTrackControls, showFades, touchOptimized
 - Buttons: PlayButton, PauseButton, StopButton, RewindButton, FastForwardButton, LoopButton, SetLoopRegionButton, ZoomInButton, ZoomOutButton, ExportWavButton
 - Controls: MasterVolumeControl, TimeFormatSelect, AudioPosition, SelectionTimeInputs, AutomaticScrollCheckbox, ContinuousPlayCheckbox
