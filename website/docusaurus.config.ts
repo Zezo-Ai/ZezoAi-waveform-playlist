@@ -222,6 +222,12 @@ const config: Config = {
           position: 'left',
         },
         {
+          href: 'https://www.buymeacoffee.com/naomiaro',
+          label: '☕ Support',
+          position: 'right',
+          className: 'navbar__link--bmc',
+        },
+        {
           href: 'https://github.com/naomiaro/waveform-playlist',
           label: 'GitHub',
           position: 'right',
