@@ -37,7 +37,7 @@ export default function MirSpectrogramPage(): React.ReactElement {
           <ul>
             <li>Spectrogram rendering with configurable FFT size and window functions</li>
             <li>Five frequency scales: linear, logarithmic, mel, bark, ERB</li>
-            <li>Six color maps: viridis, magma, inferno, grayscale, inverted gray, roseus</li>
+            <li>Six perceptually uniform color maps: viridis, magma, inferno, grayscale, inverted gray, roseus</li>
             <li>Per-track render mode: waveform, spectrogram, or split (both)</li>
             <li>Frequency range control and dB range adjustment</li>
             <li>Progress overlay and playback over spectrogram views</li>

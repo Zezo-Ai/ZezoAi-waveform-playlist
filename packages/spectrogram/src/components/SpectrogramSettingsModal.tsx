@@ -105,7 +105,7 @@ const ModalButton = styled.button<{ $primary?: boolean }>`
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.85rem;
-  background: ${p => p.$primary ? (p.theme.waveProgressColor ?? '#4a9') : 'transparent'};
+  background: ${p => p.$primary ? 'var(--ifm-color-primary, #4a9)' : 'transparent'};
   color: ${p => p.$primary ? '#fff' : 'inherit'};
 
   &:hover {

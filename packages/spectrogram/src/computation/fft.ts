@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const FFT = require('fft.js');
+import FFT from 'fft.js';
 
 /**
  * Cache fft.js instances per size (pre-computes twiddle factors).
