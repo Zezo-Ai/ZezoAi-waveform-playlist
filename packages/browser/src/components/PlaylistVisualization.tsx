@@ -1,4 +1,5 @@
-import React, { useRef, useState, type ReactNode, useCallback } from 'react';
+import React, { useRef, useState, useMemo, type ReactNode, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { getContext } from 'tone';
 import {
   Playlist,
@@ -9,7 +10,7 @@ import {
   PlaylistInfoContext,
   TrackControlsContext,
   DevicePixelRatioProvider,
-  StyledTimeScale,
+  SmartScale,
   Controls,
   Header,
   Button,
@@ -18,9 +19,11 @@ import {
   SliderWrapper,
   VolumeDownIcon,
   VolumeUpIcon,
+  TrackMenu,
   useTheme,
   waveformColorToCss,
   type RenderPlayheadFunction,
+  SpectrogramLabels,
 } from '@waveform-playlist/ui-components';
 import {
   AnnotationBoxesWrapper,
@@ -31,7 +34,9 @@ import { usePlaybackAnimation, usePlaylistState, usePlaylistControls, usePlaylis
 import type { Peaks } from '@waveform-playlist/webaudio-peaks';
 import { AnimatedPlayhead } from './AnimatedPlayhead';
 import { ChannelWithProgress } from './ChannelWithProgress';
+import type { SpectrogramConfig, ColorMapValue, RenderMode } from '@waveform-playlist/core';
 import type { AnnotationData, GetAnnotationBoxLabelFn } from '../types/annotations';
+import { getColorMap, getFrequencyScale, SpectrogramMenuItems, SpectrogramSettingsModal } from '@waveform-playlist/spectrogram';
 
 // Default duration in seconds for empty tracks (used for recording workflow)
 const DEFAULT_EMPTY_TRACK_DURATION = 60;
@@ -58,6 +63,8 @@ export interface PlaylistVisualizationProps {
    * Use with useDragSensors({ touchOptimized: true }) for best results.
    */
   touchOptimized?: boolean;
+  /** Callback when a track's close button is clicked. Only renders close button when provided. */
+  onRemoveTrack?: (trackIndex: number) => void;
   // Live recording state for real-time waveform preview
   recordingState?: {
     isRecording: boolean;
@@ -89,6 +96,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
   interactiveClips = false,
   showFades = false,
   touchOptimized = false,
+  onRemoveTrack,
   recordingState,
 }) => {
   const theme = useTheme() as import('@waveform-playlist/ui-components').WaveformPlaylistTheme;
@@ -120,6 +128,10 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
     setSelectedTrackId,
     setCurrentTime,
     setLoopRegion,
+    setTrackRenderMode,
+    setTrackSpectrogramConfig,
+    registerSpectrogramCanvases,
+    unregisterSpectrogramCanvases,
   } = usePlaylistControls();
   const {
     audioBuffers,
@@ -136,7 +148,46 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
     barWidth,
     barGap,
     isReady,
+    spectrogramDataMap,
+    spectrogramConfig,
+    spectrogramColorMap,
+    trackSpectrogramOverrides,
+    spectrogramWorkerApi,
   } = usePlaylistData();
+
+  // Per-track spectrogram rendering helpers (memoized)
+  const perTrackSpectrogramHelpers = useMemo(() => {
+    const helpers = new Map<string, {
+      colorLUT: Uint8Array;
+      frequencyScaleFn: (f: number, minF: number, maxF: number) => number;
+      config: SpectrogramConfig | undefined;
+    }>();
+    tracks.forEach((track) => {
+      const mode = trackSpectrogramOverrides.get(track.id)?.renderMode ?? track.renderMode ?? 'waveform';
+      if (mode === 'waveform') return;
+      const overrides = trackSpectrogramOverrides.get(track.id);
+      const cm = overrides?.colorMap ?? track.spectrogramColorMap ?? spectrogramColorMap ?? 'viridis';
+      const cfg = overrides?.config ?? track.spectrogramConfig ?? spectrogramConfig;
+      helpers.set(track.id, {
+        colorLUT: getColorMap(cm),
+        frequencyScaleFn: getFrequencyScale(cfg?.frequencyScale ?? 'mel'),
+        config: cfg,
+      });
+    });
+    return helpers;
+  }, [tracks, trackSpectrogramOverrides, spectrogramConfig, spectrogramColorMap]);
+
+  // Worker canvas API for SpectrogramChannel (stable reference)
+  const workerCanvasApi = useMemo(() => {
+    if (!spectrogramWorkerApi) return undefined;
+    return {
+      registerCanvas: spectrogramWorkerApi.registerCanvas.bind(spectrogramWorkerApi),
+      unregisterCanvas: spectrogramWorkerApi.unregisterCanvas.bind(spectrogramWorkerApi),
+    };
+  }, [spectrogramWorkerApi]);
+
+  // State for spectrogram settings modal
+  const [settingsModalTrackId, setSettingsModalTrackId] = useState<string | null>(null);
 
   const [isSelecting, setIsSelecting] = useState(false);
 
@@ -189,10 +240,12 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
 
     for (let i = 0; i < peaksDataArray.length; i++) {
       const trackClipPeaks = peaksDataArray[i];
-      const maxChannels = trackClipPeaks.length > 0
+      const rawCh = trackClipPeaks.length > 0
         ? Math.max(...trackClipPeaks.map(clip => clip.peaks.data.length))
         : 1;
-      const trackHeight = maxChannels * waveHeight + (showClipHeaders ? 22 : 0);
+      const trackMode = trackSpectrogramOverrides.get(tracks[i]?.id)?.renderMode ?? tracks[i]?.renderMode ?? 'waveform';
+      const effectiveCh = trackMode === 'both' ? rawCh * 2 : rawCh;
+      const trackHeight = effectiveCh * waveHeight + (showClipHeaders ? 22 : 0);
 
       if (trackY >= cumulativeHeight && trackY < cumulativeHeight + trackHeight) {
         clickedTrackIndex = i;
@@ -265,7 +318,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
           zoomLevels: [samplesPerPixel],
           waveHeight,
           timeScaleHeight,
-          duration: displayDuration,
+          duration: displayDuration * 1000,
           controls,
           barWidth,
           barGap,
@@ -288,13 +341,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
             timescale={
               timeScaleHeight > 0 ? (
                 <>
-                  <StyledTimeScale
-                    duration={displayDuration * 1000}
-                    marker={10000}
-                    bigStep={5000}
-                    secondStep={1000}
-                    renderTimestamp={renderTimestamp}
-                  />
+                  <SmartScale renderTimestamp={renderTimestamp} />
                   {isLoopEnabled && (
                     <TimescaleLoopRegion
                       startPosition={
@@ -332,12 +379,50 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                   pan: 0,
                 };
 
+                const effectiveRenderMode = trackSpectrogramOverrides.get(track.id)?.renderMode ?? track.renderMode ?? 'waveform';
+
                 const trackControls = renderTrackControls ? (
                   renderTrackControls(trackIndex)
                 ) : (
                   <Controls onClick={() => selectTrack(trackIndex)}>
-                    <Header style={{ justifyContent: 'center' }}>
-                      {trackState.name || `Track ${trackIndex + 1}`}
+                    <Header style={{ justifyContent: 'center', position: 'relative' }}>
+                      {onRemoveTrack && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onRemoveTrack(trackIndex); }}
+                          title="Remove track"
+                          style={{
+                            position: 'absolute', left: 0, top: 0,
+                            border: 'none', background: 'transparent',
+                            color: 'inherit', cursor: 'pointer',
+                            fontSize: 16, padding: '2px 4px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            opacity: 0.7, transition: 'opacity 0.15s, color 0.15s',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = '#dc3545'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.7'; e.currentTarget.style.color = 'inherit'; }}
+                        >
+                          ×
+                        </button>
+                      )}
+                      <span style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        padding: '0 24px',
+                        display: 'block',
+                      }}>
+                        {trackState.name || `Track ${trackIndex + 1}`}
+                      </span>
+                      <span style={{ position: 'absolute', right: 0, top: 0 }}>
+                        <TrackMenu
+                          items={(onClose) => SpectrogramMenuItems({
+                            renderMode: effectiveRenderMode,
+                            onRenderModeChange: (mode) => setTrackRenderMode(track.id, mode),
+                            onOpenSettings: () => setSettingsModalTrackId(track.id),
+                            onClose,
+                          })}
+                        />
+                      </span>
                     </Header>
                     <ButtonGroup>
                       <Button
@@ -382,9 +467,10 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                   </Controls>
                 );
 
-                const maxChannels = trackClipPeaks.length > 0
+                const rawChannels = trackClipPeaks.length > 0
                   ? Math.max(...trackClipPeaks.map(clip => clip.peaks.data.length))
                   : 1;
+                const maxChannels = rawChannels;
 
                 return (
                   <TrackControlsContext.Provider key={track.id} value={trackControls}>
@@ -397,13 +483,31 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                       trackId={track.id}
                       isSelected={track.id === selectedTrackId}
                     >
+                      {effectiveRenderMode !== 'waveform' && (() => {
+                        const helpers = perTrackSpectrogramHelpers.get(track.id);
+                        const trackCfg = helpers?.config;
+                        if (!trackCfg?.labels || !helpers) return null;
+                        return (
+                          <SpectrogramLabels
+                            waveHeight={waveHeight}
+                            numChannels={maxChannels}
+                            frequencyScaleFn={helpers.frequencyScaleFn}
+                            minFrequency={trackCfg.minFrequency ?? 0}
+                            maxFrequency={trackCfg.maxFrequency ?? (sampleRate / 2)}
+                            labelsColor={trackCfg.labelsColor}
+                            labelsBackground={trackCfg.labelsBackground}
+                            renderMode={effectiveRenderMode as 'spectrogram' | 'both'}
+                            hasClipHeaders={showClipHeaders}
+                          />
+                        );
+                      })()}
                       {trackClipPeaks.map((clip, clipIndex) => {
                         const peaksData = clip.peaks;
                         const width = peaksData.length;
 
                         return (
                           <Clip
-                            key={`${trackIndex}-${clipIndex}`}
+                            key={clip.clipId}
                             clipId={clip.clipId}
                             trackIndex={trackIndex}
                             clipIndex={clipIndex}
@@ -429,18 +533,37 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                               selectTrack(trackIndex);
                             }}
                           >
-                            {peaksData.data.map((channelPeaks: Peaks, channelIndex: number) => (
-                              <ChannelWithProgress
-                                key={`${trackIndex}-${clipIndex}-${channelIndex}`}
-                                index={channelIndex}
-                                data={channelPeaks}
-                                bits={peaksData.bits}
-                                length={width}
-                                isSelected={track.id === selectedTrackId}
-                                clipStartSample={clip.startSample}
-                                clipDurationSamples={clip.durationSamples}
-                              />
-                            ))}
+                            {peaksData.data.map((channelPeaks: Peaks, channelIndex: number) => {
+                              const clipSpectrograms = spectrogramDataMap.get(clip.clipId);
+                              const channelSpectrogram = clipSpectrograms?.[channelIndex] ?? clipSpectrograms?.[0];
+                              const helpers = perTrackSpectrogramHelpers.get(track.id);
+                              const trackCfg = helpers?.config;
+
+                              return (
+                                <ChannelWithProgress
+                                  key={`${clip.clipId}-${channelIndex}`}
+                                  index={channelIndex}
+                                  data={channelPeaks}
+                                  bits={peaksData.bits}
+                                  length={width}
+                                  isSelected={track.id === selectedTrackId}
+                                  clipStartSample={clip.startSample}
+                                  clipDurationSamples={clip.durationSamples}
+                                  renderMode={effectiveRenderMode}
+                                  spectrogramData={channelSpectrogram}
+                                  samplesPerPixel={samplesPerPixel}
+                                  spectrogramColorLUT={helpers?.colorLUT}
+                                  spectrogramFrequencyScaleFn={helpers?.frequencyScaleFn}
+                                  spectrogramMinFrequency={trackCfg?.minFrequency}
+                                  spectrogramMaxFrequency={trackCfg?.maxFrequency}
+                                  spectrogramWorkerApi={workerCanvasApi}
+                                  spectrogramClipId={clip.clipId}
+                                  spectrogramOnCanvasesReady={(canvasIds, canvasWidths) => {
+                                    registerSpectrogramCanvases(clip.clipId, channelIndex, canvasIds, canvasWidths);
+                                  }}
+                                />
+                              );
+                            })}
                           </Clip>
                         );
                       })}
@@ -448,7 +571,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                        recordingState.trackId === track.id &&
                        recordingState.peaks.length > 0 && (
                         <Clip
-                          key={`${trackIndex}-recording`}
+                          key={`${track.id}-recording`}
                           clipId="recording-preview"
                           trackIndex={trackIndex}
                           clipIndex={trackClipPeaks.length}
@@ -462,7 +585,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                           trackId={track.id}
                         >
                           <ChannelWithProgress
-                            key={`${trackIndex}-recording-0`}
+                            key={`${track.id}-recording-0`}
                             index={0}
                             data={recordingState.peaks}
                             bits={16}
@@ -540,6 +663,28 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
             </>
           </Playlist>
       </PlaylistInfoContext.Provider>
+      {typeof document !== 'undefined' && createPortal(
+        <SpectrogramSettingsModal
+          open={settingsModalTrackId !== null}
+          onClose={() => setSettingsModalTrackId(null)}
+          config={
+            settingsModalTrackId !== null
+              ? (trackSpectrogramOverrides.get(settingsModalTrackId)?.config ?? tracks.find(t => t.id === settingsModalTrackId)?.spectrogramConfig ?? spectrogramConfig ?? {})
+              : {}
+          }
+          colorMap={
+            settingsModalTrackId !== null
+              ? (trackSpectrogramOverrides.get(settingsModalTrackId)?.colorMap ?? tracks.find(t => t.id === settingsModalTrackId)?.spectrogramColorMap ?? spectrogramColorMap ?? 'viridis')
+              : 'viridis'
+          }
+          onApply={(newConfig, newColorMap) => {
+            if (settingsModalTrackId !== null) {
+              setTrackSpectrogramConfig(settingsModalTrackId, newConfig, newColorMap);
+            }
+          }}
+        />,
+        document.body
+      )}
     </DevicePixelRatioProvider>
   );
 };

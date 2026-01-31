@@ -358,21 +358,6 @@ Built-in control panel for a track.
 - Volume slider
 - Pan slider
 
-### TrackControlsWithDelete
-
-TrackControls with a delete button.
-
-```tsx
-<TrackControlsWithDelete
-  trackIndex={0}
-  onDelete={() => removeTrack(0)}
-/>
-```
-
-**Props:**
-- `trackIndex` (required): Track index
-- `onDelete` (required): Delete callback
-
 ---
 
 ## Export Controls

@@ -21,7 +21,6 @@ import {
   ZoomOutButton,
   AutomaticScrollCheckbox,
 } from '@waveform-playlist/browser';
-import { TrackControlsWithDelete } from '@waveform-playlist/ui-components';
 import { ClipTrack, createTrack, createClipFromSeconds } from '@waveform-playlist/core';
 import { useDocusaurusTheme } from '../../hooks/useDocusaurusTheme';
 import { FolderOpenIcon, MusicNotesIcon } from '@phosphor-icons/react';
@@ -257,42 +256,7 @@ export function NewTracksExample() {
           </Controls>
 
           <Waveform
-            renderTrackControls={(trackIndex) => {
-              const track = tracks[trackIndex];
-              if (!track) return null;
-
-              return (
-                <TrackControlsWithDelete
-                  trackIndex={trackIndex}
-                  trackName={track.name}
-                  muted={track.muted}
-                  soloed={track.soloed}
-                  volume={track.volume}
-                  pan={track.pan}
-                  onMuteChange={(muted) => {
-                    const updatedTracks = [...tracks];
-                    updatedTracks[trackIndex] = { ...track, muted };
-                    setTracks(updatedTracks);
-                  }}
-                  onSoloChange={(soloed) => {
-                    const updatedTracks = [...tracks];
-                    updatedTracks[trackIndex] = { ...track, soloed };
-                    setTracks(updatedTracks);
-                  }}
-                  onVolumeChange={(volume) => {
-                    const updatedTracks = [...tracks];
-                    updatedTracks[trackIndex] = { ...track, volume };
-                    setTracks(updatedTracks);
-                  }}
-                  onPanChange={(pan) => {
-                    const updatedTracks = [...tracks];
-                    updatedTracks[trackIndex] = { ...track, pan };
-                    setTracks(updatedTracks);
-                  }}
-                  onDelete={() => handleRemoveTrack(trackIndex)}
-                />
-              );
-            }}
+            onRemoveTrack={(index) => handleRemoveTrack(index)}
           />
         </WaveformPlaylistProvider>
       )}

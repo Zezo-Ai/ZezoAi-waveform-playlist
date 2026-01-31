@@ -39,6 +39,8 @@ export interface WaveformProps {
    * Use with useDragSensors({ touchOptimized: true }) for best results.
    */
   touchOptimized?: boolean;
+  /** Callback when a track's close button is clicked. Only renders close button when provided. */
+  onRemoveTrack?: (trackIndex: number) => void;
   // Live recording state for real-time waveform preview
   recordingState?: {
     isRecording: boolean;
@@ -71,6 +73,7 @@ export const Waveform: React.FC<WaveformProps> = ({
   interactiveClips = false,
   showFades = false,
   touchOptimized = false,
+  onRemoveTrack,
   recordingState,
 }) => {
   const { annotations } = usePlaylistState();
@@ -88,6 +91,7 @@ export const Waveform: React.FC<WaveformProps> = ({
         interactiveClips={interactiveClips}
         showFades={showFades}
         touchOptimized={touchOptimized}
+        onRemoveTrack={onRemoveTrack}
         recordingState={recordingState}
       />
       {annotations.length > 0 && (

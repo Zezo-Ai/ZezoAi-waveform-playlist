@@ -39,6 +39,8 @@ interface WaveformPlaylistProviderProps {
   barWidth?: number;                      // Default: 1
   barGap?: number;                        // Default: 0
   progressBarWidth?: number;              // Default: barWidth + barGap
+  spectrogramConfig?: SpectrogramConfig;  // Global spectrogram config
+  spectrogramColorMap?: ColorMapValue;    // Global color map. Default: 'viridis'
 }
 ```
 
@@ -562,6 +564,71 @@ Playheads: Playhead, PlayheadWithMarker (from @waveform-playlist/ui-components)
 ```
 
 All button/control components connect to context automatically. No props required for basic usage. All accept `className` and `style`.
+
+---
+
+## Spectrogram (@waveform-playlist/spectrogram)
+
+```typescript
+// From @waveform-playlist/core
+type FFTSize = 256 | 512 | 1024 | 2048 | 4096 | 8192;
+type ColorMapEntry = [number, number, number] | [number, number, number, number];
+type ColorMapName = 'viridis' | 'magma' | 'inferno' | 'grayscale' | 'igray' | 'roseus';
+type ColorMapValue = ColorMapName | ColorMapEntry[];
+type RenderMode = 'waveform' | 'spectrogram' | 'both';
+
+interface SpectrogramConfig {
+  fftSize?: FFTSize;                    // Default: 2048
+  hopSize?: number;                     // Default: fftSize / 4
+  windowFunction?: 'hann' | 'hamming' | 'blackman' | 'rectangular' | 'bartlett' | 'blackman-harris';
+  alpha?: number;                       // Window function parameter (0-1)
+  frequencyScale?: 'linear' | 'logarithmic' | 'mel' | 'bark' | 'erb'; // Default: 'mel'
+  minFrequency?: number;               // Default: 0
+  maxFrequency?: number;               // Default: sampleRate / 2
+  gainDb?: number;                     // Default: 20
+  rangeDb?: number;                    // Default: 80
+  zeroPaddingFactor?: number;          // Default: 2
+  labels?: boolean;                    // Default: false
+  labelsColor?: string;
+  labelsBackground?: string;
+}
+
+interface SpectrogramData {
+  fftSize: number;
+  windowSize: number;
+  frequencyBinCount: number;
+  sampleRate: number;
+  hopSize: number;
+  frameCount: number;
+  data: Float32Array;                  // frameCount * frequencyBinCount (row-major)
+  gainDb: number;
+  rangeDb: number;
+}
+
+interface TrackSpectrogramOverrides {
+  renderMode: RenderMode;
+  config?: SpectrogramConfig;
+  colorMap?: ColorMapValue;
+}
+
+// From @waveform-playlist/spectrogram
+interface SpectrogramWorkerApi {
+  compute(params: SpectrogramWorkerComputeParams): Promise<SpectrogramData[]>;
+  computeFFT(params: SpectrogramWorkerFFTParams): Promise<{ cacheKey: string }>;
+  renderChunks(params: SpectrogramWorkerRenderChunksParams): Promise<void>;
+  registerCanvas(canvasId: string, canvas: OffscreenCanvas): void;
+  unregisterCanvas(canvasId: string): void;
+  registerAudioData(clipId: string, channelDataArrays: Float32Array[], sampleRate: number): void;
+  unregisterAudioData(clipId: string): void;
+  computeAndRender(params: SpectrogramWorkerRenderParams): Promise<void>;
+  terminate(): void;
+}
+
+// Key exports
+export { computeSpectrogram, computeSpectrogramMono, getColorMap, getFrequencyScale } from '@waveform-playlist/spectrogram';
+export { createSpectrogramWorker } from '@waveform-playlist/spectrogram';
+export { SpectrogramMenuItems, SpectrogramSettingsModal } from '@waveform-playlist/spectrogram';
+```
 
 ---
 

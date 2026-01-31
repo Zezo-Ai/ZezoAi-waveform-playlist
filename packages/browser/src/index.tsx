@@ -135,6 +135,10 @@ export type { RenderAnnotationItemProps, AnnotationData } from '@waveform-playli
 // Export annotation callback types for Waveform components
 export type { GetAnnotationBoxLabelFn, OnAnnotationUpdateFn } from './types/annotations';
 
+// Re-export spectrogram computation and utilities
+export { computeSpectrogram, computeSpectrogramMono, getColorMap, getFrequencyScale } from '@waveform-playlist/spectrogram';
+export type { FrequencyScaleName } from '@waveform-playlist/spectrogram';
+
 // Export waveform-data.js utilities
 export {
   loadWaveformData,

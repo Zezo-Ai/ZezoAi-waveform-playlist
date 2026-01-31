@@ -171,23 +171,56 @@ export const ChannelWithProgress: React.FC<ChannelWithProgressProps> = ({
       : theme?.waveOutlineColor || 'grey';
   }
 
-  const backgroundCss = waveformColorToCss(backgroundColor);
+  // Use black background for spectrogram mode
+  const isSpectrogramMode = smartChannelProps.renderMode === 'spectrogram' || smartChannelProps.renderMode === 'both';
+  const isBothMode = smartChannelProps.renderMode === 'both';
+  const backgroundCss = isSpectrogramMode ? '#000' : waveformColorToCss(backgroundColor);
+
+  // In "both" mode each half (spectrogram + waveform) is waveHeight/2 so the track
+  // container stays the same height as a single-mode track.
+  const halfHeight = Math.floor(waveHeight / 2);
+  const effectiveHeight = waveHeight;
+  const effectiveTop = isBothMode
+    ? smartChannelProps.index * waveHeight
+    : smartChannelProps.index * waveHeight;
+
+  // In "both" mode, the waveform portion needs its own (non-black) background
+  const waveformBackgroundCss = waveformColorToCss(backgroundColor);
 
   return (
     <ChannelWrapper>
       {/* Background layer - color depends on draw mode */}
-      <Background
-        $color={backgroundCss}
-        $height={waveHeight}
-        $top={smartChannelProps.index * waveHeight}
-        $width={smartChannelProps.length}
-      />
+      {isBothMode ? (
+        <>
+          {/* Spectrogram portion: black background */}
+          <Background
+            $color="#000"
+            $height={halfHeight}
+            $top={effectiveTop}
+            $width={smartChannelProps.length}
+          />
+          {/* Waveform portion: themed background */}
+          <Background
+            $color={waveformBackgroundCss}
+            $height={halfHeight}
+            $top={effectiveTop + halfHeight}
+            $width={smartChannelProps.length}
+          />
+        </>
+      ) : (
+        <Background
+          $color={backgroundCss}
+          $height={effectiveHeight}
+          $top={effectiveTop}
+          $width={smartChannelProps.length}
+        />
+      )}
       {/* Progress overlay - shows played portion with progress color */}
       <ProgressOverlay
         ref={progressRef}
         $color={progressColor}
-        $height={waveHeight}
-        $top={smartChannelProps.index * waveHeight}
+        $height={effectiveHeight}
+        $top={effectiveTop}
       />
       {/* Waveform canvas with transparent background */}
       <ChannelContainer>

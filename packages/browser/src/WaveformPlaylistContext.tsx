@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
 import { ThemeProvider } from 'styled-components';
 import { TonePlayout, type EffectsFunction, type TrackEffectsFunction } from '@waveform-playlist/playout';
-import { type Track, type ClipTrack, type Fade } from '@waveform-playlist/core';
+import { type Track, type ClipTrack, type Fade, type SpectrogramData, type SpectrogramConfig, type SpectrogramComputeConfig, type ColorMapValue, type RenderMode, type TrackSpectrogramOverrides } from '@waveform-playlist/core';
 import { type TimeFormat, type WaveformPlaylistTheme, defaultTheme } from '@waveform-playlist/ui-components';
 import { start as toneStart, getContext } from 'tone';
 import { generatePeaks } from './peaksUtil';
+import { computeSpectrogram, computeSpectrogramMono, createSpectrogramWorker, getColorMap, type SpectrogramWorkerApi } from '@waveform-playlist/spectrogram';
 import { extractPeaksFromWaveformData } from './waveformDataLoader';
 import type { PeakData } from '@waveform-playlist/webaudio-peaks';
 import { parseAeneas, type AnnotationData } from '@waveform-playlist/annotations';
@@ -184,6 +185,14 @@ export interface PlaylistControlsContextValue {
   setLoopRegion: (start: number, end: number) => void;
   setLoopRegionFromSelection: () => void;
   clearLoopRegion: () => void;
+
+  // Per-track render mode and spectrogram config
+  setTrackRenderMode: (trackId: string, mode: RenderMode) => void;
+  setTrackSpectrogramConfig: (trackId: string, config: SpectrogramConfig, colorMap?: ColorMapValue) => void;
+
+  // Spectrogram OffscreenCanvas registration
+  registerSpectrogramCanvases: (clipId: string, channelIndex: number, canvasIds: string[], canvasWidths: number[]) => void;
+  unregisterSpectrogramCanvases: (clipId: string, channelIndex: number) => void;
 }
 
 export interface PlaylistDataContextValue {
@@ -209,6 +218,16 @@ export interface PlaylistDataContextValue {
   progressBarWidth: number;
   /** Whether the playlist has finished loading all tracks */
   isReady: boolean;
+  /** Spectrogram data keyed by clipId, value is array of per-channel spectrograms */
+  spectrogramDataMap: Map<string, SpectrogramData[]>;
+  /** Global spectrogram configuration (fallback) */
+  spectrogramConfig?: SpectrogramConfig;
+  /** Global spectrogram color map (fallback) */
+  spectrogramColorMap?: ColorMapValue;
+  /** Per-track spectrogram overrides (render mode, config, color map) */
+  trackSpectrogramOverrides: Map<string, TrackSpectrogramOverrides>;
+  /** Spectrogram worker API (for OffscreenCanvas rendering) */
+  spectrogramWorkerApi: SpectrogramWorkerApi | null;
 }
 
 // Create the 4 separate contexts
@@ -252,6 +271,10 @@ export interface WaveformPlaylistProviderProps {
   barGap?: number;
   /** Width in pixels of progress bars. Default: barWidth + barGap (fills gaps). */
   progressBarWidth?: number;
+  /** Global spectrogram configuration for tracks with renderMode 'spectrogram' or 'both' */
+  spectrogramConfig?: SpectrogramConfig;
+  /** Global color map for spectrogram rendering */
+  spectrogramColorMap?: ColorMapValue;
   children: ReactNode;
 }
 
@@ -273,6 +296,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   barWidth = 1,
   barGap = 0,
   progressBarWidth: progressBarWidthProp,
+  spectrogramConfig,
+  spectrogramColorMap,
   children,
 }) => {
   // Default progressBarWidth to barWidth + barGap (fills gaps)
@@ -297,6 +322,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const [duration, setDuration] = useState(0);
   const [audioBuffers, setAudioBuffers] = useState<AudioBuffer[]>([]);
   const [peaksDataArray, setPeaksDataArray] = useState<TrackClipPeaks[]>([]); // Updated for clip-based peaks
+  const [spectrogramDataMap, setSpectrogramDataMap] = useState<Map<string, SpectrogramData[]>>(new Map());
   const [trackStates, setTrackStates] = useState<TrackState[]>([]);
   const [selectionStart, setSelectionStart] = useState(0);
   const [selectionEnd, setSelectionEnd] = useState(0);
@@ -309,6 +335,14 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const [loopStart, setLoopStartState] = useState(0);
   const [loopEnd, setLoopEndState] = useState(0);
   const [isReady, setIsReady] = useState(false);
+
+  // Per-track spectrogram overrides (render mode, config, color map) — single Map
+  const [trackSpectrogramOverrides, setTrackSpectrogramOverrides] = useState<Map<string, TrackSpectrogramOverrides>>(new Map());
+
+  // OffscreenCanvas registry for worker-rendered spectrograms
+  // Map: clipId → Map<channelIndex, { canvasIds: string[], canvasWidths: number[] }>
+  const spectrogramCanvasRegistryRef = useRef<Map<string, Map<number, { canvasIds: string[]; canvasWidths: number[] }>>>(new Map());
+  const [spectrogramCanvasVersion, setSpectrogramCanvasVersion] = useState(0);
 
   // Refs
   const playoutRef = useRef<TonePlayout | null>(null);
@@ -430,6 +464,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       setDuration(0);
       setTrackStates([]);
       setPeaksDataArray([]);
+      setSpectrogramDataMap(new Map());
       if (playoutRef.current) {
         playoutRef.current.dispose();
         playoutRef.current = null;
@@ -673,6 +708,572 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
     setPeaksDataArray(allTrackPeaks);
   }, [tracks, samplesPerPixel, mono]);
+
+  // Compute spectrograms for tracks with renderMode 'spectrogram' or 'both'
+  // Uses per-track config; only recomputes tracks whose config changed.
+  // Computation runs in a Web Worker to avoid blocking the main thread.
+  const prevSpectrogramConfigRef = useRef<Map<string, string>>(new Map());
+  const prevSpectrogramFFTKeyRef = useRef<Map<string, string>>(new Map());
+  const spectrogramWorkerRef = useRef<ReturnType<typeof createSpectrogramWorker> | null>(null);
+  const spectrogramGenerationRef = useRef(0);
+  const prevCanvasVersionRef = useRef(0);
+  const [spectrogramWorkerReady, setSpectrogramWorkerReady] = useState(false);
+  // Per-clip cache keys from compute-fft, used to re-render from cache on display-only changes
+  const clipCacheKeysRef = useRef<Map<string, string>>(new Map());
+  // Abort controller for background chunk rendering
+  const backgroundRenderAbortRef = useRef<{ aborted: boolean } | null>(null);
+  // Track which clipIds have been pre-registered with the worker
+  const registeredAudioClipIdsRef = useRef<Set<string>>(new Set());
+
+  // Terminate worker on unmount
+  useEffect(() => {
+    return () => {
+      spectrogramWorkerRef.current?.terminate();
+      spectrogramWorkerRef.current = null;
+    };
+  }, []);
+
+  // Eagerly transfer audio data to worker when tracks load (pre-transfer optimization)
+  useEffect(() => {
+    if (!isReady || tracks.length === 0) return;
+
+    // Lazily create worker if not yet created
+    let workerApi = spectrogramWorkerRef.current;
+    if (!workerApi) {
+      try {
+        const rawWorker = new Worker(
+          new URL('@waveform-playlist/spectrogram/worker/spectrogram.worker', import.meta.url),
+          { type: 'module' }
+        );
+        workerApi = createSpectrogramWorker(rawWorker);
+        spectrogramWorkerRef.current = workerApi;
+        setSpectrogramWorkerReady(true);
+      } catch {
+        console.warn('Spectrogram Web Worker unavailable for pre-transfer');
+        return;
+      }
+    }
+
+    const currentClipIds = new Set<string>();
+
+    for (const track of tracks) {
+      for (const clip of track.clips) {
+        if (!clip.audioBuffer) continue;
+        currentClipIds.add(clip.id);
+
+        if (!registeredAudioClipIdsRef.current.has(clip.id)) {
+          const channelDataArrays: Float32Array[] = [];
+          for (let ch = 0; ch < clip.audioBuffer.numberOfChannels; ch++) {
+            channelDataArrays.push(clip.audioBuffer.getChannelData(ch));
+          }
+          workerApi.registerAudioData(clip.id, channelDataArrays, clip.audioBuffer.sampleRate);
+          registeredAudioClipIdsRef.current.add(clip.id);
+        }
+      }
+    }
+
+    // Unregister clips that were removed
+    for (const clipId of registeredAudioClipIdsRef.current) {
+      if (!currentClipIds.has(clipId)) {
+        workerApi.unregisterAudioData(clipId);
+        registeredAudioClipIdsRef.current.delete(clipId);
+      }
+    }
+  }, [isReady, tracks]);
+
+  useEffect(() => {
+    if (tracks.length === 0) return;
+
+    // Build full config key and FFT-only key per track to detect what changed
+    const currentKeys = new Map<string, string>();
+    const currentFFTKeys = new Map<string, string>();
+    tracks.forEach((track, i) => {
+      const mode = trackSpectrogramOverrides.get(track.id)?.renderMode ?? track.renderMode ?? 'waveform';
+      if (mode === 'waveform') return;
+      const cfg = trackSpectrogramOverrides.get(track.id)?.config ?? track.spectrogramConfig ?? spectrogramConfig;
+      const cm = trackSpectrogramOverrides.get(track.id)?.colorMap ?? track.spectrogramColorMap ?? spectrogramColorMap;
+      currentKeys.set(track.id, JSON.stringify({ mode, cfg, cm, mono }));
+      // FFT key: only SpectrogramComputeConfig fields (not gain, range, colormap, freq scale, etc.)
+      const computeConfig: SpectrogramComputeConfig = {
+        fftSize: cfg?.fftSize, hopSize: cfg?.hopSize,
+        windowFunction: cfg?.windowFunction, alpha: cfg?.alpha,
+        zeroPaddingFactor: cfg?.zeroPaddingFactor,
+      };
+      currentFFTKeys.set(track.id, JSON.stringify({ mode, mono, ...computeConfig }));
+    });
+
+    const prevKeys = prevSpectrogramConfigRef.current;
+    const prevFFTKeys = prevSpectrogramFFTKeyRef.current;
+
+    // Check if any track config changed (full key)
+    let configChanged = currentKeys.size !== prevKeys.size;
+    if (!configChanged) {
+      for (const [idx, key] of currentKeys) {
+        if (prevKeys.get(idx) !== key) { configChanged = true; break; }
+      }
+    }
+
+    // Check if FFT key changed (requires recomputation)
+    let fftKeyChanged = currentFFTKeys.size !== prevFFTKeys.size;
+    if (!fftKeyChanged) {
+      for (const [idx, key] of currentFFTKeys) {
+        if (prevFFTKeys.get(idx) !== key) { fftKeyChanged = true; break; }
+      }
+    }
+
+    // Check if canvas registrations changed (new canvases available for worker rendering)
+    const canvasVersionChanged = spectrogramCanvasVersion !== prevCanvasVersionRef.current;
+    prevCanvasVersionRef.current = spectrogramCanvasVersion;
+
+    if (!configChanged && !canvasVersionChanged) return;
+
+    // Only update prevKeys when config actually changed (not just canvas version)
+    if (configChanged) {
+      prevSpectrogramConfigRef.current = currentKeys;
+      prevSpectrogramFFTKeyRef.current = currentFFTKeys;
+    }
+
+    // Remove entries for clips that no longer need spectrograms (synchronous)
+    if (configChanged) {
+      setSpectrogramDataMap(prevMap => {
+        // Build set of clip IDs that still need spectrograms
+        const activeClipIds = new Set<string>();
+        for (const track of tracks) {
+          const mode = trackSpectrogramOverrides.get(track.id)?.renderMode ?? track.renderMode ?? 'waveform';
+          if (mode === 'spectrogram' || mode === 'both') {
+            for (const clip of track.clips) {
+              activeClipIds.add(clip.id);
+            }
+          }
+        }
+        // Delete any map entries not in the active set (handles removed tracks + mode changes)
+        const newMap = new Map(prevMap);
+        for (const clipId of newMap.keys()) {
+          if (!activeClipIds.has(clipId)) {
+            newMap.delete(clipId);
+          }
+        }
+        return newMap;
+      });
+    }
+
+    // Abort any ongoing background rendering
+    if (backgroundRenderAbortRef.current) {
+      backgroundRenderAbortRef.current.aborted = true;
+    }
+
+    // Generation counter to discard stale results
+    const generation = ++spectrogramGenerationRef.current;
+
+    // Lazily create worker, fall back to synchronous if it fails
+    let workerApi = spectrogramWorkerRef.current;
+    if (!workerApi) {
+      try {
+        const rawWorker = new Worker(
+          new URL('@waveform-playlist/spectrogram/worker/spectrogram.worker', import.meta.url),
+          { type: 'module' }
+        );
+        workerApi = createSpectrogramWorker(rawWorker);
+        spectrogramWorkerRef.current = workerApi;
+        setSpectrogramWorkerReady(true);
+      } catch {
+        console.warn('Spectrogram Web Worker unavailable, falling back to synchronous computation');
+      }
+    }
+
+    // Determine which tracks need FFT recomputation vs display-only re-render
+    const clipsNeedingFFT: Array<{
+      clipId: string;
+      trackIndex: number;
+      channelDataArrays: Float32Array[];
+      config: SpectrogramConfig;
+      sampleRate: number;
+      offsetSamples: number;
+      durationSamples: number;
+      clipStartSample: number;
+      monoFlag: boolean;
+      colorMap: ColorMapValue;
+    }> = [];
+    const clipsNeedingDisplayOnly: Array<{
+      clipId: string;
+      trackIndex: number;
+      config: SpectrogramConfig;
+      clipStartSample: number;
+      monoFlag: boolean;
+      colorMap: ColorMapValue;
+      numChannels: number;
+    }> = [];
+
+    tracks.forEach((track, i) => {
+      const mode = trackSpectrogramOverrides.get(track.id)?.renderMode ?? track.renderMode ?? 'waveform';
+      if (mode === 'waveform') return;
+
+      const trackConfigChanged = configChanged && (currentKeys.get(track.id) !== prevKeys.get(track.id));
+      const trackFFTChanged = fftKeyChanged && (currentFFTKeys.get(track.id) !== prevFFTKeys.get(track.id));
+      const hasRegisteredCanvases = canvasVersionChanged && track.clips.some(
+        clip => spectrogramCanvasRegistryRef.current.has(clip.id)
+      );
+      if (!trackConfigChanged && !hasRegisteredCanvases) return;
+
+      const cfg = trackSpectrogramOverrides.get(track.id)?.config ?? track.spectrogramConfig ?? spectrogramConfig ?? {};
+      const cm = trackSpectrogramOverrides.get(track.id)?.colorMap ?? track.spectrogramColorMap ?? spectrogramColorMap ?? 'viridis';
+
+      for (const clip of track.clips) {
+        if (!clip.audioBuffer) continue;
+
+        const monoFlag = mono || clip.audioBuffer.numberOfChannels === 1;
+
+        // If FFT key didn't change AND we have a cached key for this clip, display-only re-render
+        if (!trackFFTChanged && !hasRegisteredCanvases && clipCacheKeysRef.current.has(clip.id)) {
+          clipsNeedingDisplayOnly.push({
+            clipId: clip.id,
+            trackIndex: i,
+            config: cfg,
+            clipStartSample: clip.startSample,
+            monoFlag,
+            colorMap: cm,
+            numChannels: monoFlag ? 1 : clip.audioBuffer.numberOfChannels,
+          });
+          continue;
+        }
+
+        const channelDataArrays: Float32Array[] = [];
+        for (let ch = 0; ch < clip.audioBuffer.numberOfChannels; ch++) {
+          channelDataArrays.push(clip.audioBuffer.getChannelData(ch));
+        }
+
+        clipsNeedingFFT.push({
+          clipId: clip.id,
+          trackIndex: i,
+          channelDataArrays,
+          config: cfg,
+          sampleRate: clip.audioBuffer.sampleRate,
+          offsetSamples: clip.offsetSamples,
+          durationSamples: clip.durationSamples,
+          clipStartSample: clip.startSample,
+          monoFlag,
+          colorMap: cm,
+        });
+      }
+    });
+
+    if (clipsNeedingFFT.length === 0 && clipsNeedingDisplayOnly.length === 0) return;
+
+    if (!workerApi) {
+      // Synchronous fallback (no caching optimization)
+      setSpectrogramDataMap(prevMap => {
+        const newMap = new Map(prevMap);
+        for (const item of clipsNeedingFFT) {
+          const channelSpectrograms: SpectrogramData[] = [];
+          if (item.monoFlag) {
+            channelSpectrograms.push(
+              computeSpectrogramMono(
+                tracks.flatMap(t => t.clips).find(c => c.id === item.clipId)!.audioBuffer!,
+                item.config, item.offsetSamples, item.durationSamples
+              )
+            );
+          } else {
+            const clip = tracks.flatMap(t => t.clips).find(c => c.id === item.clipId)!;
+            for (let ch = 0; ch < clip.audioBuffer!.numberOfChannels; ch++) {
+              channelSpectrograms.push(
+                computeSpectrogram(clip.audioBuffer!, item.config, item.offsetSamples, item.durationSamples, ch)
+              );
+            }
+          }
+          newMap.set(item.clipId, channelSpectrograms);
+        }
+        return newMap;
+      });
+      return;
+    }
+
+    // Helper: determine visible chunk indices from scroll position
+    // clipPixelOffset is the clip's pixel position on the timeline (from clip.startSample / samplesPerPixel)
+    const getVisibleChunkRange = (canvasWidths: number[], clipPixelOffset = 0): { visibleIndices: number[]; remainingIndices: number[] } => {
+      const container = scrollContainerRef.current;
+      if (!container) {
+        // No scroll info available — all chunks are "visible"
+        return { visibleIndices: canvasWidths.map((_, i) => i), remainingIndices: [] };
+      }
+
+      const scrollLeft = container.scrollLeft;
+      const viewportWidth = container.clientWidth;
+      const controlWidth = controls.show ? controls.width : 0;
+
+      const visibleIndices: number[] = [];
+      const remainingIndices: number[] = [];
+      let offset = 0;
+
+      for (let i = 0; i < canvasWidths.length; i++) {
+        const chunkLeft = offset + controlWidth + clipPixelOffset;
+        const chunkRight = chunkLeft + canvasWidths[i];
+        // Chunk is visible if it overlaps the viewport
+        if (chunkRight > scrollLeft && chunkLeft < scrollLeft + viewportWidth) {
+          visibleIndices.push(i);
+        } else {
+          remainingIndices.push(i);
+        }
+        offset += canvasWidths[i];
+      }
+
+      return { visibleIndices, remainingIndices };
+    };
+
+    // Helper: render a set of chunks for a clip/channel via worker
+    const renderChunkSubset = async (
+      api: NonNullable<typeof workerApi>,
+      cacheKey: string,
+      channelInfo: { canvasIds: string[]; canvasWidths: number[] },
+      indices: number[],
+      item: { config: SpectrogramConfig; colorMap: ColorMapValue },
+      channelIndex: number,
+    ) => {
+      if (indices.length === 0) return;
+
+      const canvasIds = indices.map(i => channelInfo.canvasIds[i]);
+      const canvasWidths = indices.map(i => channelInfo.canvasWidths[i]);
+
+      // Compute globalPixelOffsets for each selected chunk
+      const globalPixelOffsets: number[] = [];
+      for (const idx of indices) {
+        let offset = 0;
+        for (let j = 0; j < idx; j++) {
+          offset += channelInfo.canvasWidths[j];
+        }
+        globalPixelOffsets.push(offset);
+      }
+
+      const colorLUT = getColorMap(item.colorMap);
+
+      await api.renderChunks({
+        cacheKey,
+        canvasIds,
+        canvasWidths,
+        globalPixelOffsets,
+        canvasHeight: waveHeight,
+        devicePixelRatio: typeof window !== 'undefined' ? window.devicePixelRatio : 1,
+        samplesPerPixel,
+        colorLUT,
+        frequencyScale: item.config.frequencyScale ?? 'mel',
+        minFrequency: item.config.minFrequency ?? 0,
+        maxFrequency: item.config.maxFrequency ?? 0,
+        gainDb: item.config.gainDb ?? 20,
+        rangeDb: item.config.rangeDb ?? 80,
+        channelIndex,
+      });
+    };
+
+    // 3-phase async rendering pipeline
+    const computeAsync = async () => {
+      const abortToken = { aborted: false };
+      backgroundRenderAbortRef.current = abortToken;
+
+      // --- Process clips needing full FFT ---
+      for (const item of clipsNeedingFFT) {
+        if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
+
+        try {
+          const clipCanvasInfo = spectrogramCanvasRegistryRef.current.get(item.clipId);
+          if (clipCanvasInfo && clipCanvasInfo.size > 0) {
+            const numChannels = item.monoFlag ? 1 : item.channelDataArrays.length;
+            const clipPixelOffset = Math.floor(item.clipStartSample / samplesPerPixel);
+
+            // Calculate visible sample range for range-limited FFT
+            const container = scrollContainerRef.current;
+            const windowSize = item.config.fftSize ?? 2048;
+            let visibleRange: { start: number; end: number } | undefined;
+
+            if (container) {
+              const scrollLeft = container.scrollLeft;
+              const viewportWidth = container.clientWidth;
+              const controlWidth = controls.show ? controls.width : 0;
+
+              // Viewport pixel range on the timeline
+              const vpStartPx = Math.max(0, scrollLeft - controlWidth);
+              const vpEndPx = vpStartPx + viewportWidth;
+
+              // Clip pixel range on the timeline
+              const clipStartPx = clipPixelOffset;
+              const clipEndPx = clipStartPx + Math.ceil(item.durationSamples / samplesPerPixel);
+
+              // Intersection of viewport with clip (in timeline pixels)
+              const overlapStartPx = Math.max(vpStartPx, clipStartPx);
+              const overlapEndPx = Math.min(vpEndPx, clipEndPx);
+
+              if (overlapEndPx > overlapStartPx) {
+                // Convert to clip-local pixels, then to buffer samples
+                const localStartPx = overlapStartPx - clipStartPx;
+                const localEndPx = overlapEndPx - clipStartPx;
+                const visStartSample = item.offsetSamples + Math.floor(localStartPx * samplesPerPixel);
+                const visEndSample = Math.min(
+                  item.offsetSamples + item.durationSamples,
+                  item.offsetSamples + Math.ceil(localEndPx * samplesPerPixel)
+                );
+                // Add padding for FFT windowing
+                const paddedStart = Math.max(item.offsetSamples, visStartSample - windowSize);
+                const paddedEnd = Math.min(item.offsetSamples + item.durationSamples, visEndSample + windowSize);
+
+                // Only use range-limited FFT if it's substantially smaller than the full clip
+                if ((paddedEnd - paddedStart) < item.durationSamples * 0.8) {
+                  visibleRange = { start: paddedStart, end: paddedEnd };
+                }
+              }
+            }
+
+            // Phase 1a: Compute visible-range FFT first (if range is smaller than full clip)
+            // Skip if the full-clip FFT is already cached (e.g., from a previous zoom level)
+            const fullClipAlreadyCached = clipCacheKeysRef.current.has(item.clipId);
+            if (visibleRange && !fullClipAlreadyCached) {
+              const { cacheKey: visibleCacheKey } = await workerApi!.computeFFT({
+                clipId: item.clipId,
+                channelDataArrays: item.channelDataArrays,
+                config: item.config,
+                sampleRate: item.sampleRate,
+                offsetSamples: item.offsetSamples,
+                durationSamples: item.durationSamples,
+                mono: item.monoFlag,
+                sampleRange: visibleRange,
+              });
+              if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
+
+              // Render visible chunks immediately from partial FFT
+              for (let ch = 0; ch < numChannels; ch++) {
+                const channelInfo = clipCanvasInfo.get(ch);
+                if (!channelInfo) continue;
+
+                const { visibleIndices } = getVisibleChunkRange(channelInfo.canvasWidths, clipPixelOffset);
+                await renderChunkSubset(workerApi!, visibleCacheKey, channelInfo, visibleIndices, item, ch);
+              }
+
+              if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
+            }
+
+            // Phase 1b: Compute full-clip FFT (cached in worker)
+            const { cacheKey } = await workerApi!.computeFFT({
+              clipId: item.clipId,
+              channelDataArrays: item.channelDataArrays,
+              config: item.config,
+              sampleRate: item.sampleRate,
+              offsetSamples: item.offsetSamples,
+              durationSamples: item.durationSamples,
+              mono: item.monoFlag,
+            });
+
+            if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
+
+            clipCacheKeysRef.current.set(item.clipId, cacheKey);
+
+            for (let ch = 0; ch < numChannels; ch++) {
+              const channelInfo = clipCanvasInfo.get(ch);
+              if (!channelInfo) continue;
+
+              const { visibleIndices, remainingIndices } = getVisibleChunkRange(channelInfo.canvasWidths, clipPixelOffset);
+
+              // Phase 2: Re-render visible chunks with full FFT data
+              // Always re-render: partial FFT may leave gaps at chunk edges outside the visible range
+              await renderChunkSubset(workerApi!, cacheKey, channelInfo, visibleIndices, item, ch);
+
+              if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
+
+              // Phase 3: Background render remaining chunks in batches
+              const BATCH_SIZE = 4;
+              for (let batchStart = 0; batchStart < remainingIndices.length; batchStart += BATCH_SIZE) {
+                if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
+
+                const batch = remainingIndices.slice(batchStart, batchStart + BATCH_SIZE);
+
+                // Yield to browser between batches
+                await new Promise<void>(resolve => {
+                  if (typeof requestIdleCallback === 'function') {
+                    requestIdleCallback(() => resolve());
+                  } else {
+                    setTimeout(resolve, 0);
+                  }
+                });
+
+                if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
+
+                await renderChunkSubset(workerApi!, cacheKey, channelInfo, batch, item, ch);
+              }
+            }
+          } else {
+            // Fallback: compute only, render on main thread
+            const spectrograms = await workerApi!.compute({
+              channelDataArrays: item.channelDataArrays,
+              config: item.config,
+              sampleRate: item.sampleRate,
+              offsetSamples: item.offsetSamples,
+              durationSamples: item.durationSamples,
+              mono: item.monoFlag,
+            });
+
+            if (spectrogramGenerationRef.current !== generation) return;
+
+            setSpectrogramDataMap(prevMap => {
+              const newMap = new Map(prevMap);
+              newMap.set(item.clipId, spectrograms);
+              return newMap;
+            });
+          }
+        } catch (err) {
+          console.warn('Spectrogram worker error for clip', item.clipId, err);
+        }
+      }
+
+      // --- Process clips needing display-only re-render (skip FFT) ---
+      for (const item of clipsNeedingDisplayOnly) {
+        if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
+
+        const cacheKey = clipCacheKeysRef.current.get(item.clipId);
+        if (!cacheKey) continue;
+
+        const clipCanvasInfo = spectrogramCanvasRegistryRef.current.get(item.clipId);
+        if (!clipCanvasInfo || clipCanvasInfo.size === 0) continue;
+
+        try {
+          const clipPixelOffset = Math.floor(item.clipStartSample / samplesPerPixel);
+          for (let ch = 0; ch < item.numChannels; ch++) {
+            const channelInfo = clipCanvasInfo.get(ch);
+            if (!channelInfo) continue;
+
+            const { visibleIndices, remainingIndices } = getVisibleChunkRange(channelInfo.canvasWidths, clipPixelOffset);
+
+            // Phase 2: Visible chunks first
+            await renderChunkSubset(workerApi!, cacheKey, channelInfo, visibleIndices, item, ch);
+
+            if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
+
+            // Phase 3: Background render remaining
+            const BATCH_SIZE = 4;
+            for (let batchStart = 0; batchStart < remainingIndices.length; batchStart += BATCH_SIZE) {
+              if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
+
+              const batch = remainingIndices.slice(batchStart, batchStart + BATCH_SIZE);
+
+              await new Promise<void>(resolve => {
+                if (typeof requestIdleCallback === 'function') {
+                  requestIdleCallback(() => resolve());
+                } else {
+                  setTimeout(resolve, 0);
+                }
+              });
+
+              if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
+
+              await renderChunkSubset(workerApi!, cacheKey, channelInfo, batch, item, ch);
+            }
+          }
+        } catch (err) {
+          console.warn('Spectrogram display re-render error for clip', item.clipId, err);
+        }
+      }
+
+    };
+
+    computeAsync().catch(err => {
+      console.error('[waveform-playlist] Spectrogram computation failed:', err);
+    });
+  }, [tracks, mono, spectrogramConfig, spectrogramColorMap, trackSpectrogramOverrides, waveHeight, samplesPerPixel, spectrogramCanvasVersion]);
 
   // Animation loop
   const startAnimationLoop = useCallback(() => {
@@ -1011,6 +1612,51 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     }
   }, [trackStates]);
 
+  // Per-track render mode and spectrogram config setters (convenience wrappers over single Map)
+  const setTrackRenderMode = useCallback((trackId: string, mode: RenderMode) => {
+    setTrackSpectrogramOverrides(prev => {
+      const next = new Map(prev);
+      const existing = next.get(trackId);
+      next.set(trackId, { ...existing, renderMode: mode });
+      return next;
+    });
+  }, []);
+
+  const setTrackSpectrogramConfig = useCallback((trackId: string, config: SpectrogramConfig, colorMap?: ColorMapValue) => {
+    setTrackSpectrogramOverrides(prev => {
+      const next = new Map(prev);
+      const existing = next.get(trackId);
+      next.set(trackId, {
+        renderMode: existing?.renderMode ?? 'waveform',
+        config,
+        ...(colorMap !== undefined ? { colorMap } : { colorMap: existing?.colorMap }),
+      });
+      return next;
+    });
+  }, []);
+
+  // Spectrogram OffscreenCanvas registration
+  const registerSpectrogramCanvases = useCallback((clipId: string, channelIndex: number, canvasIds: string[], canvasWidths: number[]) => {
+    const registry = spectrogramCanvasRegistryRef.current;
+    if (!registry.has(clipId)) {
+      registry.set(clipId, new Map());
+    }
+    registry.get(clipId)!.set(channelIndex, { canvasIds, canvasWidths });
+    // Bump version to trigger re-computation with canvas rendering
+    setSpectrogramCanvasVersion(v => v + 1);
+  }, []);
+
+  const unregisterSpectrogramCanvases = useCallback((clipId: string, channelIndex: number) => {
+    const registry = spectrogramCanvasRegistryRef.current;
+    const clipChannels = registry.get(clipId);
+    if (clipChannels) {
+      clipChannels.delete(channelIndex);
+      if (clipChannels.size === 0) {
+        registry.delete(clipId);
+      }
+    }
+  }, []);
+
   // Selection
   const setSelection = useCallback((start: number, end: number) => {
     setSelectionStart(start);
@@ -1133,6 +1779,14 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     setLoopRegion,
     setLoopRegionFromSelection,
     clearLoopRegion,
+
+    // Per-track render mode and spectrogram config
+    setTrackRenderMode,
+    setTrackSpectrogramConfig,
+
+    // Spectrogram OffscreenCanvas registration
+    registerSpectrogramCanvases,
+    unregisterSpectrogramCanvases,
   };
 
   const dataValue: PlaylistDataContextValue = {
@@ -1156,6 +1810,11 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     barGap,
     progressBarWidth,
     isReady,
+    spectrogramDataMap,
+    spectrogramConfig,
+    spectrogramColorMap,
+    trackSpectrogramOverrides,
+    spectrogramWorkerApi: spectrogramWorkerReady ? spectrogramWorkerRef.current : null,
   };
 
   // Combined value for backwards compatibility

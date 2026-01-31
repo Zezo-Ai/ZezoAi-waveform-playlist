@@ -487,6 +487,8 @@ const analyser = context.createAnalyser();
 9. **Animation Loop Restart** - When restarting playback, cancel existing animation frames AND reset `currentTimeRef` to the new start position before calling `startAnimationLoop()`
 10. **Constraint-First Drag Handling** - When implementing boundary trimming, calculate constrained delta first, then apply uniformly to all affected properties (startSample, offsetSamples, durationSamples)
 11. **Playlist Loading Detection** - Use `data-playlist-state` attribute and `waveform-playlist:ready` custom event for reliable loading detection in CSS, E2E tests, and external integrations
+12. **Stable React Keys for Tracks/Clips** - Always use `track.id` / `clip.clipId` as React keys, never array indices. Index-based keys cause DOM reuse on removal, breaking `transferControlToOffscreen()` (can only be called once per canvas) and causing stale OffscreenCanvas references.
+13. **Per-Track Maps Must Use Track ID** - Any `Map` storing per-track overrides (render modes, configs) must be keyed by `track.id` (string), not array index. Index keys break when tracks are added/removed.
 
 ### Playlist Loading Detection
 

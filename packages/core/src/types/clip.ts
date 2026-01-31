@@ -10,6 +10,7 @@
  */
 
 import { Fade } from './index';
+import type { RenderMode, SpectrogramConfig, ColorMapValue } from './spectrogram';
 
 /**
  * WaveformData object from waveform-data.js library.
@@ -171,6 +172,15 @@ export interface ClipTrack {
 
   /** Optional effects function for this track */
   effects?: TrackEffectsFunction;
+
+  /** Visualization render mode. Default: 'waveform' */
+  renderMode?: RenderMode;
+
+  /** Per-track spectrogram configuration (FFT size, window, frequency scale, etc.) */
+  spectrogramConfig?: SpectrogramConfig;
+
+  /** Per-track spectrogram color map name or custom color array */
+  spectrogramColorMap?: ColorMapValue;
 }
 
 /**

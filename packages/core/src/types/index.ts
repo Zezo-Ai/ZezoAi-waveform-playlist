@@ -83,3 +83,6 @@ export enum InteractionState {
 
 // Export clip-based model types
 export * from './clip';
+
+// Export spectrogram types
+export * from './spectrogram';
