@@ -374,6 +374,7 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
     });
 
     if (!fftCache.has(cacheKey)) {
+      const tFFT = performance.now();
       const spectrograms: SpectrogramData[] = [];
       if (mono || channelDataArrays.length === 1) {
         spectrograms.push(
@@ -387,6 +388,9 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
         }
       }
       fftCache.set(cacheKey, spectrograms);
+      console.log(`[spectrogram-worker] FFT computed: ${(performance.now() - tFFT).toFixed(1)}ms (${durationSamples} samples, fftSize=${fftSize})`);
+    } else {
+      console.log(`[spectrogram-worker] FFT cache hit for ${clipId}`);
     }
 
     const response: ComputeResponse = { id, cacheKey };
@@ -407,6 +411,7 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
       return;
     }
 
+    const tRender = performance.now();
     const scaleFn = getFrequencyScale((frequencyScale ?? 'mel') as FrequencyScaleName);
     const isNonLinear = frequencyScale !== 'linear';
 
@@ -426,6 +431,7 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
       gainDb,
       rangeDb,
     );
+    console.log(`[spectrogram-worker] render-chunks: ${canvasIds.length} chunks in ${(performance.now() - tRender).toFixed(1)}ms`);
 
     const response: ComputeResponse = { id, done: true };
     (self as unknown as Worker).postMessage(response);

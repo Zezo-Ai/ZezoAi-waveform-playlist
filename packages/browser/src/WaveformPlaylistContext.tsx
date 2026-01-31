@@ -1010,6 +1010,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     const computeAsync = async () => {
       const abortToken = { aborted: false };
       backgroundRenderAbortRef.current = abortToken;
+      const t0 = performance.now();
 
       // --- Process clips needing full FFT ---
       for (const item of clipsNeedingFFT) {
@@ -1019,6 +1020,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
           const clipCanvasInfo = spectrogramCanvasRegistryRef.current.get(item.clipId);
           if (clipCanvasInfo && clipCanvasInfo.size > 0) {
             // Phase 1: Compute FFT (cached in worker)
+            const tFFT0 = performance.now();
             const { cacheKey } = await workerApi!.computeFFT({
               clipId: item.clipId,
               channelDataArrays: item.channelDataArrays,
@@ -1028,6 +1030,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
               durationSamples: item.durationSamples,
               mono: item.monoFlag,
             });
+            const tFFT1 = performance.now();
+            console.log(`[spectrogram] Phase 1 FFT (${item.clipId}): ${(tFFT1 - tFFT0).toFixed(1)}ms`);
 
             if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
 
@@ -1042,11 +1046,15 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
               const { visibleIndices, remainingIndices } = getVisibleChunkRange(channelInfo.canvasWidths);
 
               // Phase 2: Render visible chunks first
+              const tVis0 = performance.now();
               await renderChunkSubset(workerApi!, cacheKey, channelInfo, visibleIndices, item, ch);
+              const tVis1 = performance.now();
+              console.log(`[spectrogram] Phase 2 visible (${item.clipId} ch${ch}): ${visibleIndices.length} chunks in ${(tVis1 - tVis0).toFixed(1)}ms`);
 
               if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
 
               // Phase 3: Background render remaining chunks in batches
+              const tBg0 = performance.now();
               const BATCH_SIZE = 4;
               for (let batchStart = 0; batchStart < remainingIndices.length; batchStart += BATCH_SIZE) {
                 if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
@@ -1065,6 +1073,10 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
                 if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
 
                 await renderChunkSubset(workerApi!, cacheKey, channelInfo, batch, item, ch);
+              }
+              const tBg1 = performance.now();
+              if (remainingIndices.length > 0) {
+                console.log(`[spectrogram] Phase 3 background (${item.clipId} ch${ch}): ${remainingIndices.length} chunks in ${(tBg1 - tBg0).toFixed(1)}ms`);
               }
             }
           } else {
@@ -1091,6 +1103,10 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         }
       }
 
+      if (clipsNeedingFFT.length > 0) {
+        console.log(`[spectrogram] All FFT clips done in ${(performance.now() - t0).toFixed(1)}ms`);
+      }
+
       // --- Process clips needing display-only re-render (skip FFT) ---
       for (const item of clipsNeedingDisplayOnly) {
         if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
@@ -1102,6 +1118,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         if (!clipCanvasInfo || clipCanvasInfo.size === 0) continue;
 
         try {
+          const tDisp0 = performance.now();
           for (let ch = 0; ch < item.numChannels; ch++) {
             const channelInfo = clipCanvasInfo.get(ch);
             if (!channelInfo) continue;
@@ -1133,10 +1150,13 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
               await renderChunkSubset(workerApi!, cacheKey, channelInfo, batch, item, ch);
             }
           }
+          console.log(`[spectrogram] Display-only re-render (${item.clipId}): ${(performance.now() - tDisp0).toFixed(1)}ms (FFT skipped)`);
         } catch (err) {
           console.warn('Spectrogram display re-render error for clip', item.clipId, err);
         }
       }
+
+      console.log(`[spectrogram] Total pipeline: ${(performance.now() - t0).toFixed(1)}ms (${clipsNeedingFFT.length} FFT, ${clipsNeedingDisplayOnly.length} display-only)`);
     };
 
     computeAsync();
