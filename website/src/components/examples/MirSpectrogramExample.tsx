@@ -208,6 +208,8 @@ export function MirSpectrogramExample() {
           theme={theme}
           waveHeight={100}
           samplesPerPixel={512}
+          barWidth={4}
+          barGap={2}
           zoomLevels={[128, 256, 512, 1024, 2048, 4096]}
           controls={{ show: true, width: 180 }}
         >
