@@ -62,6 +62,8 @@ export interface PlaylistVisualizationProps {
    * Use with useDragSensors({ touchOptimized: true }) for best results.
    */
   touchOptimized?: boolean;
+  /** Callback when a track's close button is clicked. Only renders close button when provided. */
+  onRemoveTrack?: (trackIndex: number) => void;
   // Live recording state for real-time waveform preview
   recordingState?: {
     isRecording: boolean;
@@ -93,6 +95,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
   interactiveClips = false,
   showFades = false,
   touchOptimized = false,
+  onRemoveTrack,
   recordingState,
 }) => {
   const theme = useTheme() as import('@waveform-playlist/ui-components').WaveformPlaylistTheme;
@@ -377,6 +380,24 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                 ) : (
                   <Controls onClick={() => selectTrack(trackIndex)}>
                     <Header style={{ justifyContent: 'center', position: 'relative' }}>
+                      {onRemoveTrack && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onRemoveTrack(trackIndex); }}
+                          title="Remove track"
+                          style={{
+                            position: 'absolute', left: 0, top: 0,
+                            width: 16, height: 16,
+                            border: 'none', background: 'transparent',
+                            color: '#999', cursor: 'pointer',
+                            fontSize: 12, lineHeight: '16px', padding: 0,
+                            opacity: 0.6, transition: 'opacity 0.15s, color 0.15s',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = '#dc3545'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6'; e.currentTarget.style.color = '#999'; }}
+                        >
+                          ×
+                        </button>
+                      )}
                       {trackState.name || `Track ${trackIndex + 1}`}
                       <span style={{ position: 'absolute', right: 0, top: 0 }}>
                         <TrackMenu
