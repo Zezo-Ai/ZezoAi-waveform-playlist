@@ -170,6 +170,8 @@ export function useAudioTracks(
         }),
         effects: config.effects,
         renderMode: config.renderMode,
+        spectrogramConfig: config.spectrogramConfig,
+        spectrogramColorMap: config.spectrogramColorMap,
       };
 
       return track;

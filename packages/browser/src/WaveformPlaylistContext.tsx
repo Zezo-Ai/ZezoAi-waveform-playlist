@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
 import { ThemeProvider } from 'styled-components';
 import { TonePlayout, type EffectsFunction, type TrackEffectsFunction } from '@waveform-playlist/playout';
-import { type Track, type ClipTrack, type Fade, type SpectrogramData, type SpectrogramConfig, type ColorMapValue } from '@waveform-playlist/core';
+import { type Track, type ClipTrack, type Fade, type SpectrogramData, type SpectrogramConfig, type ColorMapValue, type RenderMode } from '@waveform-playlist/core';
 import { type TimeFormat, type WaveformPlaylistTheme, defaultTheme } from '@waveform-playlist/ui-components';
 import { start as toneStart, getContext } from 'tone';
 import { generatePeaks } from './peaksUtil';
@@ -185,6 +185,10 @@ export interface PlaylistControlsContextValue {
   setLoopRegion: (start: number, end: number) => void;
   setLoopRegionFromSelection: () => void;
   clearLoopRegion: () => void;
+
+  // Per-track render mode and spectrogram config
+  setTrackRenderMode: (trackIndex: number, mode: RenderMode) => void;
+  setTrackSpectrogramConfig: (trackIndex: number, config: SpectrogramConfig, colorMap?: ColorMapValue) => void;
 }
 
 export interface PlaylistDataContextValue {
@@ -212,10 +216,16 @@ export interface PlaylistDataContextValue {
   isReady: boolean;
   /** Spectrogram data keyed by clipId, value is array of per-channel spectrograms */
   spectrogramDataMap: Map<string, SpectrogramData[]>;
-  /** Spectrogram configuration */
+  /** Global spectrogram configuration (fallback) */
   spectrogramConfig?: SpectrogramConfig;
-  /** Spectrogram color map */
+  /** Global spectrogram color map (fallback) */
   spectrogramColorMap?: ColorMapValue;
+  /** Per-track render mode overrides (set via track menu) */
+  trackRenderModes: Map<number, RenderMode>;
+  /** Per-track spectrogram config overrides */
+  trackSpectrogramConfigs: Map<number, SpectrogramConfig>;
+  /** Per-track spectrogram color map overrides */
+  trackSpectrogramColorMaps: Map<number, ColorMapValue>;
 }
 
 // Create the 4 separate contexts
@@ -323,6 +333,11 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const [loopStart, setLoopStartState] = useState(0);
   const [loopEnd, setLoopEndState] = useState(0);
   const [isReady, setIsReady] = useState(false);
+
+  // Per-track render mode and spectrogram config overrides (set via track menu)
+  const [trackRenderModes, setTrackRenderModes] = useState<Map<number, RenderMode>>(new Map());
+  const [trackSpectrogramConfigs, setTrackSpectrogramConfigs] = useState<Map<number, SpectrogramConfig>>(new Map());
+  const [trackSpectrogramColorMaps, setTrackSpectrogramColorMaps] = useState<Map<number, ColorMapValue>>(new Map());
 
   // Refs
   const playoutRef = useRef<TonePlayout | null>(null);
@@ -689,49 +704,85 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   }, [tracks, samplesPerPixel, mono]);
 
   // Compute spectrograms for tracks with renderMode 'spectrogram' or 'both'
+  // Uses per-track config; only recomputes tracks whose config changed.
+  const prevSpectrogramConfigRef = useRef<Map<number, string>>(new Map());
+
   useEffect(() => {
     if (tracks.length === 0) return;
 
-    const newMap = new Map<string, SpectrogramData[]>();
+    // Build a config key per track to detect changes
+    const currentKeys = new Map<number, string>();
+    tracks.forEach((track, i) => {
+      const mode = trackRenderModes.get(i) ?? track.renderMode ?? 'waveform';
+      if (mode === 'waveform') return;
+      const cfg = trackSpectrogramConfigs.get(i) ?? track.spectrogramConfig ?? spectrogramConfig;
+      const cm = trackSpectrogramColorMaps.get(i) ?? track.spectrogramColorMap ?? spectrogramColorMap;
+      currentKeys.set(i, JSON.stringify({ mode, cfg, cm, mono }));
+    });
 
-    for (const track of tracks) {
-      const mode = track.renderMode ?? 'waveform';
-      if (mode === 'waveform') continue;
+    const prevKeys = prevSpectrogramConfigRef.current;
 
-      for (const clip of track.clips) {
-        if (!clip.audioBuffer) continue;
-
-        const channelSpectrograms: SpectrogramData[] = [];
-
-        if (mono || clip.audioBuffer.numberOfChannels === 1) {
-          channelSpectrograms.push(
-            computeSpectrogramMono(
-              clip.audioBuffer,
-              spectrogramConfig,
-              clip.offsetSamples,
-              clip.durationSamples
-            )
-          );
-        } else {
-          for (let ch = 0; ch < clip.audioBuffer.numberOfChannels; ch++) {
-            channelSpectrograms.push(
-              computeSpectrogram(
-                clip.audioBuffer,
-                spectrogramConfig,
-                clip.offsetSamples,
-                clip.durationSamples,
-                ch
-              )
-            );
-          }
-        }
-
-        newMap.set(clip.id, channelSpectrograms);
+    // Check if any track changed
+    let anyChanged = currentKeys.size !== prevKeys.size;
+    if (!anyChanged) {
+      for (const [idx, key] of currentKeys) {
+        if (prevKeys.get(idx) !== key) { anyChanged = true; break; }
       }
     }
 
-    setSpectrogramDataMap(newMap);
-  }, [tracks, mono, spectrogramConfig]);
+    if (!anyChanged) return;
+
+    prevSpectrogramConfigRef.current = currentKeys;
+
+    setSpectrogramDataMap(prevMap => {
+      const newMap = new Map(prevMap);
+
+      // Remove entries for tracks that are no longer spectrogram
+      for (const track of tracks) {
+        const trackIdx = tracks.indexOf(track);
+        const mode = trackRenderModes.get(trackIdx) ?? track.renderMode ?? 'waveform';
+        if (mode === 'waveform') {
+          for (const clip of track.clips) {
+            newMap.delete(clip.id);
+          }
+        }
+      }
+
+      // Compute/recompute for changed tracks
+      tracks.forEach((track, i) => {
+        const mode = trackRenderModes.get(i) ?? track.renderMode ?? 'waveform';
+        if (mode === 'waveform') return;
+
+        const key = currentKeys.get(i);
+        const prevKey = prevKeys.get(i);
+        if (key === prevKey) return; // This track didn't change
+
+        const cfg = trackSpectrogramConfigs.get(i) ?? track.spectrogramConfig ?? spectrogramConfig;
+
+        for (const clip of track.clips) {
+          if (!clip.audioBuffer) continue;
+
+          const channelSpectrograms: SpectrogramData[] = [];
+
+          if (mono || clip.audioBuffer.numberOfChannels === 1) {
+            channelSpectrograms.push(
+              computeSpectrogramMono(clip.audioBuffer, cfg, clip.offsetSamples, clip.durationSamples)
+            );
+          } else {
+            for (let ch = 0; ch < clip.audioBuffer.numberOfChannels; ch++) {
+              channelSpectrograms.push(
+                computeSpectrogram(clip.audioBuffer, cfg, clip.offsetSamples, clip.durationSamples, ch)
+              );
+            }
+          }
+
+          newMap.set(clip.id, channelSpectrograms);
+        }
+      });
+
+      return newMap;
+    });
+  }, [tracks, mono, spectrogramConfig, spectrogramColorMap, trackRenderModes, trackSpectrogramConfigs, trackSpectrogramColorMaps]);
 
   // Animation loop
   const startAnimationLoop = useCallback(() => {
@@ -1070,6 +1121,30 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     }
   }, [trackStates]);
 
+  // Per-track render mode and spectrogram config setters
+  const setTrackRenderMode = useCallback((trackIndex: number, mode: RenderMode) => {
+    setTrackRenderModes(prev => {
+      const next = new Map(prev);
+      next.set(trackIndex, mode);
+      return next;
+    });
+  }, []);
+
+  const setTrackSpectrogramConfig = useCallback((trackIndex: number, config: SpectrogramConfig, colorMap?: ColorMapValue) => {
+    setTrackSpectrogramConfigs(prev => {
+      const next = new Map(prev);
+      next.set(trackIndex, config);
+      return next;
+    });
+    if (colorMap !== undefined) {
+      setTrackSpectrogramColorMaps(prev => {
+        const next = new Map(prev);
+        next.set(trackIndex, colorMap);
+        return next;
+      });
+    }
+  }, []);
+
   // Selection
   const setSelection = useCallback((start: number, end: number) => {
     setSelectionStart(start);
@@ -1192,6 +1267,10 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     setLoopRegion,
     setLoopRegionFromSelection,
     clearLoopRegion,
+
+    // Per-track render mode and spectrogram config
+    setTrackRenderMode,
+    setTrackSpectrogramConfig,
   };
 
   const dataValue: PlaylistDataContextValue = {
@@ -1218,6 +1297,9 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     spectrogramDataMap,
     spectrogramConfig,
     spectrogramColorMap,
+    trackRenderModes,
+    trackSpectrogramConfigs,
+    trackSpectrogramColorMaps,
   };
 
   // Combined value for backwards compatibility

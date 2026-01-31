@@ -1,4 +1,5 @@
 import React, { useRef, useState, useMemo, type ReactNode, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { getContext } from 'tone';
 import {
   Playlist,
@@ -18,6 +19,8 @@ import {
   SliderWrapper,
   VolumeDownIcon,
   VolumeUpIcon,
+  TrackMenu,
+  SpectrogramSettingsModal,
   useTheme,
   waveformColorToCss,
   type RenderPlayheadFunction,
@@ -31,6 +34,7 @@ import { usePlaybackAnimation, usePlaylistState, usePlaylistControls, usePlaylis
 import type { Peaks } from '@waveform-playlist/webaudio-peaks';
 import { AnimatedPlayhead } from './AnimatedPlayhead';
 import { ChannelWithProgress } from './ChannelWithProgress';
+import type { SpectrogramConfig, ColorMapValue, RenderMode } from '@waveform-playlist/core';
 import type { AnnotationData, GetAnnotationBoxLabelFn } from '../types/annotations';
 import { getColorMap, getFrequencyScale } from '../spectrogram';
 
@@ -121,6 +125,8 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
     setSelectedTrackId,
     setCurrentTime,
     setLoopRegion,
+    setTrackRenderMode,
+    setTrackSpectrogramConfig,
   } = usePlaylistControls();
   const {
     audioBuffers,
@@ -140,17 +146,34 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
     spectrogramDataMap,
     spectrogramConfig,
     spectrogramColorMap,
+    trackRenderModes,
+    trackSpectrogramConfigs,
+    trackSpectrogramColorMaps,
   } = usePlaylistData();
 
-  // Pre-compute spectrogram rendering helpers from config
-  const spectrogramColorLUT = useMemo(
-    () => getColorMap(spectrogramColorMap ?? 'viridis'),
-    [spectrogramColorMap]
-  );
-  const spectrogramFrequencyScaleFn = useMemo(
-    () => getFrequencyScale(spectrogramConfig?.frequencyScale ?? 'linear'),
-    [spectrogramConfig?.frequencyScale]
-  );
+  // Per-track spectrogram rendering helpers (memoized)
+  const perTrackSpectrogramHelpers = useMemo(() => {
+    const helpers = new Map<number, {
+      colorLUT: Uint8Array;
+      frequencyScaleFn: (f: number, minF: number, maxF: number) => number;
+      config: SpectrogramConfig | undefined;
+    }>();
+    tracks.forEach((track, i) => {
+      const mode = trackRenderModes.get(i) ?? track.renderMode ?? 'waveform';
+      if (mode === 'waveform') return;
+      const cm = trackSpectrogramColorMaps.get(i) ?? track.spectrogramColorMap ?? spectrogramColorMap ?? 'viridis';
+      const cfg = trackSpectrogramConfigs.get(i) ?? track.spectrogramConfig ?? spectrogramConfig;
+      helpers.set(i, {
+        colorLUT: getColorMap(cm),
+        frequencyScaleFn: getFrequencyScale(cfg?.frequencyScale ?? 'linear'),
+        config: cfg,
+      });
+    });
+    return helpers;
+  }, [tracks, trackRenderModes, trackSpectrogramConfigs, trackSpectrogramColorMaps, spectrogramConfig, spectrogramColorMap]);
+
+  // State for spectrogram settings modal
+  const [settingsModalTrackIndex, setSettingsModalTrackIndex] = useState<number | null>(null);
 
   const [isSelecting, setIsSelecting] = useState(false);
 
@@ -346,12 +369,21 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                   pan: 0,
                 };
 
+                const effectiveRenderMode = trackRenderModes.get(trackIndex) ?? track.renderMode ?? 'waveform';
+
                 const trackControls = renderTrackControls ? (
                   renderTrackControls(trackIndex)
                 ) : (
                   <Controls onClick={() => selectTrack(trackIndex)}>
-                    <Header style={{ justifyContent: 'center' }}>
+                    <Header style={{ justifyContent: 'center', position: 'relative' }}>
                       {trackState.name || `Track ${trackIndex + 1}`}
+                      <span style={{ position: 'absolute', right: 0, top: 0 }}>
+                        <TrackMenu
+                          renderMode={effectiveRenderMode}
+                          onRenderModeChange={(mode) => setTrackRenderMode(trackIndex, mode)}
+                          onOpenSpectrogramSettings={() => setSettingsModalTrackIndex(trackIndex)}
+                        />
+                      </span>
                     </Header>
                     <ButtonGroup>
                       <Button
@@ -446,7 +478,8 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                             {peaksData.data.map((channelPeaks: Peaks, channelIndex: number) => {
                               const clipSpectrograms = spectrogramDataMap.get(clip.clipId);
                               const channelSpectrogram = clipSpectrograms?.[channelIndex] ?? clipSpectrograms?.[0];
-                              const trackRenderMode = track.renderMode ?? 'waveform';
+                              const helpers = perTrackSpectrogramHelpers.get(trackIndex);
+                              const trackCfg = helpers?.config;
 
                               return (
                                 <ChannelWithProgress
@@ -458,16 +491,16 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                                   isSelected={track.id === selectedTrackId}
                                   clipStartSample={clip.startSample}
                                   clipDurationSamples={clip.durationSamples}
-                                  renderMode={trackRenderMode}
+                                  renderMode={effectiveRenderMode}
                                   spectrogramData={channelSpectrogram}
                                   samplesPerPixel={samplesPerPixel}
-                                  spectrogramColorLUT={spectrogramColorLUT}
-                                  spectrogramFrequencyScaleFn={spectrogramFrequencyScaleFn}
-                                  spectrogramMinFrequency={spectrogramConfig?.minFrequency}
-                                  spectrogramMaxFrequency={spectrogramConfig?.maxFrequency}
-                                  spectrogramLabels={spectrogramConfig?.labels}
-                                  spectrogramLabelsColor={spectrogramConfig?.labelsColor}
-                                  spectrogramLabelsBackground={spectrogramConfig?.labelsBackground}
+                                  spectrogramColorLUT={helpers?.colorLUT}
+                                  spectrogramFrequencyScaleFn={helpers?.frequencyScaleFn}
+                                  spectrogramMinFrequency={trackCfg?.minFrequency}
+                                  spectrogramMaxFrequency={trackCfg?.maxFrequency}
+                                  spectrogramLabels={trackCfg?.labels}
+                                  spectrogramLabelsColor={trackCfg?.labelsColor}
+                                  spectrogramLabelsBackground={trackCfg?.labelsBackground}
                                 />
                               );
                             })}
@@ -570,6 +603,28 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
             </>
           </Playlist>
       </PlaylistInfoContext.Provider>
+      {typeof document !== 'undefined' && createPortal(
+        <SpectrogramSettingsModal
+          open={settingsModalTrackIndex !== null}
+          onClose={() => setSettingsModalTrackIndex(null)}
+          config={
+            settingsModalTrackIndex !== null
+              ? (trackSpectrogramConfigs.get(settingsModalTrackIndex) ?? tracks[settingsModalTrackIndex]?.spectrogramConfig ?? spectrogramConfig ?? {})
+              : {}
+          }
+          colorMap={
+            settingsModalTrackIndex !== null
+              ? (trackSpectrogramColorMaps.get(settingsModalTrackIndex) ?? tracks[settingsModalTrackIndex]?.spectrogramColorMap ?? spectrogramColorMap ?? 'viridis')
+              : 'viridis'
+          }
+          onApply={(newConfig, newColorMap) => {
+            if (settingsModalTrackIndex !== null) {
+              setTrackSpectrogramConfig(settingsModalTrackIndex, newConfig, newColorMap);
+            }
+          }}
+        />,
+        document.body
+      )}
     </DevicePixelRatioProvider>
   );
 };
