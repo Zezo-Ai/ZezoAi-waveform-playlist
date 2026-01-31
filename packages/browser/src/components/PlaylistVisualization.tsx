@@ -159,17 +159,17 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
 
   // Per-track spectrogram rendering helpers (memoized)
   const perTrackSpectrogramHelpers = useMemo(() => {
-    const helpers = new Map<number, {
+    const helpers = new Map<string, {
       colorLUT: Uint8Array;
       frequencyScaleFn: (f: number, minF: number, maxF: number) => number;
       config: SpectrogramConfig | undefined;
     }>();
-    tracks.forEach((track, i) => {
+    tracks.forEach((track) => {
       const mode = trackRenderModes.get(track.id) ?? track.renderMode ?? 'waveform';
       if (mode === 'waveform') return;
       const cm = trackSpectrogramColorMaps.get(track.id) ?? track.spectrogramColorMap ?? spectrogramColorMap ?? 'viridis';
       const cfg = trackSpectrogramConfigs.get(track.id) ?? track.spectrogramConfig ?? spectrogramConfig;
-      helpers.set(i, {
+      helpers.set(track.id, {
         colorLUT: getColorMap(cm),
         frequencyScaleFn: getFrequencyScale(cfg?.frequencyScale ?? 'mel'),
         config: cfg,
@@ -471,8 +471,6 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                 const rawChannels = trackClipPeaks.length > 0
                   ? Math.max(...trackClipPeaks.map(clip => clip.peaks.data.length))
                   : 1;
-                // In "both" mode spectrogram + waveform each render at half waveHeight,
-                // so the track container stays the same height as single-mode tracks.
                 const maxChannels = rawChannels;
 
                 return (
@@ -487,7 +485,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                       isSelected={track.id === selectedTrackId}
                     >
                       {effectiveRenderMode !== 'waveform' && (() => {
-                        const helpers = perTrackSpectrogramHelpers.get(trackIndex);
+                        const helpers = perTrackSpectrogramHelpers.get(track.id);
                         const trackCfg = helpers?.config;
                         if (!trackCfg?.labels || !helpers) return null;
                         return (
@@ -539,7 +537,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                             {peaksData.data.map((channelPeaks: Peaks, channelIndex: number) => {
                               const clipSpectrograms = spectrogramDataMap.get(clip.clipId);
                               const channelSpectrogram = clipSpectrograms?.[channelIndex] ?? clipSpectrograms?.[0];
-                              const helpers = perTrackSpectrogramHelpers.get(trackIndex);
+                              const helpers = perTrackSpectrogramHelpers.get(track.id);
                               const trackCfg = helpers?.config;
 
                               return (

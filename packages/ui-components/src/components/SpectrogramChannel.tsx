@@ -140,7 +140,7 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
         widths.push(Math.min(length - i * MAX_CANVAS_WIDTH, MAX_CANVAS_WIDTH));
       } catch (err) {
         console.warn(`[spectrogram] transferControlToOffscreen failed for ${canvasId}:`, err);
-        break;
+        continue;
       }
     }
 

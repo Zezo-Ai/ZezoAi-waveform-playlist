@@ -289,6 +289,7 @@ function renderSpectrogramToCanvas(
 
     const ctx = offscreen.getContext('2d');
     if (!ctx) {
+      console.warn(`[spectrogram-worker] getContext('2d') returned null for canvas "${canvasId}"`);
       if (!globalPixelOffsets) accumulatedOffset += canvasWidth;
       continue;
     }
