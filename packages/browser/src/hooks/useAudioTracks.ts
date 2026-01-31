@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ClipTrack, createTrack, createClipFromSeconds, type Fade, type TrackEffectsFunction, type WaveformDataObject } from '@waveform-playlist/core';
+import { ClipTrack, createTrack, createClipFromSeconds, type Fade, type TrackEffectsFunction, type WaveformDataObject, type RenderMode, type SpectrogramConfig, type ColorMapValue } from '@waveform-playlist/core';
 import * as Tone from 'tone';
 
 /**
@@ -36,6 +36,12 @@ export interface AudioTrackConfig {
   // For peaks-first rendering, provide this without audioBuffer/src
   // Sample rate and duration are derived from waveformData.sample_rate and waveformData.duration
   waveformData?: WaveformDataObject;
+  /** Visualization render mode: 'waveform' | 'spectrogram' | 'both'. Default: 'waveform' */
+  renderMode?: RenderMode;
+  /** Spectrogram configuration (FFT size, window, frequency scale, etc.) */
+  spectrogramConfig?: SpectrogramConfig;
+  /** Spectrogram color map name or custom color array */
+  spectrogramColorMap?: ColorMapValue;
 }
 
 /**
@@ -163,6 +169,7 @@ export function useAudioTracks(
           color: config.color,
         }),
         effects: config.effects,
+        renderMode: config.renderMode,
       };
 
       return track;

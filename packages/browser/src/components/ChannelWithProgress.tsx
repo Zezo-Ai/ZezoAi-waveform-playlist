@@ -171,7 +171,9 @@ export const ChannelWithProgress: React.FC<ChannelWithProgressProps> = ({
       : theme?.waveOutlineColor || 'grey';
   }
 
-  const backgroundCss = waveformColorToCss(backgroundColor);
+  // Use black background for spectrogram mode
+  const isSpectrogramMode = smartChannelProps.renderMode === 'spectrogram' || smartChannelProps.renderMode === 'both';
+  const backgroundCss = isSpectrogramMode ? '#000' : waveformColorToCss(backgroundColor);
 
   return (
     <ChannelWrapper>

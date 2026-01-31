@@ -1,6 +1,8 @@
 import React, { FunctionComponent } from 'react';
 import { useDevicePixelRatio, usePlaylistInfo, useTheme } from '../contexts';
 import { Channel } from './Channel';
+import { SpectrogramChannel, type SpectrogramChannelProps } from './SpectrogramChannel';
+import type { SpectrogramData, RenderMode } from '@waveform-playlist/core';
 
 export interface SmartChannelProps {
   className?: string;
@@ -11,12 +13,47 @@ export interface SmartChannelProps {
   isSelected?: boolean; // Whether this channel's track is selected
   /** If true, background is transparent (for use with external progress overlay) */
   transparentBackground?: boolean;
+  /** Render mode: waveform, spectrogram, or both */
+  renderMode?: RenderMode;
+  /** Spectrogram data for this channel */
+  spectrogramData?: SpectrogramData;
+  /** 256-entry RGB LUT from getColorMap() */
+  spectrogramColorLUT?: Uint8Array;
+  /** Samples per pixel at current zoom level */
+  samplesPerPixel?: number;
+  /** Frequency scale function */
+  spectrogramFrequencyScaleFn?: (f: number, minF: number, maxF: number) => number;
+  /** Min frequency in Hz */
+  spectrogramMinFrequency?: number;
+  /** Max frequency in Hz */
+  spectrogramMaxFrequency?: number;
+  /** Show frequency labels */
+  spectrogramLabels?: boolean;
+  /** Label text color */
+  spectrogramLabelsColor?: string;
+  /** Label background color */
+  spectrogramLabelsBackground?: string;
 }
 
-export const SmartChannel: FunctionComponent<SmartChannelProps> = ({ isSelected, transparentBackground, ...props }) => {
+export const SmartChannel: FunctionComponent<SmartChannelProps> = ({
+  isSelected,
+  transparentBackground,
+  renderMode = 'waveform',
+  spectrogramData,
+  spectrogramColorLUT,
+  samplesPerPixel: sppProp,
+  spectrogramFrequencyScaleFn,
+  spectrogramMinFrequency,
+  spectrogramMaxFrequency,
+  spectrogramLabels,
+  spectrogramLabelsColor,
+  spectrogramLabelsBackground,
+  ...props
+}) => {
   const theme = useTheme();
-  const { waveHeight, barWidth, barGap } = usePlaylistInfo();
+  const { waveHeight, barWidth, barGap, samplesPerPixel: contextSpp } = usePlaylistInfo();
   const devicePixelRatio = useDevicePixelRatio();
+  const samplesPerPixel = sppProp ?? contextSpp;
 
   // Use selected colors if track is selected
   const waveOutlineColor = isSelected && theme
@@ -30,6 +67,65 @@ export const SmartChannel: FunctionComponent<SmartChannelProps> = ({ isSelected,
   // Get draw mode from theme (defaults to 'inverted' for backwards compatibility)
   const drawMode = theme?.waveformDrawMode || 'inverted';
 
+  if (renderMode === 'spectrogram' && spectrogramData) {
+    return (
+      <SpectrogramChannel
+        index={props.index}
+        data={spectrogramData}
+        length={props.length}
+        waveHeight={waveHeight}
+        devicePixelRatio={devicePixelRatio}
+        samplesPerPixel={samplesPerPixel}
+        colorLUT={spectrogramColorLUT}
+        frequencyScaleFn={spectrogramFrequencyScaleFn}
+        minFrequency={spectrogramMinFrequency}
+        maxFrequency={spectrogramMaxFrequency}
+        labels={spectrogramLabels}
+        labelsColor={spectrogramLabelsColor}
+        labelsBackground={spectrogramLabelsBackground}
+      />
+    );
+  }
+
+  if (renderMode === 'both' && spectrogramData) {
+    const halfHeight = Math.floor(waveHeight / 2);
+    return (
+      <>
+        <SpectrogramChannel
+          index={props.index}
+          data={spectrogramData}
+          length={props.length}
+          waveHeight={halfHeight}
+          devicePixelRatio={devicePixelRatio}
+          samplesPerPixel={samplesPerPixel}
+          colorLUT={spectrogramColorLUT}
+          frequencyScaleFn={spectrogramFrequencyScaleFn}
+          minFrequency={spectrogramMinFrequency}
+          maxFrequency={spectrogramMaxFrequency}
+          labels={spectrogramLabels}
+          labelsColor={spectrogramLabelsColor}
+          labelsBackground={spectrogramLabelsBackground}
+        />
+        <div style={{ position: 'absolute', top: props.index * waveHeight + halfHeight, width: props.length, height: halfHeight }}>
+          <Channel
+            {...props}
+            {...theme}
+            index={0}
+            waveOutlineColor={waveOutlineColor}
+            waveFillColor={waveFillColor}
+            waveHeight={halfHeight}
+            devicePixelRatio={devicePixelRatio}
+            barWidth={barWidth}
+            barGap={barGap}
+            transparentBackground={transparentBackground}
+            drawMode={drawMode}
+          />
+        </div>
+      </>
+    );
+  }
+
+  // Default: waveform mode
   return (
     <Channel
       {...props}

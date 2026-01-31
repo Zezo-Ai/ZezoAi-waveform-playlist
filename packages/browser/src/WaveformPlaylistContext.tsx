@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
 import { ThemeProvider } from 'styled-components';
 import { TonePlayout, type EffectsFunction, type TrackEffectsFunction } from '@waveform-playlist/playout';
-import { type Track, type ClipTrack, type Fade } from '@waveform-playlist/core';
+import { type Track, type ClipTrack, type Fade, type SpectrogramData, type SpectrogramConfig, type ColorMapValue } from '@waveform-playlist/core';
 import { type TimeFormat, type WaveformPlaylistTheme, defaultTheme } from '@waveform-playlist/ui-components';
 import { start as toneStart, getContext } from 'tone';
 import { generatePeaks } from './peaksUtil';
+import { computeSpectrogram, computeSpectrogramMono } from './spectrogram';
 import { extractPeaksFromWaveformData } from './waveformDataLoader';
 import type { PeakData } from '@waveform-playlist/webaudio-peaks';
 import { parseAeneas, type AnnotationData } from '@waveform-playlist/annotations';
@@ -209,6 +210,12 @@ export interface PlaylistDataContextValue {
   progressBarWidth: number;
   /** Whether the playlist has finished loading all tracks */
   isReady: boolean;
+  /** Spectrogram data keyed by clipId, value is array of per-channel spectrograms */
+  spectrogramDataMap: Map<string, SpectrogramData[]>;
+  /** Spectrogram configuration */
+  spectrogramConfig?: SpectrogramConfig;
+  /** Spectrogram color map */
+  spectrogramColorMap?: ColorMapValue;
 }
 
 // Create the 4 separate contexts
@@ -252,6 +259,10 @@ export interface WaveformPlaylistProviderProps {
   barGap?: number;
   /** Width in pixels of progress bars. Default: barWidth + barGap (fills gaps). */
   progressBarWidth?: number;
+  /** Global spectrogram configuration for tracks with renderMode 'spectrogram' or 'both' */
+  spectrogramConfig?: SpectrogramConfig;
+  /** Global color map for spectrogram rendering */
+  spectrogramColorMap?: ColorMapValue;
   children: ReactNode;
 }
 
@@ -273,6 +284,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   barWidth = 1,
   barGap = 0,
   progressBarWidth: progressBarWidthProp,
+  spectrogramConfig,
+  spectrogramColorMap,
   children,
 }) => {
   // Default progressBarWidth to barWidth + barGap (fills gaps)
@@ -297,6 +310,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const [duration, setDuration] = useState(0);
   const [audioBuffers, setAudioBuffers] = useState<AudioBuffer[]>([]);
   const [peaksDataArray, setPeaksDataArray] = useState<TrackClipPeaks[]>([]); // Updated for clip-based peaks
+  const [spectrogramDataMap, setSpectrogramDataMap] = useState<Map<string, SpectrogramData[]>>(new Map());
   const [trackStates, setTrackStates] = useState<TrackState[]>([]);
   const [selectionStart, setSelectionStart] = useState(0);
   const [selectionEnd, setSelectionEnd] = useState(0);
@@ -673,6 +687,51 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
     setPeaksDataArray(allTrackPeaks);
   }, [tracks, samplesPerPixel, mono]);
+
+  // Compute spectrograms for tracks with renderMode 'spectrogram' or 'both'
+  useEffect(() => {
+    if (tracks.length === 0) return;
+
+    const newMap = new Map<string, SpectrogramData[]>();
+
+    for (const track of tracks) {
+      const mode = track.renderMode ?? 'waveform';
+      if (mode === 'waveform') continue;
+
+      for (const clip of track.clips) {
+        if (!clip.audioBuffer) continue;
+
+        const channelSpectrograms: SpectrogramData[] = [];
+
+        if (mono || clip.audioBuffer.numberOfChannels === 1) {
+          channelSpectrograms.push(
+            computeSpectrogramMono(
+              clip.audioBuffer,
+              spectrogramConfig,
+              clip.offsetSamples,
+              clip.durationSamples
+            )
+          );
+        } else {
+          for (let ch = 0; ch < clip.audioBuffer.numberOfChannels; ch++) {
+            channelSpectrograms.push(
+              computeSpectrogram(
+                clip.audioBuffer,
+                spectrogramConfig,
+                clip.offsetSamples,
+                clip.durationSamples,
+                ch
+              )
+            );
+          }
+        }
+
+        newMap.set(clip.id, channelSpectrograms);
+      }
+    }
+
+    setSpectrogramDataMap(newMap);
+  }, [tracks, mono, spectrogramConfig]);
 
   // Animation loop
   const startAnimationLoop = useCallback(() => {
@@ -1156,6 +1215,9 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     barGap,
     progressBarWidth,
     isReady,
+    spectrogramDataMap,
+    spectrogramConfig,
+    spectrogramColorMap,
   };
 
   // Combined value for backwards compatibility

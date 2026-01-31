@@ -17,6 +17,7 @@ import {
   HeadphonesIcon,
   DeviceMobileIcon,
   GaugeIcon,
+  WaveformIcon,
 } from '@phosphor-icons/react';
 import styles from './examples.module.css';
 
@@ -126,6 +127,13 @@ const examples = [
     path: 'mobile-annotations',
     category: 'mobile',
     icon: <TextAaIcon weight="light" aria-hidden="true" />,
+  },
+  {
+    title: 'MIR Spectrogram',
+    description: 'Frequency domain. Full spectrum analysis.',
+    path: 'mir-spectrogram',
+    category: 'tools',
+    icon: <WaveformIcon weight="light" aria-hidden="true" />,
   },
 ];
 

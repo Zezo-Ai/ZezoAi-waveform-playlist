@@ -10,6 +10,7 @@
  */
 
 import { Fade } from './index';
+import type { RenderMode } from './spectrogram';
 
 /**
  * WaveformData object from waveform-data.js library.
@@ -171,6 +172,9 @@ export interface ClipTrack {
 
   /** Optional effects function for this track */
   effects?: TrackEffectsFunction;
+
+  /** Visualization render mode. Default: 'waveform' */
+  renderMode?: RenderMode;
 }
 
 /**

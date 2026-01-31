@@ -1,0 +1,302 @@
+import React, { FunctionComponent, useLayoutEffect, useCallback, useRef } from 'react';
+import styled from 'styled-components';
+import type { SpectrogramData, ColorMapValue } from '@waveform-playlist/core';
+
+const MAX_CANVAS_WIDTH = 1000;
+
+interface WrapperProps {
+  readonly $index: number;
+  readonly $cssWidth: number;
+  readonly $waveHeight: number;
+}
+
+const Wrapper = styled.div.attrs<WrapperProps>((props) => ({
+  style: {
+    top: `${props.$waveHeight * props.$index}px`,
+    width: `${props.$cssWidth}px`,
+    height: `${props.$waveHeight}px`,
+  },
+}))<WrapperProps>`
+  position: absolute;
+  background: #000;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+`;
+
+interface CanvasProps {
+  readonly $cssWidth: number;
+  readonly $waveHeight: number;
+}
+
+const SpectrogramCanvas = styled.canvas.attrs<CanvasProps>((props) => ({
+  style: {
+    width: `${props.$cssWidth}px`,
+    height: `${props.$waveHeight}px`,
+  },
+}))<CanvasProps>`
+  float: left;
+  position: relative;
+  will-change: transform;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+`;
+
+// Inline getColorMap to avoid cross-package import at component level
+// This avoids needing browser package as dependency of ui-components
+function defaultGetColorMap(): Uint8Array {
+  // Viridis fallback — 256-entry grayscale
+  const lut = new Uint8Array(256 * 3);
+  for (let i = 0; i < 256; i++) {
+    lut[i * 3] = lut[i * 3 + 1] = lut[i * 3 + 2] = i;
+  }
+  return lut;
+}
+
+export interface SpectrogramChannelProps {
+  /** Channel index (0 = first, 1 = second, etc.) */
+  index: number;
+  /** Computed spectrogram data */
+  data: SpectrogramData;
+  /** Width in CSS pixels */
+  length: number;
+  /** Height in CSS pixels */
+  waveHeight: number;
+  /** Device pixel ratio for sharp rendering */
+  devicePixelRatio?: number;
+  /** Samples per pixel at current zoom level */
+  samplesPerPixel: number;
+  /** 256-entry RGB LUT (768 bytes) from getColorMap() */
+  colorLUT?: Uint8Array;
+  /** Frequency scale function: (freqHz, minF, maxF) => [0,1] */
+  frequencyScaleFn?: (f: number, minF: number, maxF: number) => number;
+  /** Min frequency in Hz */
+  minFrequency?: number;
+  /** Max frequency in Hz (defaults to sampleRate/2) */
+  maxFrequency?: number;
+  /** Show frequency axis labels */
+  labels?: boolean;
+  /** Label text color */
+  labelsColor?: string;
+  /** Label background color */
+  labelsBackground?: string;
+}
+
+export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
+  index,
+  data,
+  length,
+  waveHeight,
+  devicePixelRatio = 1,
+  samplesPerPixel,
+  colorLUT,
+  frequencyScaleFn,
+  minFrequency = 0,
+  maxFrequency,
+  labels = false,
+  labelsColor = '#ccc',
+  labelsBackground = 'rgba(0,0,0,0.6)',
+}) => {
+  const canvasesRef = useRef<HTMLCanvasElement[]>([]);
+  const labelsCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const canvasRef = useCallback(
+    (canvas: HTMLCanvasElement | null) => {
+      if (canvas !== null) {
+        const idx = parseInt(canvas.dataset.index!, 10);
+        canvasesRef.current[idx] = canvas;
+      }
+    },
+    []
+  );
+
+  const lut = colorLUT ?? defaultGetColorMap();
+  const maxF = maxFrequency ?? data.sampleRate / 2;
+  const scaleFn = frequencyScaleFn ?? ((f: number, minF: number, maxF: number) => (f - minF) / (maxF - minF));
+
+  useLayoutEffect(() => {
+    const canvases = canvasesRef.current;
+    const { frequencyBinCount, frameCount, hopSize, sampleRate, minDecibels, maxDecibels } = data;
+    const dbRange = maxDecibels - minDecibels;
+    let globalPixelOffset = 0;
+
+    // Pre-compute Y mapping: for each pixel row, which frequency bin(s) to sample
+    const binToFreq = (bin: number) => (bin / frequencyBinCount) * (sampleRate / 2);
+
+    for (let canvasIdx = 0; canvasIdx < canvases.length; canvasIdx++) {
+      const canvas = canvases[canvasIdx];
+      if (!canvas) continue;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) continue;
+
+      const canvasWidth = canvas.width / devicePixelRatio;
+      const canvasHeight = waveHeight;
+
+      ctx.resetTransform();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.imageSmoothingEnabled = false;
+      ctx.scale(devicePixelRatio, devicePixelRatio);
+
+      // Create ImageData at CSS pixel size, then putImageData at scaled resolution
+      const imgData = ctx.createImageData(canvasWidth, canvasHeight);
+      const pixels = imgData.data;
+
+      for (let x = 0; x < canvasWidth; x++) {
+        const globalX = globalPixelOffset + x;
+
+        // Map pixel X → spectrogram frame
+        const samplePos = globalX * samplesPerPixel;
+        const frame = Math.floor(samplePos / hopSize);
+
+        if (frame < 0 || frame >= frameCount) continue;
+
+        const frameOffset = frame * frequencyBinCount;
+
+        for (let y = 0; y < canvasHeight; y++) {
+          // Y=0 is top of canvas, but low frequencies should be at bottom
+          const normalizedY = 1 - y / canvasHeight; // 0=bottom, 1=top
+
+          // Map normalizedY through frequency scale to find which frequency this pixel represents
+          // We need the inverse: given a normalized position, find the frequency
+          // Use binary search over frequency bins
+          let bin = Math.floor(normalizedY * frequencyBinCount);
+
+          // If we have a non-linear scale, find the correct bin
+          if (frequencyScaleFn) {
+            // Binary search: find the bin whose scaled position is closest to normalizedY
+            let lo = 0;
+            let hi = frequencyBinCount - 1;
+            while (lo < hi) {
+              const mid = (lo + hi) >> 1;
+              const freq = binToFreq(mid);
+              const scaled = scaleFn(freq, minFrequency, maxF);
+              if (scaled < normalizedY) {
+                lo = mid + 1;
+              } else {
+                hi = mid;
+              }
+            }
+            bin = lo;
+          }
+
+          if (bin < 0 || bin >= frequencyBinCount) continue;
+
+          // Get dB value and normalize to [0, 1]
+          const db = data.data[frameOffset + bin];
+          const normalized = Math.max(0, Math.min(1, (db - minDecibels) / dbRange));
+
+          // Map to color via LUT (0-255 index)
+          const colorIdx = Math.floor(normalized * 255);
+          const pixelIdx = (y * canvasWidth + x) * 4;
+          pixels[pixelIdx] = lut[colorIdx * 3];
+          pixels[pixelIdx + 1] = lut[colorIdx * 3 + 1];
+          pixels[pixelIdx + 2] = lut[colorIdx * 3 + 2];
+          pixels[pixelIdx + 3] = 255;
+        }
+      }
+
+      // Put at device pixel ratio scale
+      ctx.resetTransform();
+      ctx.putImageData(imgData, 0, 0);
+
+      // Scale up to fill canvas
+      if (devicePixelRatio !== 1) {
+        // Draw the image data at 1:1, then scale
+        const tmpCanvas = document.createElement('canvas');
+        tmpCanvas.width = canvasWidth;
+        tmpCanvas.height = canvasHeight;
+        const tmpCtx = tmpCanvas.getContext('2d')!;
+        tmpCtx.putImageData(imgData, 0, 0);
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(tmpCanvas, 0, 0, canvas.width, canvas.height);
+      }
+
+      globalPixelOffset += canvasWidth;
+    }
+
+    // Draw labels
+    if (labels && labelsCanvasRef.current) {
+      const labelsCanvas = labelsCanvasRef.current;
+      const lctx = labelsCanvas.getContext('2d');
+      if (lctx) {
+        const lw = labelsCanvas.width / devicePixelRatio;
+        const lh = waveHeight;
+        lctx.resetTransform();
+        lctx.clearRect(0, 0, labelsCanvas.width, labelsCanvas.height);
+        lctx.scale(devicePixelRatio, devicePixelRatio);
+
+        const labelFreqs = getFrequencyLabels(minFrequency, maxF);
+        lctx.font = '10px monospace';
+        lctx.textBaseline = 'middle';
+
+        for (const freq of labelFreqs) {
+          const normalized = scaleFn(freq, minFrequency, maxF);
+          if (normalized < 0 || normalized > 1) continue;
+          const y = lh * (1 - normalized);
+
+          const text = freq >= 1000 ? `${(freq / 1000).toFixed(1)}k` : `${freq}`;
+          const metrics = lctx.measureText(text);
+          const padding = 2;
+
+          lctx.fillStyle = labelsBackground;
+          lctx.fillRect(0, y - 6, metrics.width + padding * 2, 12);
+          lctx.fillStyle = labelsColor;
+          lctx.fillText(text, padding, y);
+        }
+      }
+    }
+  }, [data, length, waveHeight, devicePixelRatio, samplesPerPixel, lut, frequencyScaleFn, minFrequency, maxF, labels, labelsColor, labelsBackground, scaleFn]);
+
+  // Build canvas chunks
+  let totalWidth = length;
+  let canvasCount = 0;
+  const canvases = [];
+  while (totalWidth > 0) {
+    const currentWidth = Math.min(totalWidth, MAX_CANVAS_WIDTH);
+    canvases.push(
+      <SpectrogramCanvas
+        key={`${length}-${canvasCount}`}
+        $cssWidth={currentWidth}
+        width={currentWidth * devicePixelRatio}
+        height={waveHeight * devicePixelRatio}
+        $waveHeight={waveHeight}
+        data-index={canvasCount}
+        ref={canvasRef}
+      />
+    );
+    totalWidth -= currentWidth;
+    canvasCount++;
+  }
+
+  return (
+    <Wrapper $index={index} $cssWidth={length} $waveHeight={waveHeight}>
+      {canvases}
+      {labels && (
+        <canvas
+          ref={labelsCanvasRef}
+          width={60 * devicePixelRatio}
+          height={waveHeight * devicePixelRatio}
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: 60,
+            height: waveHeight,
+            pointerEvents: 'none',
+            zIndex: 1,
+          }}
+        />
+      )}
+    </Wrapper>
+  );
+};
+
+/** Generate nice frequency labels for the axis */
+function getFrequencyLabels(minF: number, maxF: number): number[] {
+  const candidates = [
+    20, 50, 100, 200, 500, 1000, 2000, 3000, 4000, 5000,
+    8000, 10000, 12000, 16000, 20000,
+  ];
+  return candidates.filter(f => f >= minF && f <= maxF);
+}

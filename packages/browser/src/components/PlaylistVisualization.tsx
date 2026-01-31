@@ -1,4 +1,4 @@
-import React, { useRef, useState, type ReactNode, useCallback } from 'react';
+import React, { useRef, useState, useMemo, type ReactNode, useCallback } from 'react';
 import { getContext } from 'tone';
 import {
   Playlist,
@@ -32,6 +32,7 @@ import type { Peaks } from '@waveform-playlist/webaudio-peaks';
 import { AnimatedPlayhead } from './AnimatedPlayhead';
 import { ChannelWithProgress } from './ChannelWithProgress';
 import type { AnnotationData, GetAnnotationBoxLabelFn } from '../types/annotations';
+import { getColorMap, getFrequencyScale } from '../spectrogram';
 
 // Default duration in seconds for empty tracks (used for recording workflow)
 const DEFAULT_EMPTY_TRACK_DURATION = 60;
@@ -136,7 +137,20 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
     barWidth,
     barGap,
     isReady,
+    spectrogramDataMap,
+    spectrogramConfig,
+    spectrogramColorMap,
   } = usePlaylistData();
+
+  // Pre-compute spectrogram rendering helpers from config
+  const spectrogramColorLUT = useMemo(
+    () => getColorMap(spectrogramColorMap ?? 'viridis'),
+    [spectrogramColorMap]
+  );
+  const spectrogramFrequencyScaleFn = useMemo(
+    () => getFrequencyScale(spectrogramConfig?.frequencyScale ?? 'linear'),
+    [spectrogramConfig?.frequencyScale]
+  );
 
   const [isSelecting, setIsSelecting] = useState(false);
 
@@ -429,18 +443,34 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                               selectTrack(trackIndex);
                             }}
                           >
-                            {peaksData.data.map((channelPeaks: Peaks, channelIndex: number) => (
-                              <ChannelWithProgress
-                                key={`${trackIndex}-${clipIndex}-${channelIndex}`}
-                                index={channelIndex}
-                                data={channelPeaks}
-                                bits={peaksData.bits}
-                                length={width}
-                                isSelected={track.id === selectedTrackId}
-                                clipStartSample={clip.startSample}
-                                clipDurationSamples={clip.durationSamples}
-                              />
-                            ))}
+                            {peaksData.data.map((channelPeaks: Peaks, channelIndex: number) => {
+                              const clipSpectrograms = spectrogramDataMap.get(clip.clipId);
+                              const channelSpectrogram = clipSpectrograms?.[channelIndex] ?? clipSpectrograms?.[0];
+                              const trackRenderMode = track.renderMode ?? 'waveform';
+
+                              return (
+                                <ChannelWithProgress
+                                  key={`${trackIndex}-${clipIndex}-${channelIndex}`}
+                                  index={channelIndex}
+                                  data={channelPeaks}
+                                  bits={peaksData.bits}
+                                  length={width}
+                                  isSelected={track.id === selectedTrackId}
+                                  clipStartSample={clip.startSample}
+                                  clipDurationSamples={clip.durationSamples}
+                                  renderMode={trackRenderMode}
+                                  spectrogramData={channelSpectrogram}
+                                  samplesPerPixel={samplesPerPixel}
+                                  spectrogramColorLUT={spectrogramColorLUT}
+                                  spectrogramFrequencyScaleFn={spectrogramFrequencyScaleFn}
+                                  spectrogramMinFrequency={spectrogramConfig?.minFrequency}
+                                  spectrogramMaxFrequency={spectrogramConfig?.maxFrequency}
+                                  spectrogramLabels={spectrogramConfig?.labels}
+                                  spectrogramLabelsColor={spectrogramConfig?.labelsColor}
+                                  spectrogramLabelsBackground={spectrogramConfig?.labelsBackground}
+                                />
+                              );
+                            })}
                           </Clip>
                         );
                       })}
