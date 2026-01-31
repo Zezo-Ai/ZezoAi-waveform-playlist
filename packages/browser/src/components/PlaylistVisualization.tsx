@@ -35,9 +35,9 @@ import { usePlaybackAnimation, usePlaylistState, usePlaylistControls, usePlaylis
 import type { Peaks } from '@waveform-playlist/webaudio-peaks';
 import { AnimatedPlayhead } from './AnimatedPlayhead';
 import { ChannelWithProgress } from './ChannelWithProgress';
-import type { SpectrogramConfig, ColorMapValue, RenderMode } from '@waveform-playlist/core';
+import type { SpectrogramConfig } from '@waveform-playlist/core';
 import type { AnnotationData, GetAnnotationBoxLabelFn } from '../types/annotations';
-import { getColorMap, getFrequencyScale, SpectrogramMenuItems, SpectrogramSettingsModal } from '@waveform-playlist/spectrogram';
+import { useSpectrogramIntegration } from '../SpectrogramIntegrationContext';
 
 // Default duration in seconds for empty tracks (used for recording workflow)
 const DEFAULT_EMPTY_TRACK_DURATION = 60;
@@ -129,10 +129,6 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
     setSelectedTrackId,
     setCurrentTime,
     setLoopRegion,
-    setTrackRenderMode,
-    setTrackSpectrogramConfig,
-    registerSpectrogramCanvases,
-    unregisterSpectrogramCanvases,
   } = usePlaylistControls();
   const {
     audioBuffers,
@@ -149,43 +145,42 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
     barWidth,
     barGap,
     isReady,
-    spectrogramDataMap,
-    spectrogramConfig,
-    spectrogramColorMap,
-    trackSpectrogramOverrides,
-    spectrogramWorkerApi,
   } = usePlaylistData();
 
-  // Per-track spectrogram rendering helpers (memoized)
+  // Optional spectrogram integration (only available when SpectrogramProvider is present)
+  const spectrogram = useSpectrogramIntegration();
+
+  // Per-track spectrogram rendering helpers (memoized) — only computed when spectrogram is available
   const perTrackSpectrogramHelpers = useMemo(() => {
+    if (!spectrogram) return new Map<string, { colorLUT: Uint8Array; frequencyScaleFn: (f: number, minF: number, maxF: number) => number; config: SpectrogramConfig | undefined }>();
     const helpers = new Map<string, {
       colorLUT: Uint8Array;
       frequencyScaleFn: (f: number, minF: number, maxF: number) => number;
       config: SpectrogramConfig | undefined;
     }>();
     tracks.forEach((track) => {
-      const mode = trackSpectrogramOverrides.get(track.id)?.renderMode ?? track.renderMode ?? 'waveform';
+      const mode = spectrogram.trackSpectrogramOverrides.get(track.id)?.renderMode ?? track.renderMode ?? 'waveform';
       if (mode === 'waveform') return;
-      const overrides = trackSpectrogramOverrides.get(track.id);
-      const cm = overrides?.colorMap ?? track.spectrogramColorMap ?? spectrogramColorMap ?? 'viridis';
-      const cfg = overrides?.config ?? track.spectrogramConfig ?? spectrogramConfig;
+      const overrides = spectrogram.trackSpectrogramOverrides.get(track.id);
+      const cm = overrides?.colorMap ?? track.spectrogramColorMap ?? spectrogram.spectrogramColorMap ?? 'viridis';
+      const cfg = overrides?.config ?? track.spectrogramConfig ?? spectrogram.spectrogramConfig;
       helpers.set(track.id, {
-        colorLUT: getColorMap(cm),
-        frequencyScaleFn: getFrequencyScale(cfg?.frequencyScale ?? 'mel'),
+        colorLUT: spectrogram.getColorMap(cm),
+        frequencyScaleFn: spectrogram.getFrequencyScale(cfg?.frequencyScale ?? 'mel'),
         config: cfg,
       });
     });
     return helpers;
-  }, [tracks, trackSpectrogramOverrides, spectrogramConfig, spectrogramColorMap]);
+  }, [tracks, spectrogram]);
 
   // Worker canvas API for SpectrogramChannel (stable reference)
   const workerCanvasApi = useMemo(() => {
-    if (!spectrogramWorkerApi) return undefined;
+    if (!spectrogram?.spectrogramWorkerApi) return undefined;
     return {
-      registerCanvas: spectrogramWorkerApi.registerCanvas.bind(spectrogramWorkerApi),
-      unregisterCanvas: spectrogramWorkerApi.unregisterCanvas.bind(spectrogramWorkerApi),
+      registerCanvas: spectrogram.spectrogramWorkerApi.registerCanvas.bind(spectrogram.spectrogramWorkerApi),
+      unregisterCanvas: spectrogram.spectrogramWorkerApi.unregisterCanvas.bind(spectrogram.spectrogramWorkerApi),
     };
-  }, [spectrogramWorkerApi]);
+  }, [spectrogram?.spectrogramWorkerApi]);
 
   // State for spectrogram settings modal
   const [settingsModalTrackId, setSettingsModalTrackId] = useState<string | null>(null);
@@ -244,7 +239,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
       const rawCh = trackClipPeaks.length > 0
         ? Math.max(...trackClipPeaks.map(clip => clip.peaks.data.length))
         : 1;
-      const trackMode = trackSpectrogramOverrides.get(tracks[i]?.id)?.renderMode ?? tracks[i]?.renderMode ?? 'waveform';
+      const trackMode = spectrogram?.trackSpectrogramOverrides.get(tracks[i]?.id)?.renderMode ?? tracks[i]?.renderMode ?? 'waveform';
       const effectiveCh = trackMode === 'both' ? rawCh * 2 : rawCh;
       const trackHeight = effectiveCh * waveHeight + (showClipHeaders ? 22 : 0);
 
@@ -380,7 +375,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                   pan: 0,
                 };
 
-                const effectiveRenderMode = trackSpectrogramOverrides.get(track.id)?.renderMode ?? track.renderMode ?? 'waveform';
+                const effectiveRenderMode = spectrogram?.trackSpectrogramOverrides.get(track.id)?.renderMode ?? track.renderMode ?? 'waveform';
 
                 const trackControls = renderTrackControls ? (
                   renderTrackControls(trackIndex)
@@ -399,16 +394,18 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                       }}>
                         {trackState.name || `Track ${trackIndex + 1}`}
                       </span>
-                      <span style={{ position: 'absolute', right: 0, top: 0 }}>
-                        <TrackMenu
-                          items={(onClose) => SpectrogramMenuItems({
-                            renderMode: effectiveRenderMode,
-                            onRenderModeChange: (mode) => setTrackRenderMode(track.id, mode),
-                            onOpenSettings: () => setSettingsModalTrackId(track.id),
-                            onClose,
-                          })}
-                        />
-                      </span>
+                      {spectrogram?.renderMenuItems && (
+                        <span style={{ position: 'absolute', right: 0, top: 0 }}>
+                          <TrackMenu
+                            items={(onClose) => spectrogram.renderMenuItems!({
+                              renderMode: effectiveRenderMode,
+                              onRenderModeChange: (mode) => spectrogram.setTrackRenderMode(track.id, mode),
+                              onOpenSettings: () => setSettingsModalTrackId(track.id),
+                              onClose,
+                            })}
+                          />
+                        </span>
+                      )}
                     </Header>
                     <ButtonGroup>
                       <Button
@@ -520,7 +517,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                             }}
                           >
                             {peaksData.data.map((channelPeaks: Peaks, channelIndex: number) => {
-                              const clipSpectrograms = spectrogramDataMap.get(clip.clipId);
+                              const clipSpectrograms = spectrogram?.spectrogramDataMap.get(clip.clipId);
                               const channelSpectrogram = clipSpectrograms?.[channelIndex] ?? clipSpectrograms?.[0];
                               const helpers = perTrackSpectrogramHelpers.get(track.id);
                               const trackCfg = helpers?.config;
@@ -544,9 +541,9 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                                   spectrogramMaxFrequency={trackCfg?.maxFrequency}
                                   spectrogramWorkerApi={workerCanvasApi}
                                   spectrogramClipId={clip.clipId}
-                                  spectrogramOnCanvasesReady={(canvasIds, canvasWidths) => {
-                                    registerSpectrogramCanvases(clip.clipId, channelIndex, canvasIds, canvasWidths);
-                                  }}
+                                  spectrogramOnCanvasesReady={spectrogram ? (canvasIds, canvasWidths) => {
+                                    spectrogram.registerSpectrogramCanvases(clip.clipId, channelIndex, canvasIds, canvasWidths);
+                                  } : undefined}
                                 />
                               );
                             })}
@@ -649,23 +646,23 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
             </>
           </Playlist>
       </PlaylistInfoContext.Provider>
-      {typeof document !== 'undefined' && createPortal(
-        <SpectrogramSettingsModal
+      {spectrogram?.SettingsModal && typeof document !== 'undefined' && createPortal(
+        <spectrogram.SettingsModal
           open={settingsModalTrackId !== null}
           onClose={() => setSettingsModalTrackId(null)}
           config={
             settingsModalTrackId !== null
-              ? (trackSpectrogramOverrides.get(settingsModalTrackId)?.config ?? tracks.find(t => t.id === settingsModalTrackId)?.spectrogramConfig ?? spectrogramConfig ?? {})
+              ? (spectrogram.trackSpectrogramOverrides.get(settingsModalTrackId)?.config ?? tracks.find(t => t.id === settingsModalTrackId)?.spectrogramConfig ?? spectrogram.spectrogramConfig ?? {})
               : {}
           }
           colorMap={
             settingsModalTrackId !== null
-              ? (trackSpectrogramOverrides.get(settingsModalTrackId)?.colorMap ?? tracks.find(t => t.id === settingsModalTrackId)?.spectrogramColorMap ?? spectrogramColorMap ?? 'viridis')
+              ? (spectrogram.trackSpectrogramOverrides.get(settingsModalTrackId)?.colorMap ?? tracks.find(t => t.id === settingsModalTrackId)?.spectrogramColorMap ?? spectrogram.spectrogramColorMap ?? 'viridis')
               : 'viridis'
           }
           onApply={(newConfig, newColorMap) => {
             if (settingsModalTrackId !== null) {
-              setTrackSpectrogramConfig(settingsModalTrackId, newConfig, newColorMap);
+              spectrogram.setTrackSpectrogramConfig(settingsModalTrackId, newConfig, newColorMap);
             }
           }}
         />,

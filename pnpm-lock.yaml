@@ -84,9 +84,6 @@ importers:
       '@waveform-playlist/recording':
         specifier: workspace:*
         version: link:../recording
-      '@waveform-playlist/spectrogram':
-        specifier: workspace:*
-        version: link:../spectrogram
       '@waveform-playlist/ui-components':
         specifier: workspace:*
         version: link:../ui-components
@@ -224,6 +221,9 @@ importers:
 
   packages/spectrogram:
     dependencies:
+      '@waveform-playlist/browser':
+        specifier: workspace:*
+        version: link:../browser
       '@waveform-playlist/core':
         specifier: workspace:*
         version: link:../core
