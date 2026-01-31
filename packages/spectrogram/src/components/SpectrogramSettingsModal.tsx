@@ -139,6 +139,7 @@ export const SpectrogramSettingsModal: React.FC<SpectrogramSettingsModalProps> =
   const [gainDb, setGainDb] = useState(config.gainDb ?? 20);
   const [rangeDb, setRangeDb] = useState(config.rangeDb ?? 80);
   const [zeroPadding, setZeroPadding] = useState(config.zeroPaddingFactor ?? 2);
+  const [hopSize, setHopSize] = useState(config.hopSize ?? Math.floor((config.fftSize ?? 2048) / 4));
   const [showLabels, setShowLabels] = useState(config.labels ?? false);
 
   // Sync local state when props change
@@ -152,6 +153,7 @@ export const SpectrogramSettingsModal: React.FC<SpectrogramSettingsModalProps> =
     setGainDb(config.gainDb ?? 20);
     setRangeDb(config.rangeDb ?? 80);
     setZeroPadding(config.zeroPaddingFactor ?? 2);
+    setHopSize(config.hopSize ?? Math.floor((config.fftSize ?? 2048) / 4));
     setShowLabels(config.labels ?? false);
   }, [config, colorMap]);
 
@@ -187,6 +189,7 @@ export const SpectrogramSettingsModal: React.FC<SpectrogramSettingsModalProps> =
         gainDb,
         rangeDb,
         zeroPaddingFactor: zeroPadding,
+        hopSize,
         labels: showLabels,
       },
       localColorMap
@@ -200,8 +203,20 @@ export const SpectrogramSettingsModal: React.FC<SpectrogramSettingsModalProps> =
       <FormGrid>
         <Field>
           <Label>FFT Size</Label>
-          <Select value={fftSize} onChange={e => setFftSize(Number(e.target.value))}>
+          <Select value={fftSize} onChange={e => { const v = Number(e.target.value); setFftSize(v); setHopSize(v / 4); }}>
             {FFT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+          </Select>
+        </Field>
+
+        <Field>
+          <Label>Hop Size</Label>
+          <Select value={hopSize} onChange={e => setHopSize(Number(e.target.value))}>
+            {[
+              { label: `${fftSize} (no overlap)`, value: fftSize },
+              { label: `${fftSize / 2} (50%)`, value: fftSize / 2 },
+              { label: `${fftSize / 4} (75%)`, value: fftSize / 4 },
+              { label: `${fftSize / 8} (87.5%)`, value: fftSize / 8 },
+            ].map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </Select>
         </Field>
 
