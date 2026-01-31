@@ -187,8 +187,8 @@ export interface PlaylistControlsContextValue {
   clearLoopRegion: () => void;
 
   // Per-track render mode and spectrogram config
-  setTrackRenderMode: (trackIndex: number, mode: RenderMode) => void;
-  setTrackSpectrogramConfig: (trackIndex: number, config: SpectrogramConfig, colorMap?: ColorMapValue) => void;
+  setTrackRenderMode: (trackId: string, mode: RenderMode) => void;
+  setTrackSpectrogramConfig: (trackId: string, config: SpectrogramConfig, colorMap?: ColorMapValue) => void;
 
   // Spectrogram OffscreenCanvas registration
   registerSpectrogramCanvases: (clipId: string, channelIndex: number, canvasIds: string[], canvasWidths: number[]) => void;
@@ -225,11 +225,11 @@ export interface PlaylistDataContextValue {
   /** Global spectrogram color map (fallback) */
   spectrogramColorMap?: ColorMapValue;
   /** Per-track render mode overrides (set via track menu) */
-  trackRenderModes: Map<number, RenderMode>;
+  trackRenderModes: Map<string, RenderMode>;
   /** Per-track spectrogram config overrides */
-  trackSpectrogramConfigs: Map<number, SpectrogramConfig>;
+  trackSpectrogramConfigs: Map<string, SpectrogramConfig>;
   /** Per-track spectrogram color map overrides */
-  trackSpectrogramColorMaps: Map<number, ColorMapValue>;
+  trackSpectrogramColorMaps: Map<string, ColorMapValue>;
   /** Spectrogram worker API (for OffscreenCanvas rendering) */
   spectrogramWorkerApi: SpectrogramWorkerApi | null;
 }
@@ -341,9 +341,9 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const [isReady, setIsReady] = useState(false);
 
   // Per-track render mode and spectrogram config overrides (set via track menu)
-  const [trackRenderModes, setTrackRenderModes] = useState<Map<number, RenderMode>>(new Map());
-  const [trackSpectrogramConfigs, setTrackSpectrogramConfigs] = useState<Map<number, SpectrogramConfig>>(new Map());
-  const [trackSpectrogramColorMaps, setTrackSpectrogramColorMaps] = useState<Map<number, ColorMapValue>>(new Map());
+  const [trackRenderModes, setTrackRenderModes] = useState<Map<string, RenderMode>>(new Map());
+  const [trackSpectrogramConfigs, setTrackSpectrogramConfigs] = useState<Map<string, SpectrogramConfig>>(new Map());
+  const [trackSpectrogramColorMaps, setTrackSpectrogramColorMaps] = useState<Map<string, ColorMapValue>>(new Map());
 
   // OffscreenCanvas registry for worker-rendered spectrograms
   // Map: clipId → Map<channelIndex, { canvasIds: string[], canvasWidths: number[] }>
@@ -717,8 +717,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   // Compute spectrograms for tracks with renderMode 'spectrogram' or 'both'
   // Uses per-track config; only recomputes tracks whose config changed.
   // Computation runs in a Web Worker to avoid blocking the main thread.
-  const prevSpectrogramConfigRef = useRef<Map<number, string>>(new Map());
-  const prevSpectrogramFFTKeyRef = useRef<Map<number, string>>(new Map());
+  const prevSpectrogramConfigRef = useRef<Map<string, string>>(new Map());
+  const prevSpectrogramFFTKeyRef = useRef<Map<string, string>>(new Map());
   const spectrogramWorkerRef = useRef<ReturnType<typeof createSpectrogramWorker> | null>(null);
   const spectrogramGenerationRef = useRef(0);
   const prevCanvasVersionRef = useRef(0);
@@ -790,16 +790,16 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     if (tracks.length === 0) return;
 
     // Build full config key and FFT-only key per track to detect what changed
-    const currentKeys = new Map<number, string>();
-    const currentFFTKeys = new Map<number, string>();
+    const currentKeys = new Map<string, string>();
+    const currentFFTKeys = new Map<string, string>();
     tracks.forEach((track, i) => {
-      const mode = trackRenderModes.get(i) ?? track.renderMode ?? 'waveform';
+      const mode = trackRenderModes.get(track.id) ?? track.renderMode ?? 'waveform';
       if (mode === 'waveform') return;
-      const cfg = trackSpectrogramConfigs.get(i) ?? track.spectrogramConfig ?? spectrogramConfig;
-      const cm = trackSpectrogramColorMaps.get(i) ?? track.spectrogramColorMap ?? spectrogramColorMap;
-      currentKeys.set(i, JSON.stringify({ mode, cfg, cm, mono }));
+      const cfg = trackSpectrogramConfigs.get(track.id) ?? track.spectrogramConfig ?? spectrogramConfig;
+      const cm = trackSpectrogramColorMaps.get(track.id) ?? track.spectrogramColorMap ?? spectrogramColorMap;
+      currentKeys.set(track.id, JSON.stringify({ mode, cfg, cm, mono }));
       // FFT key: only params that affect FFT output (not gain, range, colormap, freq scale, etc.)
-      currentFFTKeys.set(i, JSON.stringify({
+      currentFFTKeys.set(track.id, JSON.stringify({
         mode, mono,
         fftSize: cfg?.fftSize, hopSize: cfg?.hopSize,
         windowFunction: cfg?.windowFunction, alpha: cfg?.alpha,
@@ -843,8 +843,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       setSpectrogramDataMap(prevMap => {
         const newMap = new Map(prevMap);
         for (const track of tracks) {
-          const trackIdx = tracks.indexOf(track);
-          const mode = trackRenderModes.get(trackIdx) ?? track.renderMode ?? 'waveform';
+          const mode = trackRenderModes.get(track.id) ?? track.renderMode ?? 'waveform';
           if (mode === 'waveform') {
             for (const clip of track.clips) {
               newMap.delete(clip.id);
@@ -903,18 +902,18 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     }> = [];
 
     tracks.forEach((track, i) => {
-      const mode = trackRenderModes.get(i) ?? track.renderMode ?? 'waveform';
+      const mode = trackRenderModes.get(track.id) ?? track.renderMode ?? 'waveform';
       if (mode === 'waveform') return;
 
-      const trackConfigChanged = configChanged && (currentKeys.get(i) !== prevKeys.get(i));
-      const trackFFTChanged = fftKeyChanged && (currentFFTKeys.get(i) !== prevFFTKeys.get(i));
+      const trackConfigChanged = configChanged && (currentKeys.get(track.id) !== prevKeys.get(track.id));
+      const trackFFTChanged = fftKeyChanged && (currentFFTKeys.get(track.id) !== prevFFTKeys.get(track.id));
       const hasRegisteredCanvases = canvasVersionChanged && track.clips.some(
         clip => spectrogramCanvasRegistryRef.current.has(clip.id)
       );
       if (!trackConfigChanged && !hasRegisteredCanvases) return;
 
-      const cfg = trackSpectrogramConfigs.get(i) ?? track.spectrogramConfig ?? spectrogramConfig ?? {};
-      const cm = trackSpectrogramColorMaps.get(i) ?? track.spectrogramColorMap ?? spectrogramColorMap ?? 'viridis';
+      const cfg = trackSpectrogramConfigs.get(track.id) ?? track.spectrogramConfig ?? spectrogramConfig ?? {};
+      const cm = trackSpectrogramColorMaps.get(track.id) ?? track.spectrogramColorMap ?? spectrogramColorMap ?? 'viridis';
 
       for (const clip of track.clips) {
         if (!clip.audioBuffer) continue;
@@ -1609,24 +1608,24 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   }, [trackStates]);
 
   // Per-track render mode and spectrogram config setters
-  const setTrackRenderMode = useCallback((trackIndex: number, mode: RenderMode) => {
+  const setTrackRenderMode = useCallback((trackId: string, mode: RenderMode) => {
     setTrackRenderModes(prev => {
       const next = new Map(prev);
-      next.set(trackIndex, mode);
+      next.set(trackId, mode);
       return next;
     });
   }, []);
 
-  const setTrackSpectrogramConfig = useCallback((trackIndex: number, config: SpectrogramConfig, colorMap?: ColorMapValue) => {
+  const setTrackSpectrogramConfig = useCallback((trackId: string, config: SpectrogramConfig, colorMap?: ColorMapValue) => {
     setTrackSpectrogramConfigs(prev => {
       const next = new Map(prev);
-      next.set(trackIndex, config);
+      next.set(trackId, config);
       return next;
     });
     if (colorMap !== undefined) {
       setTrackSpectrogramColorMaps(prev => {
         const next = new Map(prev);
-        next.set(trackIndex, colorMap);
+        next.set(trackId, colorMap);
         return next;
       });
     }

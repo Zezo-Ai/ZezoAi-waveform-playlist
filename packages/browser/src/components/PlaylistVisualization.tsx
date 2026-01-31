@@ -165,10 +165,10 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
       config: SpectrogramConfig | undefined;
     }>();
     tracks.forEach((track, i) => {
-      const mode = trackRenderModes.get(i) ?? track.renderMode ?? 'waveform';
+      const mode = trackRenderModes.get(track.id) ?? track.renderMode ?? 'waveform';
       if (mode === 'waveform') return;
-      const cm = trackSpectrogramColorMaps.get(i) ?? track.spectrogramColorMap ?? spectrogramColorMap ?? 'viridis';
-      const cfg = trackSpectrogramConfigs.get(i) ?? track.spectrogramConfig ?? spectrogramConfig;
+      const cm = trackSpectrogramColorMaps.get(track.id) ?? track.spectrogramColorMap ?? spectrogramColorMap ?? 'viridis';
+      const cfg = trackSpectrogramConfigs.get(track.id) ?? track.spectrogramConfig ?? spectrogramConfig;
       helpers.set(i, {
         colorLUT: getColorMap(cm),
         frequencyScaleFn: getFrequencyScale(cfg?.frequencyScale ?? 'mel'),
@@ -188,7 +188,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
   }, [spectrogramWorkerApi]);
 
   // State for spectrogram settings modal
-  const [settingsModalTrackIndex, setSettingsModalTrackIndex] = useState<number | null>(null);
+  const [settingsModalTrackId, setSettingsModalTrackId] = useState<string | null>(null);
 
   const [isSelecting, setIsSelecting] = useState(false);
 
@@ -244,7 +244,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
       const rawCh = trackClipPeaks.length > 0
         ? Math.max(...trackClipPeaks.map(clip => clip.peaks.data.length))
         : 1;
-      const trackMode = trackRenderModes.get(i) ?? tracks[i]?.renderMode ?? 'waveform';
+      const trackMode = trackRenderModes.get(tracks[i]?.id) ?? tracks[i]?.renderMode ?? 'waveform';
       const effectiveCh = trackMode === 'both' ? rawCh * 2 : rawCh;
       const trackHeight = effectiveCh * waveHeight + (showClipHeaders ? 22 : 0);
 
@@ -380,7 +380,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                   pan: 0,
                 };
 
-                const effectiveRenderMode = trackRenderModes.get(trackIndex) ?? track.renderMode ?? 'waveform';
+                const effectiveRenderMode = trackRenderModes.get(track.id) ?? track.renderMode ?? 'waveform';
 
                 const trackControls = renderTrackControls ? (
                   renderTrackControls(trackIndex)
@@ -418,8 +418,8 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                         <TrackMenu
                           items={(onClose) => SpectrogramMenuItems({
                             renderMode: effectiveRenderMode,
-                            onRenderModeChange: (mode) => setTrackRenderMode(trackIndex, mode),
-                            onOpenSettings: () => setSettingsModalTrackIndex(trackIndex),
+                            onRenderModeChange: (mode) => setTrackRenderMode(track.id, mode),
+                            onOpenSettings: () => setSettingsModalTrackId(track.id),
                             onClose,
                           })}
                         />
@@ -510,7 +510,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
 
                         return (
                           <Clip
-                            key={`${trackIndex}-${clipIndex}`}
+                            key={clip.clipId}
                             clipId={clip.clipId}
                             trackIndex={trackIndex}
                             clipIndex={clipIndex}
@@ -544,7 +544,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
 
                               return (
                                 <ChannelWithProgress
-                                  key={`${trackIndex}-${clipIndex}-${channelIndex}`}
+                                  key={`${clip.clipId}-${channelIndex}`}
                                   index={channelIndex}
                                   data={channelPeaks}
                                   bits={peaksData.bits}
@@ -574,7 +574,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                        recordingState.trackId === track.id &&
                        recordingState.peaks.length > 0 && (
                         <Clip
-                          key={`${trackIndex}-recording`}
+                          key={`${track.id}-recording`}
                           clipId="recording-preview"
                           trackIndex={trackIndex}
                           clipIndex={trackClipPeaks.length}
@@ -588,7 +588,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                           trackId={track.id}
                         >
                           <ChannelWithProgress
-                            key={`${trackIndex}-recording-0`}
+                            key={`${track.id}-recording-0`}
                             index={0}
                             data={recordingState.peaks}
                             bits={16}
@@ -668,21 +668,21 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
       </PlaylistInfoContext.Provider>
       {typeof document !== 'undefined' && createPortal(
         <SpectrogramSettingsModal
-          open={settingsModalTrackIndex !== null}
-          onClose={() => setSettingsModalTrackIndex(null)}
+          open={settingsModalTrackId !== null}
+          onClose={() => setSettingsModalTrackId(null)}
           config={
-            settingsModalTrackIndex !== null
-              ? (trackSpectrogramConfigs.get(settingsModalTrackIndex) ?? tracks[settingsModalTrackIndex]?.spectrogramConfig ?? spectrogramConfig ?? {})
+            settingsModalTrackId !== null
+              ? (trackSpectrogramConfigs.get(settingsModalTrackId) ?? tracks.find(t => t.id === settingsModalTrackId)?.spectrogramConfig ?? spectrogramConfig ?? {})
               : {}
           }
           colorMap={
-            settingsModalTrackIndex !== null
-              ? (trackSpectrogramColorMaps.get(settingsModalTrackIndex) ?? tracks[settingsModalTrackIndex]?.spectrogramColorMap ?? spectrogramColorMap ?? 'viridis')
+            settingsModalTrackId !== null
+              ? (trackSpectrogramColorMaps.get(settingsModalTrackId) ?? tracks.find(t => t.id === settingsModalTrackId)?.spectrogramColorMap ?? spectrogramColorMap ?? 'viridis')
               : 'viridis'
           }
           onApply={(newConfig, newColorMap) => {
-            if (settingsModalTrackIndex !== null) {
-              setTrackSpectrogramConfig(settingsModalTrackIndex, newConfig, newColorMap);
+            if (settingsModalTrackId !== null) {
+              setTrackSpectrogramConfig(settingsModalTrackId, newConfig, newColorMap);
             }
           }}
         />,
