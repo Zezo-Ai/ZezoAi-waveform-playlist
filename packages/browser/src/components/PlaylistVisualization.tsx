@@ -129,6 +129,8 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
     setLoopRegion,
     setTrackRenderMode,
     setTrackSpectrogramConfig,
+    registerSpectrogramCanvases,
+    unregisterSpectrogramCanvases,
   } = usePlaylistControls();
   const {
     audioBuffers,
@@ -151,6 +153,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
     trackRenderModes,
     trackSpectrogramConfigs,
     trackSpectrogramColorMaps,
+    spectrogramWorkerApi,
   } = usePlaylistData();
 
   // Per-track spectrogram rendering helpers (memoized)
@@ -173,6 +176,15 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
     });
     return helpers;
   }, [tracks, trackRenderModes, trackSpectrogramConfigs, trackSpectrogramColorMaps, spectrogramConfig, spectrogramColorMap]);
+
+  // Worker canvas API for SpectrogramChannel (stable reference)
+  const workerCanvasApi = useMemo(() => {
+    if (!spectrogramWorkerApi) return undefined;
+    return {
+      registerCanvas: spectrogramWorkerApi.registerCanvas.bind(spectrogramWorkerApi),
+      unregisterCanvas: spectrogramWorkerApi.unregisterCanvas.bind(spectrogramWorkerApi),
+    };
+  }, [spectrogramWorkerApi]);
 
   // State for spectrogram settings modal
   const [settingsModalTrackIndex, setSettingsModalTrackIndex] = useState<number | null>(null);
@@ -386,14 +398,14 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                           title="Remove track"
                           style={{
                             position: 'absolute', left: 0, top: 0,
-                            width: 16, height: 16,
                             border: 'none', background: 'transparent',
-                            color: '#999', cursor: 'pointer',
-                            fontSize: 12, lineHeight: '16px', padding: 0,
-                            opacity: 0.6, transition: 'opacity 0.15s, color 0.15s',
+                            color: 'inherit', cursor: 'pointer',
+                            fontSize: 16, padding: '2px 4px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            opacity: 0.7, transition: 'opacity 0.15s, color 0.15s',
                           }}
                           onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = '#dc3545'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6'; e.currentTarget.style.color = '#999'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.7'; e.currentTarget.style.color = 'inherit'; }}
                         >
                           ×
                         </button>
@@ -528,6 +540,11 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                                   spectrogramLabels={trackCfg?.labels}
                                   spectrogramLabelsColor={trackCfg?.labelsColor}
                                   spectrogramLabelsBackground={trackCfg?.labelsBackground}
+                                  spectrogramWorkerApi={workerCanvasApi}
+                                  spectrogramClipId={clip.clipId}
+                                  spectrogramOnCanvasesReady={(canvasIds, canvasWidths) => {
+                                    registerSpectrogramCanvases(clip.clipId, channelIndex, canvasIds, canvasWidths);
+                                  }}
                                 />
                               );
                             })}

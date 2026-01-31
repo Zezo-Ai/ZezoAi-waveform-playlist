@@ -9,9 +9,32 @@ export interface SpectrogramWorkerComputeParams {
   mono: boolean;
 }
 
+export interface SpectrogramWorkerRenderParams extends SpectrogramWorkerComputeParams {
+  render: {
+    canvasIds: string[][];
+    canvasWidths: number[];
+    canvasHeight: number;
+    devicePixelRatio: number;
+    samplesPerPixel: number;
+    colorLUT: Uint8Array;
+    frequencyScale: string;
+    minFrequency: number;
+    maxFrequency: number;
+  };
+}
+
 interface ComputeResponse {
   id: string;
-  spectrograms: SpectrogramData[];
+  spectrograms?: SpectrogramData[];
+  done?: boolean;
+}
+
+export interface SpectrogramWorkerApi {
+  compute(params: SpectrogramWorkerComputeParams): Promise<SpectrogramData[]>;
+  registerCanvas(canvasId: string, canvas: OffscreenCanvas): void;
+  unregisterCanvas(canvasId: string): void;
+  computeAndRender(params: SpectrogramWorkerRenderParams): Promise<void>;
+  terminate(): void;
 }
 
 let idCounter = 0;
@@ -28,21 +51,23 @@ let idCounter = 0;
  * const api = createSpectrogramWorker(worker);
  * ```
  */
-export function createSpectrogramWorker(worker: Worker): {
-  compute(params: SpectrogramWorkerComputeParams): Promise<SpectrogramData[]>;
-  terminate(): void;
-} {
+export function createSpectrogramWorker(worker: Worker): SpectrogramWorkerApi {
   const pending = new Map<string, {
-    resolve: (value: SpectrogramData[]) => void;
+    resolve: (value: any) => void;
     reject: (reason: unknown) => void;
   }>();
 
   worker.onmessage = (e: MessageEvent<ComputeResponse>) => {
-    const { id, spectrograms } = e.data;
+    const { id, spectrograms, done } = e.data;
     const entry = pending.get(id);
     if (entry) {
       pending.delete(id);
-      entry.resolve(spectrograms);
+      if (done && !spectrograms) {
+        // compute-render response — no data, just a signal
+        entry.resolve(undefined);
+      } else {
+        entry.resolve(spectrograms);
+      }
     }
   };
 
@@ -73,6 +98,43 @@ export function createSpectrogramWorker(worker: Worker): {
             offsetSamples: params.offsetSamples,
             durationSamples: params.durationSamples,
             mono: params.mono,
+          },
+          transferables,
+        );
+      });
+    },
+
+    registerCanvas(canvasId: string, canvas: OffscreenCanvas): void {
+      worker.postMessage(
+        { type: 'register-canvas', canvasId, canvas },
+        [canvas],
+      );
+    },
+
+    unregisterCanvas(canvasId: string): void {
+      worker.postMessage({ type: 'unregister-canvas', canvasId });
+    },
+
+    computeAndRender(params: SpectrogramWorkerRenderParams): Promise<void> {
+      const id = String(++idCounter);
+
+      return new Promise<void>((resolve, reject) => {
+        pending.set(id, { resolve, reject });
+
+        const transferableArrays = params.channelDataArrays.map(arr => arr.slice());
+        const transferables: Transferable[] = transferableArrays.map(arr => arr.buffer);
+
+        worker.postMessage(
+          {
+            type: 'compute-render',
+            id,
+            channelDataArrays: transferableArrays,
+            config: params.config,
+            sampleRate: params.sampleRate,
+            offsetSamples: params.offsetSamples,
+            durationSamples: params.durationSamples,
+            mono: params.mono,
+            render: params.render,
           },
           transferables,
         );

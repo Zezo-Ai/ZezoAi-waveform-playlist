@@ -130,24 +130,27 @@ function MirSpectrogramInner() {
 export function MirSpectrogramExample() {
   const { theme } = useDocusaurusTheme();
   const [userTracks, setUserTracks] = useState<ClipTrack[]>([]);
+  const [removedBaseIds, setRemovedBaseIds] = useState<Set<string>>(new Set());
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { tracks: baseTracks, loading, error } = useAudioTracks(AUDIO_CONFIGS, { progressive: true });
 
-  const allTracks = [...baseTracks, ...userTracks];
+  const filteredBaseTracks = baseTracks.filter(t => !removedBaseIds.has(t.id));
+  const allTracks = [...filteredBaseTracks, ...userTracks];
 
   const handleRemoveTrack = useCallback((index: number) => {
-    if (index < baseTracks.length) {
-      // Can't remove base tracks from useAudioTracks — ignore or could filter
-      return;
+    if (index < filteredBaseTracks.length) {
+      setRemovedBaseIds(prev => new Set([...prev, filteredBaseTracks[index].id]));
+    } else {
+      setUserTracks(prev => prev.filter((_, i) => i !== index - filteredBaseTracks.length));
     }
-    setUserTracks(prev => prev.filter((_, i) => i !== index - baseTracks.length));
-  }, [baseTracks.length]);
+  }, [filteredBaseTracks]);
 
   const handleClearAll = useCallback(() => {
     setUserTracks([]);
-  }, []);
+    setRemovedBaseIds(new Set(baseTracks.map(t => t.id)));
+  }, [baseTracks]);
 
   const addFiles = async (files: File[]) => {
     const audioContext = Tone.getContext().rawContext as AudioContext;
@@ -216,8 +219,8 @@ export function MirSpectrogramExample() {
             <AudioPosition />
             <ZoomInButton />
             <ZoomOutButton />
-            <ClearButton onClick={handleClearAll} title="Remove all user-added tracks">
-              Clear Added
+            <ClearButton onClick={handleClearAll} title="Remove all tracks">
+              Clear All
             </ClearButton>
           </ControlBar>
           <Waveform onRemoveTrack={handleRemoveTrack} />

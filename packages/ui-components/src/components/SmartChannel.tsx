@@ -1,7 +1,7 @@
 import React, { FunctionComponent } from 'react';
 import { useDevicePixelRatio, usePlaylistInfo, useTheme } from '../contexts';
 import { Channel } from './Channel';
-import { SpectrogramChannel, type SpectrogramChannelProps } from './SpectrogramChannel';
+import { SpectrogramChannel, type SpectrogramChannelProps, type SpectrogramWorkerCanvasApi } from './SpectrogramChannel';
 import type { SpectrogramData, RenderMode } from '@waveform-playlist/core';
 
 export interface SmartChannelProps {
@@ -33,6 +33,12 @@ export interface SmartChannelProps {
   spectrogramLabelsColor?: string;
   /** Label background color */
   spectrogramLabelsBackground?: string;
+  /** Worker API for OffscreenCanvas transfer */
+  spectrogramWorkerApi?: SpectrogramWorkerCanvasApi;
+  /** Clip ID for worker canvas registration */
+  spectrogramClipId?: string;
+  /** Callback when canvases are registered with the worker */
+  spectrogramOnCanvasesReady?: (canvasIds: string[], canvasWidths: number[]) => void;
 }
 
 export const SmartChannel: FunctionComponent<SmartChannelProps> = ({
@@ -48,6 +54,9 @@ export const SmartChannel: FunctionComponent<SmartChannelProps> = ({
   spectrogramLabels,
   spectrogramLabelsColor,
   spectrogramLabelsBackground,
+  spectrogramWorkerApi,
+  spectrogramClipId,
+  spectrogramOnCanvasesReady,
   ...props
 }) => {
   const theme = useTheme();
@@ -67,7 +76,10 @@ export const SmartChannel: FunctionComponent<SmartChannelProps> = ({
   // Get draw mode from theme (defaults to 'inverted' for backwards compatibility)
   const drawMode = theme?.waveformDrawMode || 'inverted';
 
-  if (renderMode === 'spectrogram' && spectrogramData) {
+  // Worker mode: spectrogram data is optional (worker renders directly)
+  const hasSpectrogram = spectrogramData || spectrogramWorkerApi;
+
+  if (renderMode === 'spectrogram' && hasSpectrogram) {
     return (
       <SpectrogramChannel
         index={props.index}
@@ -83,11 +95,14 @@ export const SmartChannel: FunctionComponent<SmartChannelProps> = ({
         labels={spectrogramLabels}
         labelsColor={spectrogramLabelsColor}
         labelsBackground={spectrogramLabelsBackground}
+        workerApi={spectrogramWorkerApi}
+        clipId={spectrogramClipId}
+        onCanvasesReady={spectrogramOnCanvasesReady}
       />
     );
   }
 
-  if (renderMode === 'both' && spectrogramData) {
+  if (renderMode === 'both' && hasSpectrogram) {
     // Spectrogram above, waveform below — each at full waveHeight.
     // The "both" channel index occupies 2× slots, so spectrogram is at
     // slot (index * 2) and waveform at slot (index * 2 + 1).
@@ -107,6 +122,9 @@ export const SmartChannel: FunctionComponent<SmartChannelProps> = ({
           labels={spectrogramLabels}
           labelsColor={spectrogramLabelsColor}
           labelsBackground={spectrogramLabelsBackground}
+          workerApi={spectrogramWorkerApi}
+          clipId={spectrogramClipId}
+          onCanvasesReady={spectrogramOnCanvasesReady}
         />
         <div style={{ position: 'absolute', top: (props.index * 2 + 1) * waveHeight, width: props.length, height: waveHeight }}>
           <Channel

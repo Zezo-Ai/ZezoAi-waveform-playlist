@@ -5,7 +5,7 @@ import { type Track, type ClipTrack, type Fade, type SpectrogramData, type Spect
 import { type TimeFormat, type WaveformPlaylistTheme, defaultTheme } from '@waveform-playlist/ui-components';
 import { start as toneStart, getContext } from 'tone';
 import { generatePeaks } from './peaksUtil';
-import { computeSpectrogram, computeSpectrogramMono, createSpectrogramWorker } from '@waveform-playlist/spectrogram';
+import { computeSpectrogram, computeSpectrogramMono, createSpectrogramWorker, getColorMap, type SpectrogramWorkerApi } from '@waveform-playlist/spectrogram';
 import { extractPeaksFromWaveformData } from './waveformDataLoader';
 import type { PeakData } from '@waveform-playlist/webaudio-peaks';
 import { parseAeneas, type AnnotationData } from '@waveform-playlist/annotations';
@@ -189,6 +189,10 @@ export interface PlaylistControlsContextValue {
   // Per-track render mode and spectrogram config
   setTrackRenderMode: (trackIndex: number, mode: RenderMode) => void;
   setTrackSpectrogramConfig: (trackIndex: number, config: SpectrogramConfig, colorMap?: ColorMapValue) => void;
+
+  // Spectrogram OffscreenCanvas registration
+  registerSpectrogramCanvases: (clipId: string, channelIndex: number, canvasIds: string[], canvasWidths: number[]) => void;
+  unregisterSpectrogramCanvases: (clipId: string, channelIndex: number) => void;
 }
 
 export interface PlaylistDataContextValue {
@@ -226,6 +230,8 @@ export interface PlaylistDataContextValue {
   trackSpectrogramConfigs: Map<number, SpectrogramConfig>;
   /** Per-track spectrogram color map overrides */
   trackSpectrogramColorMaps: Map<number, ColorMapValue>;
+  /** Spectrogram worker API (for OffscreenCanvas rendering) */
+  spectrogramWorkerApi: SpectrogramWorkerApi | null;
 }
 
 // Create the 4 separate contexts
@@ -338,6 +344,11 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const [trackRenderModes, setTrackRenderModes] = useState<Map<number, RenderMode>>(new Map());
   const [trackSpectrogramConfigs, setTrackSpectrogramConfigs] = useState<Map<number, SpectrogramConfig>>(new Map());
   const [trackSpectrogramColorMaps, setTrackSpectrogramColorMaps] = useState<Map<number, ColorMapValue>>(new Map());
+
+  // OffscreenCanvas registry for worker-rendered spectrograms
+  // Map: clipId → Map<channelIndex, { canvasIds: string[], canvasWidths: number[] }>
+  const spectrogramCanvasRegistryRef = useRef<Map<string, Map<number, { canvasIds: string[]; canvasWidths: number[] }>>>(new Map());
+  const [spectrogramCanvasVersion, setSpectrogramCanvasVersion] = useState(0);
 
   // Refs
   const playoutRef = useRef<TonePlayout | null>(null);
@@ -709,6 +720,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const prevSpectrogramConfigRef = useRef<Map<number, string>>(new Map());
   const spectrogramWorkerRef = useRef<ReturnType<typeof createSpectrogramWorker> | null>(null);
   const spectrogramGenerationRef = useRef(0);
+  const prevCanvasVersionRef = useRef(0);
+  const [spectrogramWorkerReady, setSpectrogramWorkerReady] = useState(false);
 
   // Terminate worker on unmount
   useEffect(() => {
@@ -733,32 +746,41 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
     const prevKeys = prevSpectrogramConfigRef.current;
 
-    // Check if any track changed
-    let anyChanged = currentKeys.size !== prevKeys.size;
-    if (!anyChanged) {
+    // Check if any track config changed
+    let configChanged = currentKeys.size !== prevKeys.size;
+    if (!configChanged) {
       for (const [idx, key] of currentKeys) {
-        if (prevKeys.get(idx) !== key) { anyChanged = true; break; }
+        if (prevKeys.get(idx) !== key) { configChanged = true; break; }
       }
     }
 
-    if (!anyChanged) return;
+    // Check if canvas registrations changed (new canvases available for worker rendering)
+    const canvasVersionChanged = spectrogramCanvasVersion !== prevCanvasVersionRef.current;
+    prevCanvasVersionRef.current = spectrogramCanvasVersion;
 
-    prevSpectrogramConfigRef.current = currentKeys;
+    if (!configChanged && !canvasVersionChanged) return;
+
+    // Only update prevKeys when config actually changed (not just canvas version)
+    if (configChanged) {
+      prevSpectrogramConfigRef.current = currentKeys;
+    }
 
     // Remove entries for tracks that are no longer spectrogram (synchronous)
-    setSpectrogramDataMap(prevMap => {
-      const newMap = new Map(prevMap);
-      for (const track of tracks) {
-        const trackIdx = tracks.indexOf(track);
-        const mode = trackRenderModes.get(trackIdx) ?? track.renderMode ?? 'waveform';
-        if (mode === 'waveform') {
-          for (const clip of track.clips) {
-            newMap.delete(clip.id);
+    if (configChanged) {
+      setSpectrogramDataMap(prevMap => {
+        const newMap = new Map(prevMap);
+        for (const track of tracks) {
+          const trackIdx = tracks.indexOf(track);
+          const mode = trackRenderModes.get(trackIdx) ?? track.renderMode ?? 'waveform';
+          if (mode === 'waveform') {
+            for (const clip of track.clips) {
+              newMap.delete(clip.id);
+            }
           }
         }
-      }
-      return newMap;
-    });
+        return newMap;
+      });
+    }
 
     // Generation counter to discard stale results
     const generation = ++spectrogramGenerationRef.current;
@@ -773,6 +795,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         );
         workerApi = createSpectrogramWorker(rawWorker);
         spectrogramWorkerRef.current = workerApi;
+        setSpectrogramWorkerReady(true);
       } catch {
         console.warn('Spectrogram Web Worker unavailable, falling back to synchronous computation');
       }
@@ -781,23 +804,29 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     // Collect clips that need (re)computation
     const clipsToCompute: Array<{
       clipId: string;
+      trackIndex: number;
       channelDataArrays: Float32Array[];
       config: SpectrogramConfig;
       sampleRate: number;
       offsetSamples: number;
       durationSamples: number;
       monoFlag: boolean;
+      colorMap: ColorMapValue;
     }> = [];
 
     tracks.forEach((track, i) => {
       const mode = trackRenderModes.get(i) ?? track.renderMode ?? 'waveform';
       if (mode === 'waveform') return;
 
-      const key = currentKeys.get(i);
-      const prevKey = prevKeys.get(i);
-      if (key === prevKey) return;
+      // Include clip if config changed OR if canvas version changed and clip has registered canvases
+      const trackConfigChanged = configChanged && (currentKeys.get(i) !== prevKeys.get(i));
+      const hasRegisteredCanvases = canvasVersionChanged && track.clips.some(
+        clip => spectrogramCanvasRegistryRef.current.has(clip.id)
+      );
+      if (!trackConfigChanged && !hasRegisteredCanvases) return;
 
       const cfg = trackSpectrogramConfigs.get(i) ?? track.spectrogramConfig ?? spectrogramConfig ?? {};
+      const cm = trackSpectrogramColorMaps.get(i) ?? track.spectrogramColorMap ?? spectrogramColorMap ?? 'viridis';
 
       for (const clip of track.clips) {
         if (!clip.audioBuffer) continue;
@@ -809,12 +838,14 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
         clipsToCompute.push({
           clipId: clip.id,
+          trackIndex: i,
           channelDataArrays,
           config: cfg,
           sampleRate: clip.audioBuffer.sampleRate,
           offsetSamples: clip.offsetSamples,
           durationSamples: clip.durationSamples,
           monoFlag: mono || clip.audioBuffer.numberOfChannels === 1,
+          colorMap: cm,
         });
       }
     });
@@ -856,22 +887,66 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         if (spectrogramGenerationRef.current !== generation) return; // Stale
 
         try {
-          const spectrograms = await workerApi!.compute({
-            channelDataArrays: item.channelDataArrays,
-            config: item.config,
-            sampleRate: item.sampleRate,
-            offsetSamples: item.offsetSamples,
-            durationSamples: item.durationSamples,
-            mono: item.monoFlag,
-          });
+          // Check if OffscreenCanvases are registered for this clip
+          const clipCanvasInfo = spectrogramCanvasRegistryRef.current.get(item.clipId);
+          if (clipCanvasInfo && clipCanvasInfo.size > 0) {
+            // Build canvasIds array: [channel][chunk]
+            const numChannels = item.monoFlag ? 1 : item.channelDataArrays.length;
+            const canvasIds: string[][] = [];
+            let canvasWidths: number[] = [];
+
+            for (let ch = 0; ch < numChannels; ch++) {
+              const channelInfo = clipCanvasInfo.get(ch);
+              if (channelInfo) {
+                canvasIds.push(channelInfo.canvasIds);
+                canvasWidths = channelInfo.canvasWidths; // same for all channels
+              } else {
+                canvasIds.push([]);
+              }
+            }
+
+            const colorLUT = getColorMap(item.colorMap);
+
+            await workerApi!.computeAndRender({
+              channelDataArrays: item.channelDataArrays,
+              config: item.config,
+              sampleRate: item.sampleRate,
+              offsetSamples: item.offsetSamples,
+              durationSamples: item.durationSamples,
+              mono: item.monoFlag,
+              render: {
+                canvasIds,
+                canvasWidths,
+                canvasHeight: waveHeight,
+                devicePixelRatio: typeof window !== 'undefined' ? window.devicePixelRatio : 1,
+                samplesPerPixel,
+                colorLUT,
+                frequencyScale: item.config.frequencyScale ?? 'linear',
+                minFrequency: item.config.minFrequency ?? 0,
+                maxFrequency: item.config.maxFrequency ?? 0,
+              },
+            });
+          } else {
+            // Fallback: compute only, render on main thread
+            const spectrograms = await workerApi!.compute({
+              channelDataArrays: item.channelDataArrays,
+              config: item.config,
+              sampleRate: item.sampleRate,
+              offsetSamples: item.offsetSamples,
+              durationSamples: item.durationSamples,
+              mono: item.monoFlag,
+            });
+
+            if (spectrogramGenerationRef.current !== generation) return; // Stale
+
+            setSpectrogramDataMap(prevMap => {
+              const newMap = new Map(prevMap);
+              newMap.set(item.clipId, spectrograms);
+              return newMap;
+            });
+          }
 
           if (spectrogramGenerationRef.current !== generation) return; // Stale
-
-          setSpectrogramDataMap(prevMap => {
-            const newMap = new Map(prevMap);
-            newMap.set(item.clipId, spectrograms);
-            return newMap;
-          });
         } catch (err) {
           console.warn('Spectrogram worker error for clip', item.clipId, err);
         }
@@ -879,7 +954,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     };
 
     computeAsync();
-  }, [tracks, mono, spectrogramConfig, spectrogramColorMap, trackRenderModes, trackSpectrogramConfigs, trackSpectrogramColorMaps]);
+  }, [tracks, mono, spectrogramConfig, spectrogramColorMap, trackRenderModes, trackSpectrogramConfigs, trackSpectrogramColorMaps, waveHeight, samplesPerPixel, spectrogramCanvasVersion]);
 
   // Animation loop
   const startAnimationLoop = useCallback(() => {
@@ -1242,6 +1317,28 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     }
   }, []);
 
+  // Spectrogram OffscreenCanvas registration
+  const registerSpectrogramCanvases = useCallback((clipId: string, channelIndex: number, canvasIds: string[], canvasWidths: number[]) => {
+    const registry = spectrogramCanvasRegistryRef.current;
+    if (!registry.has(clipId)) {
+      registry.set(clipId, new Map());
+    }
+    registry.get(clipId)!.set(channelIndex, { canvasIds, canvasWidths });
+    // Bump version to trigger re-computation with canvas rendering
+    setSpectrogramCanvasVersion(v => v + 1);
+  }, []);
+
+  const unregisterSpectrogramCanvases = useCallback((clipId: string, channelIndex: number) => {
+    const registry = spectrogramCanvasRegistryRef.current;
+    const clipChannels = registry.get(clipId);
+    if (clipChannels) {
+      clipChannels.delete(channelIndex);
+      if (clipChannels.size === 0) {
+        registry.delete(clipId);
+      }
+    }
+  }, []);
+
   // Selection
   const setSelection = useCallback((start: number, end: number) => {
     setSelectionStart(start);
@@ -1368,6 +1465,10 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     // Per-track render mode and spectrogram config
     setTrackRenderMode,
     setTrackSpectrogramConfig,
+
+    // Spectrogram OffscreenCanvas registration
+    registerSpectrogramCanvases,
+    unregisterSpectrogramCanvases,
   };
 
   const dataValue: PlaylistDataContextValue = {
@@ -1397,6 +1498,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     trackRenderModes,
     trackSpectrogramConfigs,
     trackSpectrogramColorMaps,
+    spectrogramWorkerApi: spectrogramWorkerReady ? spectrogramWorkerRef.current : null,
   };
 
   // Combined value for backwards compatibility

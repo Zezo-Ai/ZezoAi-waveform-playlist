@@ -1,4 +1,4 @@
-import React, { FunctionComponent, useLayoutEffect, useCallback, useRef } from 'react';
+import React, { FunctionComponent, useLayoutEffect, useCallback, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import type { SpectrogramData, ColorMapValue } from '@waveform-playlist/core';
 
@@ -52,11 +52,16 @@ function defaultGetColorMap(): Uint8Array {
   return lut;
 }
 
+export interface SpectrogramWorkerCanvasApi {
+  registerCanvas(canvasId: string, canvas: OffscreenCanvas): void;
+  unregisterCanvas(canvasId: string): void;
+}
+
 export interface SpectrogramChannelProps {
   /** Channel index (0 = first, 1 = second, etc.) */
   index: number;
-  /** Computed spectrogram data */
-  data: SpectrogramData;
+  /** Computed spectrogram data (not needed when workerApi is provided) */
+  data?: SpectrogramData;
   /** Width in CSS pixels */
   length: number;
   /** Height in CSS pixels */
@@ -79,6 +84,12 @@ export interface SpectrogramChannelProps {
   labelsColor?: string;
   /** Label background color */
   labelsBackground?: string;
+  /** Worker API for transferring canvas ownership. When provided, rendering is done in the worker. */
+  workerApi?: SpectrogramWorkerCanvasApi;
+  /** Clip ID used to construct unique canvas IDs for worker registration */
+  clipId?: string;
+  /** Callback when canvases are registered with the worker, providing canvas IDs and widths */
+  onCanvasesReady?: (canvasIds: string[], canvasWidths: number[]) => void;
 }
 
 export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
@@ -95,9 +106,16 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
   labels = false,
   labelsColor = '#ccc',
   labelsBackground = 'rgba(0,0,0,0.6)',
+  workerApi,
+  clipId,
+  onCanvasesReady,
 }) => {
   const canvasesRef = useRef<HTMLCanvasElement[]>([]);
   const labelsCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const registeredIdsRef = useRef<string[]>([]);
+
+  // Track whether we're in worker mode (canvas transferred)
+  const isWorkerMode = !!(workerApi && clipId);
 
   const canvasRef = useCallback(
     (canvas: HTMLCanvasElement | null) => {
@@ -109,11 +127,55 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
     []
   );
 
+  // Worker mode: transfer canvases to worker on mount
+  useEffect(() => {
+    if (!isWorkerMode) return;
+
+    const canvases = canvasesRef.current;
+    const ids: string[] = [];
+    const widths: number[] = [];
+
+    for (let i = 0; i < canvases.length; i++) {
+      const canvas = canvases[i];
+      if (!canvas) continue;
+
+      const canvasId = `${clipId}-ch${index}-chunk${i}`;
+
+      try {
+        const offscreen = canvas.transferControlToOffscreen();
+        workerApi!.registerCanvas(canvasId, offscreen);
+        ids.push(canvasId);
+        widths.push(Math.min(length - i * MAX_CANVAS_WIDTH, MAX_CANVAS_WIDTH));
+      } catch {
+        // transferControlToOffscreen may fail if already transferred or unsupported
+        break;
+      }
+    }
+
+    registeredIdsRef.current = ids;
+
+    if (ids.length > 0 && onCanvasesReady) {
+      onCanvasesReady(ids, widths);
+    }
+
+    return () => {
+      for (const id of registeredIdsRef.current) {
+        workerApi!.unregisterCanvas(id);
+      }
+      registeredIdsRef.current = [];
+    };
+  // Re-run when canvas keys change (length changes cause remount via key prop)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isWorkerMode, clipId, index, length]);
+
   const lut = colorLUT ?? defaultGetColorMap();
-  const maxF = maxFrequency ?? data.sampleRate / 2;
+  const maxF = maxFrequency ?? (data ? data.sampleRate / 2 : 22050);
   const scaleFn = frequencyScaleFn ?? ((f: number, minF: number, maxF: number) => (f - minF) / (maxF - minF));
 
+  // Main-thread rendering (skipped in worker mode)
   useLayoutEffect(() => {
+    if (isWorkerMode || !data) return;
+
     const canvases = canvasesRef.current;
     const { frequencyBinCount, frameCount, hopSize, sampleRate, minDecibels, maxDecibels } = data;
     const dbRange = maxDecibels - minDecibels;
@@ -246,7 +308,40 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
         }
       }
     }
-  }, [data, length, waveHeight, devicePixelRatio, samplesPerPixel, lut, frequencyScaleFn, minFrequency, maxF, labels, labelsColor, labelsBackground, scaleFn]);
+  }, [isWorkerMode, data, length, waveHeight, devicePixelRatio, samplesPerPixel, lut, frequencyScaleFn, minFrequency, maxF, labels, labelsColor, labelsBackground, scaleFn]);
+
+  // Worker mode: draw labels on main thread when render completes
+  useLayoutEffect(() => {
+    if (!isWorkerMode || !labels || !labelsCanvasRef.current || !data) return;
+
+    const labelsCanvas = labelsCanvasRef.current;
+    const lctx = labelsCanvas.getContext('2d');
+    if (!lctx) return;
+
+    const lh = waveHeight;
+    lctx.resetTransform();
+    lctx.clearRect(0, 0, labelsCanvas.width, labelsCanvas.height);
+    lctx.scale(devicePixelRatio, devicePixelRatio);
+
+    const labelFreqs = getFrequencyLabels(minFrequency, maxF);
+    lctx.font = '10px monospace';
+    lctx.textBaseline = 'middle';
+
+    for (const freq of labelFreqs) {
+      const normalized = scaleFn(freq, minFrequency, maxF);
+      if (normalized < 0 || normalized > 1) continue;
+      const y = lh * (1 - normalized);
+
+      const text = freq >= 1000 ? `${(freq / 1000).toFixed(1)}k` : `${freq}`;
+      const metrics = lctx.measureText(text);
+      const padding = 2;
+
+      lctx.fillStyle = labelsBackground;
+      lctx.fillRect(0, y - 6, metrics.width + padding * 2, 12);
+      lctx.fillStyle = labelsColor;
+      lctx.fillText(text, padding, y);
+    }
+  }, [isWorkerMode, labels, data, waveHeight, devicePixelRatio, minFrequency, maxF, scaleFn, labelsColor, labelsBackground]);
 
   // Build canvas chunks
   let totalWidth = length;
