@@ -464,6 +464,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       setDuration(0);
       setTrackStates([]);
       setPeaksDataArray([]);
+      setSpectrogramDataMap(new Map());
       if (playoutRef.current) {
         playoutRef.current.dispose();
         playoutRef.current = null;
@@ -832,16 +833,24 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       prevSpectrogramFFTKeyRef.current = currentFFTKeys;
     }
 
-    // Remove entries for tracks that are no longer spectrogram (synchronous)
+    // Remove entries for clips that no longer need spectrograms (synchronous)
     if (configChanged) {
       setSpectrogramDataMap(prevMap => {
-        const newMap = new Map(prevMap);
+        // Build set of clip IDs that still need spectrograms
+        const activeClipIds = new Set<string>();
         for (const track of tracks) {
           const mode = trackSpectrogramOverrides.get(track.id)?.renderMode ?? track.renderMode ?? 'waveform';
-          if (mode === 'waveform') {
+          if (mode === 'spectrogram' || mode === 'both') {
             for (const clip of track.clips) {
-              newMap.delete(clip.id);
+              activeClipIds.add(clip.id);
             }
+          }
+        }
+        // Delete any map entries not in the active set (handles removed tracks + mode changes)
+        const newMap = new Map(prevMap);
+        for (const clipId of newMap.keys()) {
+          if (!activeClipIds.has(clipId)) {
+            newMap.delete(clipId);
           }
         }
         return newMap;

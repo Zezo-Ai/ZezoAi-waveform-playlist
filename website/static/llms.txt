@@ -7,7 +7,7 @@
 waveform-playlist is a React component library for building browser-based audio editing applications. It provides:
 
 - Multitrack audio playback, mixing, and editing
-- Canvas-based waveform rendering with zoom
+- Canvas-based waveform and spectrogram rendering with zoom
 - Click-to-seek, drag-to-select, clip drag/trim/split
 - 20 real-time audio effects (reverb, delay, EQ, compression, etc.) via Tone.js
 - Time-synchronized annotations with drag editing
@@ -26,6 +26,7 @@ waveform-playlist is a React component library for building browser-based audio 
 - `@waveform-playlist/recording` — Microphone access, AudioWorklet recording, VU meter
 - `@waveform-playlist/webaudio-peaks` — Peak extraction from AudioBuffer
 - `@waveform-playlist/media-element-playout` — HTMLAudioElement playback with pitch-preserving speed control
+- `@waveform-playlist/spectrogram` — Spectrogram computation (FFT), worker-based rendering, color maps, frequency scales
 
 ## Quick Start
 
