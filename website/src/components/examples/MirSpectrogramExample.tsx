@@ -11,6 +11,7 @@ import {
   AudioPosition,
   ZoomInButton,
   ZoomOutButton,
+  AutomaticScrollCheckbox,
   useAudioTracks,
   usePlaybackShortcuts,
 } from '@waveform-playlist/browser';
@@ -211,7 +212,7 @@ export function MirSpectrogramExample() {
           barGap={2}
           zoomLevels={[512, 1024, 2048, 4096, 8192, 16384, 32768]}
           controls={{ show: true, width: 180 }}
-          spectrogramColorMap="roseus"
+          spectrogramColorMap="viridis"
         >
           <MirSpectrogramInner />
           <ControlBar>
@@ -222,6 +223,7 @@ export function MirSpectrogramExample() {
             <AudioPosition />
             <ZoomInButton />
             <ZoomOutButton />
+            <AutomaticScrollCheckbox />
             <ClearButton onClick={handleClearAll} title="Remove all tracks">
               Clear All
             </ClearButton>
