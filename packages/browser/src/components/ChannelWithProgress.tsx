@@ -173,23 +173,30 @@ export const ChannelWithProgress: React.FC<ChannelWithProgressProps> = ({
 
   // Use black background for spectrogram mode
   const isSpectrogramMode = smartChannelProps.renderMode === 'spectrogram' || smartChannelProps.renderMode === 'both';
+  const isBothMode = smartChannelProps.renderMode === 'both';
   const backgroundCss = isSpectrogramMode ? '#000' : waveformColorToCss(backgroundColor);
+
+  // In "both" mode each channel occupies 2× waveHeight (spectrogram + waveform stacked)
+  const effectiveHeight = isBothMode ? waveHeight * 2 : waveHeight;
+  const effectiveTop = isBothMode
+    ? smartChannelProps.index * 2 * waveHeight
+    : smartChannelProps.index * waveHeight;
 
   return (
     <ChannelWrapper>
       {/* Background layer - color depends on draw mode */}
       <Background
         $color={backgroundCss}
-        $height={waveHeight}
-        $top={smartChannelProps.index * waveHeight}
+        $height={effectiveHeight}
+        $top={effectiveTop}
         $width={smartChannelProps.length}
       />
       {/* Progress overlay - shows played portion with progress color */}
       <ProgressOverlay
         ref={progressRef}
         $color={progressColor}
-        $height={waveHeight}
-        $top={smartChannelProps.index * waveHeight}
+        $height={effectiveHeight}
+        $top={effectiveTop}
       />
       {/* Waveform canvas with transparent background */}
       <ChannelContainer>

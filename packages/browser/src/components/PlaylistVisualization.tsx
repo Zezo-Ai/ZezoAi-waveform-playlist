@@ -226,10 +226,12 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
 
     for (let i = 0; i < peaksDataArray.length; i++) {
       const trackClipPeaks = peaksDataArray[i];
-      const maxChannels = trackClipPeaks.length > 0
+      const rawCh = trackClipPeaks.length > 0
         ? Math.max(...trackClipPeaks.map(clip => clip.peaks.data.length))
         : 1;
-      const trackHeight = maxChannels * waveHeight + (showClipHeaders ? 22 : 0);
+      const trackMode = trackRenderModes.get(i) ?? tracks[i]?.renderMode ?? 'waveform';
+      const effectiveCh = trackMode === 'both' ? rawCh * 2 : rawCh;
+      const trackHeight = effectiveCh * waveHeight + (showClipHeaders ? 22 : 0);
 
       if (trackY >= cumulativeHeight && trackY < cumulativeHeight + trackHeight) {
         clickedTrackIndex = i;
@@ -428,9 +430,11 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                   </Controls>
                 );
 
-                const maxChannels = trackClipPeaks.length > 0
+                const rawChannels = trackClipPeaks.length > 0
                   ? Math.max(...trackClipPeaks.map(clip => clip.peaks.data.length))
                   : 1;
+                // In "both" mode each channel needs 2× waveHeight (spectrogram + waveform)
+                const maxChannels = effectiveRenderMode === 'both' ? rawChannels * 2 : rawChannels;
 
                 return (
                   <TrackControlsContext.Provider key={track.id} value={trackControls}>
