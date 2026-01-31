@@ -10,7 +10,7 @@ import {
   PlaylistInfoContext,
   TrackControlsContext,
   DevicePixelRatioProvider,
-  StyledTimeScale,
+  SmartScale,
   Controls,
   Header,
   Button,
@@ -319,7 +319,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
           zoomLevels: [samplesPerPixel],
           waveHeight,
           timeScaleHeight,
-          duration: displayDuration,
+          duration: displayDuration * 1000,
           controls,
           barWidth,
           barGap,
@@ -342,13 +342,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
             timescale={
               timeScaleHeight > 0 ? (
                 <>
-                  <StyledTimeScale
-                    duration={displayDuration * 1000}
-                    marker={10000}
-                    bigStep={5000}
-                    secondStep={1000}
-                    renderTimestamp={renderTimestamp}
-                  />
+                  <SmartScale renderTimestamp={renderTimestamp} />
                   {isLoopEnabled && (
                     <TimescaleLoopRegion
                       startPosition={
