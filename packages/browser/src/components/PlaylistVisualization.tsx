@@ -468,8 +468,9 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                 const rawChannels = trackClipPeaks.length > 0
                   ? Math.max(...trackClipPeaks.map(clip => clip.peaks.data.length))
                   : 1;
-                // In "both" mode each channel needs 2× waveHeight (spectrogram + waveform)
-                const maxChannels = effectiveRenderMode === 'both' ? rawChannels * 2 : rawChannels;
+                // In "both" mode spectrogram + waveform each render at half waveHeight,
+                // so the track container stays the same height as single-mode tracks.
+                const maxChannels = rawChannels;
 
                 return (
                   <TrackControlsContext.Provider key={track.id} value={trackControls}>

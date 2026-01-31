@@ -103,16 +103,16 @@ export const SmartChannel: FunctionComponent<SmartChannelProps> = ({
   }
 
   if (renderMode === 'both' && hasSpectrogram) {
-    // Spectrogram above, waveform below — each at full waveHeight.
-    // The "both" channel index occupies 2× slots, so spectrogram is at
-    // slot (index * 2) and waveform at slot (index * 2 + 1).
+    // Spectrogram above, waveform below — each at half waveHeight so the
+    // overall track container stays the same height as a single-mode track.
+    const halfHeight = Math.floor(waveHeight / 2);
     return (
       <>
         <SpectrogramChannel
           index={props.index * 2}
           data={spectrogramData}
           length={props.length}
-          waveHeight={waveHeight}
+          waveHeight={halfHeight}
           devicePixelRatio={devicePixelRatio}
           samplesPerPixel={samplesPerPixel}
           colorLUT={spectrogramColorLUT}
@@ -126,14 +126,14 @@ export const SmartChannel: FunctionComponent<SmartChannelProps> = ({
           clipId={spectrogramClipId}
           onCanvasesReady={spectrogramOnCanvasesReady}
         />
-        <div style={{ position: 'absolute', top: (props.index * 2 + 1) * waveHeight, width: props.length, height: waveHeight }}>
+        <div style={{ position: 'absolute', top: (props.index * 2 + 1) * halfHeight, width: props.length, height: halfHeight }}>
           <Channel
             {...props}
             {...theme}
             index={0}
             waveOutlineColor={waveOutlineColor}
             waveFillColor={waveFillColor}
-            waveHeight={waveHeight}
+            waveHeight={halfHeight}
             devicePixelRatio={devicePixelRatio}
             barWidth={barWidth}
             barGap={barGap}
