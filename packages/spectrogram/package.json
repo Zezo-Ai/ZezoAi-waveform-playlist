@@ -10,6 +10,9 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
+    },
+    "./worker/spectrogram.worker": {
+      "import": "./dist/worker/spectrogram.worker.mjs"
     }
   },
   "sideEffects": false,

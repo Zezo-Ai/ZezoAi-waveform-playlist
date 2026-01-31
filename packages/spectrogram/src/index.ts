@@ -8,3 +8,6 @@ export type { SpectrogramMenuItemsProps } from './components';
 export { SpectrogramSettingsModal } from './components';
 export type { SpectrogramSettingsModalProps } from './components';
 export type { TrackMenuItem } from './components';
+
+// Worker
+export { createSpectrogramWorker } from './worker';

@@ -5,7 +5,7 @@ import { type Track, type ClipTrack, type Fade, type SpectrogramData, type Spect
 import { type TimeFormat, type WaveformPlaylistTheme, defaultTheme } from '@waveform-playlist/ui-components';
 import { start as toneStart, getContext } from 'tone';
 import { generatePeaks } from './peaksUtil';
-import { computeSpectrogram, computeSpectrogramMono } from '@waveform-playlist/spectrogram';
+import { computeSpectrogram, computeSpectrogramMono, createSpectrogramWorker } from '@waveform-playlist/spectrogram';
 import { extractPeaksFromWaveformData } from './waveformDataLoader';
 import type { PeakData } from '@waveform-playlist/webaudio-peaks';
 import { parseAeneas, type AnnotationData } from '@waveform-playlist/annotations';
@@ -705,7 +705,18 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
   // Compute spectrograms for tracks with renderMode 'spectrogram' or 'both'
   // Uses per-track config; only recomputes tracks whose config changed.
+  // Computation runs in a Web Worker to avoid blocking the main thread.
   const prevSpectrogramConfigRef = useRef<Map<number, string>>(new Map());
+  const spectrogramWorkerRef = useRef<ReturnType<typeof createSpectrogramWorker> | null>(null);
+  const spectrogramGenerationRef = useRef(0);
+
+  // Terminate worker on unmount
+  useEffect(() => {
+    return () => {
+      spectrogramWorkerRef.current?.terminate();
+      spectrogramWorkerRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (tracks.length === 0) return;
@@ -734,10 +745,9 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
     prevSpectrogramConfigRef.current = currentKeys;
 
+    // Remove entries for tracks that are no longer spectrogram (synchronous)
     setSpectrogramDataMap(prevMap => {
       const newMap = new Map(prevMap);
-
-      // Remove entries for tracks that are no longer spectrogram
       for (const track of tracks) {
         const trackIdx = tracks.indexOf(track);
         const mode = trackRenderModes.get(trackIdx) ?? track.renderMode ?? 'waveform';
@@ -747,41 +757,128 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
           }
         }
       }
+      return newMap;
+    });
 
-      // Compute/recompute for changed tracks
-      tracks.forEach((track, i) => {
-        const mode = trackRenderModes.get(i) ?? track.renderMode ?? 'waveform';
-        if (mode === 'waveform') return;
+    // Generation counter to discard stale results
+    const generation = ++spectrogramGenerationRef.current;
 
-        const key = currentKeys.get(i);
-        const prevKey = prevKeys.get(i);
-        if (key === prevKey) return; // This track didn't change
+    // Lazily create worker, fall back to synchronous if it fails
+    let workerApi = spectrogramWorkerRef.current;
+    if (!workerApi) {
+      try {
+        const rawWorker = new Worker(
+          new URL('@waveform-playlist/spectrogram/worker/spectrogram.worker', import.meta.url),
+          { type: 'module' }
+        );
+        workerApi = createSpectrogramWorker(rawWorker);
+        spectrogramWorkerRef.current = workerApi;
+      } catch {
+        console.warn('Spectrogram Web Worker unavailable, falling back to synchronous computation');
+      }
+    }
 
-        const cfg = trackSpectrogramConfigs.get(i) ?? track.spectrogramConfig ?? spectrogramConfig;
+    // Collect clips that need (re)computation
+    const clipsToCompute: Array<{
+      clipId: string;
+      channelDataArrays: Float32Array[];
+      config: SpectrogramConfig;
+      sampleRate: number;
+      offsetSamples: number;
+      durationSamples: number;
+      monoFlag: boolean;
+    }> = [];
 
-        for (const clip of track.clips) {
-          if (!clip.audioBuffer) continue;
+    tracks.forEach((track, i) => {
+      const mode = trackRenderModes.get(i) ?? track.renderMode ?? 'waveform';
+      if (mode === 'waveform') return;
 
+      const key = currentKeys.get(i);
+      const prevKey = prevKeys.get(i);
+      if (key === prevKey) return;
+
+      const cfg = trackSpectrogramConfigs.get(i) ?? track.spectrogramConfig ?? spectrogramConfig ?? {};
+
+      for (const clip of track.clips) {
+        if (!clip.audioBuffer) continue;
+
+        const channelDataArrays: Float32Array[] = [];
+        for (let ch = 0; ch < clip.audioBuffer.numberOfChannels; ch++) {
+          channelDataArrays.push(clip.audioBuffer.getChannelData(ch));
+        }
+
+        clipsToCompute.push({
+          clipId: clip.id,
+          channelDataArrays,
+          config: cfg,
+          sampleRate: clip.audioBuffer.sampleRate,
+          offsetSamples: clip.offsetSamples,
+          durationSamples: clip.durationSamples,
+          monoFlag: mono || clip.audioBuffer.numberOfChannels === 1,
+        });
+      }
+    });
+
+    if (clipsToCompute.length === 0) return;
+
+    if (!workerApi) {
+      // Synchronous fallback
+      setSpectrogramDataMap(prevMap => {
+        const newMap = new Map(prevMap);
+        for (const item of clipsToCompute) {
           const channelSpectrograms: SpectrogramData[] = [];
-
-          if (mono || clip.audioBuffer.numberOfChannels === 1) {
+          if (item.monoFlag) {
             channelSpectrograms.push(
-              computeSpectrogramMono(clip.audioBuffer, cfg, clip.offsetSamples, clip.durationSamples)
+              computeSpectrogramMono(
+                // Reconstruct a minimal AudioBuffer-like call using the original track clip
+                tracks.flatMap(t => t.clips).find(c => c.id === item.clipId)!.audioBuffer!,
+                item.config, item.offsetSamples, item.durationSamples
+              )
             );
           } else {
-            for (let ch = 0; ch < clip.audioBuffer.numberOfChannels; ch++) {
+            const clip = tracks.flatMap(t => t.clips).find(c => c.id === item.clipId)!;
+            for (let ch = 0; ch < clip.audioBuffer!.numberOfChannels; ch++) {
               channelSpectrograms.push(
-                computeSpectrogram(clip.audioBuffer, cfg, clip.offsetSamples, clip.durationSamples, ch)
+                computeSpectrogram(clip.audioBuffer!, item.config, item.offsetSamples, item.durationSamples, ch)
               );
             }
           }
-
-          newMap.set(clip.id, channelSpectrograms);
+          newMap.set(item.clipId, channelSpectrograms);
         }
+        return newMap;
       });
+      return;
+    }
 
-      return newMap;
-    });
+    // Async worker computation
+    const computeAsync = async () => {
+      for (const item of clipsToCompute) {
+        if (spectrogramGenerationRef.current !== generation) return; // Stale
+
+        try {
+          const spectrograms = await workerApi!.compute({
+            channelDataArrays: item.channelDataArrays,
+            config: item.config,
+            sampleRate: item.sampleRate,
+            offsetSamples: item.offsetSamples,
+            durationSamples: item.durationSamples,
+            mono: item.monoFlag,
+          });
+
+          if (spectrogramGenerationRef.current !== generation) return; // Stale
+
+          setSpectrogramDataMap(prevMap => {
+            const newMap = new Map(prevMap);
+            newMap.set(item.clipId, spectrograms);
+            return newMap;
+          });
+        } catch (err) {
+          console.warn('Spectrogram worker error for clip', item.clipId, err);
+        }
+      }
+    };
+
+    computeAsync();
   }, [tracks, mono, spectrogramConfig, spectrogramColorMap, trackRenderModes, trackSpectrogramConfigs, trackSpectrogramColorMaps]);
 
   // Animation loop
