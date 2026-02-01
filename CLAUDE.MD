@@ -55,9 +55,14 @@ pnpm publish --filter './packages/*' --no-git-checks
 npm install @waveform-playlist/browser
 ```
 
-**Version Bumping:** All 10 `package.json` files (root + 9 packages) must be bumped in sync:
+**Version Bumping:** All 11 `package.json` files (root + 10 packages) must be bumped in sync:
 ```bash
 sed -i '' 's/"version": "OLD"/"version": "NEW"/g' package.json packages/*/package.json
+```
+
+**First-time scoped packages:** New `@waveform-playlist/*` packages need `--access public` on first npm publish:
+```bash
+pnpm publish --filter @waveform-playlist/NEW-PACKAGE --no-git-checks --access public
 ```
 
 **Prerelease Tag:** Use `@next` for prerelease versions when preparing future major releases.
