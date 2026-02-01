@@ -52,6 +52,26 @@ For microphone recording:
 npm install @waveform-playlist/recording
 ```
 
+### Spectrogram
+
+For spectrogram visualization (FFT computation, worker-based rendering, color maps):
+
+```bash npm2yarn
+npm install @waveform-playlist/spectrogram
+```
+
+Wrap your playlist with `SpectrogramProvider` to enable spectrogram features:
+
+```tsx
+import { SpectrogramProvider } from '@waveform-playlist/spectrogram';
+
+<WaveformPlaylistProvider tracks={tracks}>
+  <SpectrogramProvider config={spectrogramConfig} colorMap="viridis">
+    <Waveform />
+  </SpectrogramProvider>
+</WaveformPlaylistProvider>
+```
+
 ## TypeScript
 
 All packages include TypeScript definitions. No additional `@types` packages are needed.
