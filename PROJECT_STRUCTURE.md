@@ -352,7 +352,7 @@ audiowaveform -i audio.mp3 -o peaks-stereo.dat -z 256 --split-channels
 - **Peer Dependencies:** React ^18.0.0, styled-components ^6.0.0
 - **Bundle Size Impact:** ~50KB (only included if installed)
 - **Use Cases:** Subtitle/caption editing, transcripts, audio labeling
-- **Documentation:** See `OPTIONAL_PACKAGES.md`
+- **Documentation:** See `website/docs/getting-started/installation.md`
 
 #### `@waveform-playlist/recording`
 
@@ -864,7 +864,6 @@ pnpm build
 
 ### Documentation
 
-- `OPTIONAL_PACKAGES.md` - Optional packages guide (annotations, etc.)
 - `CLAUDE.md` - AI development notes and architectural decisions
 - `PROJECT_STRUCTURE.md` - This file
 
