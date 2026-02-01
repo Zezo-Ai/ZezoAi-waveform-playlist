@@ -140,6 +140,8 @@ sed -i '' 's/"version": "OLD"/"version": "NEW"/g' package.json packages/*/packag
 - **Dev server**: `pnpm --filter website start` - Docusaurus dev server
 - **Hard refresh**: Always use Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows/Linux) after builds
 
+**pnpm Build Ordering:** `pnpm recursive run` determines build order from `dependencies` and `devDependencies` only — **not** `peerDependencies`. If package A needs package B's types at build time (e.g., for DTS generation), B must be in A's `devDependencies` even if it's already a `peerDependency`. Without this, CI builds fail because packages build in parallel/alphabetical order.
+
 ### E2E Testing with Playwright
 
 - **Run tests**: `pnpm test`, `pnpm test:ui` (interactive), `pnpm test:headed` (visible browser)
