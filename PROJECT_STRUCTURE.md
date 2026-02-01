@@ -655,7 +655,7 @@ Users can:
 3. Maintain full type safety with TypeScript
 4. Test hooks independently from UI
 
-See `packages/browser/src/hooks/README.md` for full API documentation.
+See `packages/browser/src/hooks/` for hook implementations.
 
 ### Component State (React useState)
 
@@ -864,7 +864,6 @@ pnpm build
 
 ### Documentation
 
-- `packages/browser/src/hooks/README.md` - Hooks API documentation
 - `OPTIONAL_PACKAGES.md` - Optional packages guide (annotations, etc.)
 - `CLAUDE.md` - AI development notes and architectural decisions
 - `PROJECT_STRUCTURE.md` - This file
@@ -955,7 +954,6 @@ See `website/src/components/examples/` for 16 complete examples covering minimal
 
 ### Documentation
 
-- `packages/browser/src/hooks/README.md` - Hooks API documentation
 - `website/src/components/examples/FlexibleApiExample.tsx` - Flexible API example
 
 ## E2E Testing
