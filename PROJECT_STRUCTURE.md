@@ -864,7 +864,6 @@ pnpm build
 
 ### Documentation
 
-- `packages/browser/HOOKS_ARCHITECTURE.md` - Hooks architecture overview
 - `packages/browser/src/hooks/README.md` - Hooks API documentation
 - `OPTIONAL_PACKAGES.md` - Optional packages guide (annotations, etc.)
 - `CLAUDE.md` - AI development notes and architectural decisions
@@ -956,7 +955,6 @@ See `website/src/components/examples/` for 16 complete examples covering minimal
 
 ### Documentation
 
-- `packages/browser/HOOKS_ARCHITECTURE.md` - Hooks architecture overview
 - `packages/browser/src/hooks/README.md` - Hooks API documentation
 - `website/src/components/examples/FlexibleApiExample.tsx` - Flexible API example
 
