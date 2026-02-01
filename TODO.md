@@ -42,7 +42,6 @@ Multi-track audio editor roadmap for waveform-playlist.
 - Horizontal virtual scrolling (2+ hour timelines)
 - Vertical virtual scrolling (20+ tracks)
 - RAF batching
-- Canvas stitching
 
 ### Phase 5: Polish & Usability
 
