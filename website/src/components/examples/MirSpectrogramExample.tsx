@@ -17,6 +17,7 @@ import {
 } from '@waveform-playlist/browser';
 import type { SpectrogramConfig, RenderMode, ClipTrack } from '@waveform-playlist/core';
 import { createTrack, createClipFromSeconds } from '@waveform-playlist/core';
+import { SpectrogramProvider } from '@waveform-playlist/spectrogram';
 import type { AudioTrackConfig } from '@waveform-playlist/browser';
 import { useDocusaurusTheme } from '../../hooks/useDocusaurusTheme';
 import { FolderOpenIcon, MusicNotesIcon } from '@phosphor-icons/react';
@@ -213,8 +214,8 @@ export function MirSpectrogramExample() {
           barGap={2}
           zoomLevels={[512, 1024, 2048, 4096, 8192, 16384, 32768]}
           controls={{ show: true, width: 180 }}
-          spectrogramColorMap="viridis"
         >
+          <SpectrogramProvider colorMap="viridis">
           <MirSpectrogramInner />
           <ControlBar>
             <RewindButton />
@@ -230,6 +231,7 @@ export function MirSpectrogramExample() {
             </ClearButton>
           </ControlBar>
           <Waveform onRemoveTrack={handleRemoveTrack} showClipHeaders />
+          </SpectrogramProvider>
         </WaveformPlaylistProvider>
       )}
 

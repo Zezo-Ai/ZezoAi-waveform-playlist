@@ -54,6 +54,7 @@
     "fft.js": "^4.0.4"
   },
   "peerDependencies": {
+    "@waveform-playlist/browser": "workspace:*",
     "react": "^18.0.0",
     "styled-components": "^6.0.0"
   }

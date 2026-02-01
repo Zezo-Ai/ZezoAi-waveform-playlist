@@ -26,7 +26,7 @@ waveform-playlist is a React component library for building browser-based audio 
 - `@waveform-playlist/recording` — Microphone access, AudioWorklet recording, VU meter
 - `@waveform-playlist/webaudio-peaks` — Peak extraction from AudioBuffer
 - `@waveform-playlist/media-element-playout` — HTMLAudioElement playback with pitch-preserving speed control
-- `@waveform-playlist/spectrogram` — Spectrogram computation (FFT), worker-based rendering, color maps, frequency scales
+- `@waveform-playlist/spectrogram` — Optional spectrogram package: FFT computation, worker-based rendering, color maps, frequency scales. Integrates via `SpectrogramProvider` wrapper
 
 ## Quick Start
 
