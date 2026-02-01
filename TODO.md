@@ -106,6 +106,13 @@ Multi-track audio editor roadmap for waveform-playlist.
 - Audacity-style loop playback (separate loop region from selection, timescale-only UI)
 - Sample-based peaks generation (no floating-point precision errors)
 
+### Bundle Optimization ✅
+
+- Spectrogram decoupled from browser package (2025-01-31)
+  - `@waveform-playlist/spectrogram` is now optional via `SpectrogramIntegrationContext`
+  - Browser dist: 269KB/67KB gzipped, zero spectrogram runtime code
+  - New `SpectrogramProvider` wrapper in spectrogram package
+
 ---
 
 ## 🔮 Future Phases

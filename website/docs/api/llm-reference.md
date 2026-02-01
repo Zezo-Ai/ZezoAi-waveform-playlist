@@ -39,8 +39,6 @@ interface WaveformPlaylistProviderProps {
   barWidth?: number;                      // Default: 1
   barGap?: number;                        // Default: 0
   progressBarWidth?: number;              // Default: barWidth + barGap
-  spectrogramConfig?: SpectrogramConfig;  // Global spectrogram config
-  spectrogramColorMap?: ColorMapValue;    // Global color map. Default: 'viridis'
 }
 ```
 
@@ -569,6 +567,24 @@ All button/control components connect to context automatically. No props require
 
 ## Spectrogram (@waveform-playlist/spectrogram)
 
+Spectrogram is an **optional** package. Integrate via `SpectrogramProvider`:
+
+```typescript
+import { SpectrogramProvider } from '@waveform-playlist/spectrogram';
+
+<WaveformPlaylistProvider tracks={tracks}>
+  <SpectrogramProvider config={spectrogramConfig} colorMap="viridis">
+    <Waveform />
+  </SpectrogramProvider>
+</WaveformPlaylistProvider>
+
+interface SpectrogramProviderProps {
+  config?: SpectrogramConfig;
+  colorMap?: ColorMapValue;
+  children: ReactNode;
+}
+```
+
 ```typescript
 // From @waveform-playlist/core
 type FFTSize = 256 | 512 | 1024 | 2048 | 4096 | 8192;
@@ -625,9 +641,14 @@ interface SpectrogramWorkerApi {
 }
 
 // Key exports
+export { SpectrogramProvider } from '@waveform-playlist/spectrogram';
 export { computeSpectrogram, computeSpectrogramMono, getColorMap, getFrequencyScale } from '@waveform-playlist/spectrogram';
 export { createSpectrogramWorker } from '@waveform-playlist/spectrogram';
 export { SpectrogramMenuItems, SpectrogramSettingsModal } from '@waveform-playlist/spectrogram';
+
+// Integration context (from @waveform-playlist/browser)
+export { useSpectrogramIntegration, SpectrogramIntegrationProvider } from '@waveform-playlist/browser';
+export type { SpectrogramIntegration, SpectrogramWorkerApi } from '@waveform-playlist/browser';
 ```
 
 ---
