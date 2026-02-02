@@ -35,13 +35,13 @@ import {
   usePlaylistState,
   useClipDragHandlers,
   useDragSensors,
-  useIntegratedRecording,
 } from '@waveform-playlist/browser';
 import {
   RecordButton,
   MicrophoneSelector,
   VUMeter,
   RecordingIndicator,
+  useIntegratedRecording,
 } from '@waveform-playlist/recording';
 import { useDocusaurusTheme } from '../../hooks/useDocusaurusTheme';
 import { MicrophoneIcon, FolderOpenIcon, MusicNotesIcon } from '@phosphor-icons/react';
@@ -303,6 +303,27 @@ const RecordingControlsInner: React.FC<RecordingControlsInnerProps> = ({
     [tracks, setTracks]
   );
 
+  const handleRemoveTrack = useCallback(
+    async (trackIndex: number) => {
+      const trackToRemove = tracks[trackIndex];
+      if (!trackToRemove) return;
+
+      // Stop recording if we're removing the track being recorded to
+      // Must await so the recorded clip is saved before the track is removed
+      if (isRecording && trackToRemove.id === selectedTrackId) {
+        await stopRecording();
+      }
+
+      // Clear selection if removed track was selected
+      if (trackToRemove.id === selectedTrackId) {
+        setSelectedTrackId(null);
+      }
+
+      setTracks(tracks.filter((_, i) => i !== trackIndex));
+    },
+    [tracks, setTracks, selectedTrackId, setSelectedTrackId, isRecording, stopRecording]
+  );
+
   return (
     <>
       {error && (
@@ -425,6 +446,7 @@ const RecordingControlsInner: React.FC<RecordingControlsInnerProps> = ({
         <Waveform
           showClipHeaders
           interactiveClips
+          onRemoveTrack={handleRemoveTrack}
           recordingState={
             isRecording && selectedTrackId
               ? {

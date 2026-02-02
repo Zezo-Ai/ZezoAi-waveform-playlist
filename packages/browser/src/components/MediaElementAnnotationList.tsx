@@ -1,14 +1,14 @@
 import React, { useCallback } from 'react';
-import { AnnotationText } from '@waveform-playlist/annotations';
 import type {
-  RenderAnnotationItemProps,
+  AnnotationData,
   AnnotationAction,
   AnnotationActionOptions,
-} from '@waveform-playlist/annotations';
+  RenderAnnotationItemProps,
+} from '@waveform-playlist/core';
+import { useAnnotationIntegration } from '../AnnotationIntegrationContext';
 import { useMediaElementState, useMediaElementControls } from '../MediaElementPlaylistContext';
-import type { AnnotationData, OnAnnotationUpdateFn } from '../types/annotations';
+import type { OnAnnotationUpdateFn } from '../types/annotations';
 
-export type { RenderAnnotationItemProps, AnnotationAction, AnnotationActionOptions } from '@waveform-playlist/annotations';
 export type { OnAnnotationUpdateFn } from '../types/annotations';
 
 export interface MediaElementAnnotationListProps {
@@ -45,8 +45,8 @@ export interface MediaElementAnnotationListProps {
 /**
  * Standalone annotation text list component for MediaElementPlaylistProvider.
  *
- * Reads annotations and playback state from context and renders AnnotationText
- * unconditionally (even when annotations are empty).
+ * Requires @waveform-playlist/annotations with AnnotationProvider.
+ * Throws if used without `<AnnotationProvider>` wrapping the component tree.
  */
 export const MediaElementAnnotationList: React.FC<MediaElementAnnotationListProps> = ({
   height,
@@ -59,6 +59,7 @@ export const MediaElementAnnotationList: React.FC<MediaElementAnnotationListProp
   scrollActiveContainer = 'nearest',
 }) => {
   const { annotations, activeAnnotationId, continuousPlay } = useMediaElementState();
+  const integration = useAnnotationIntegration();
   const { setAnnotations } = useMediaElementControls();
 
   const resolvedConfig = annotationListConfig ?? { linkEndpoints: false, continuousPlay };
@@ -67,6 +68,8 @@ export const MediaElementAnnotationList: React.FC<MediaElementAnnotationListProp
     setAnnotations(updatedAnnotations);
     onAnnotationUpdate?.(updatedAnnotations);
   }, [setAnnotations, onAnnotationUpdate]);
+
+  const { AnnotationText } = integration;
 
   return (
     <AnnotationText

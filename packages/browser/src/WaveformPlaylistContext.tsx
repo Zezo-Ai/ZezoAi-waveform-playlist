@@ -3,12 +3,12 @@ import { ThemeProvider } from 'styled-components';
 import { TonePlayout, type EffectsFunction, type TrackEffectsFunction } from '@waveform-playlist/playout';
 import { type Track, type ClipTrack, type Fade } from '@waveform-playlist/core';
 import { type TimeFormat, type WaveformPlaylistTheme, defaultTheme } from '@waveform-playlist/ui-components';
-import { start as toneStart, getContext } from 'tone';
+import { getContext } from 'tone';
 import { generatePeaks } from './peaksUtil';
 
 import { extractPeaksFromWaveformData } from './waveformDataLoader';
 import type { PeakData } from '@waveform-playlist/webaudio-peaks';
-import { parseAeneas, type AnnotationData } from '@waveform-playlist/annotations';
+import type { AnnotationData } from '@waveform-playlist/core';
 import { useTimeFormat, useZoomControls, useMasterVolume } from './hooks';
 
 // Types
@@ -282,12 +282,21 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   // Default progressBarWidth to barWidth + barGap (fills gaps)
   const progressBarWidth = progressBarWidthProp ?? (barWidth + barGap);
   // Annotations are derived from prop (single source of truth in parent)
+  // In v6, annotations must be pre-parsed (numeric start/end). Use parseAeneas() from @waveform-playlist/annotations before passing.
   const annotations = useMemo(() => {
     if (!annotationList?.annotations) return [];
-    return annotationList.annotations.map((ann: any) => {
-      if (typeof ann.start === 'number') return ann;
-      return parseAeneas(ann);
-    });
+    if (process.env.NODE_ENV !== 'production' && annotationList.annotations.length > 0) {
+      const first = annotationList.annotations[0] as Record<string, unknown>;
+      if (typeof first.start !== 'number' || typeof first.end !== 'number') {
+        console.error(
+          '[waveform-playlist] Annotations must have numeric start/end values. ' +
+          'In v6, use parseAeneas() from @waveform-playlist/annotations before passing annotations. ' +
+          'Received start type: ' + typeof first.start
+        );
+        return [];
+      }
+    }
+    return annotationList.annotations as AnnotationData[];
   }, [annotationList?.annotations]);
 
   // Ref for animation loop (avoids restarting loop on annotation change)
@@ -881,9 +890,6 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     if (!playoutRef.current || audioBuffers.length === 0) return;
 
     await playoutRef.current.init();
-
-    // Resume Tone.js context if needed (required for Safari and user interaction)
-    await toneStart();
 
     const actualStartTime = startTime ?? currentTimeRef.current;
     playStartPositionRef.current = actualStartTime;

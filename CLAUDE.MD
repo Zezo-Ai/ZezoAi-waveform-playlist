@@ -170,6 +170,14 @@ pnpm publish --filter @waveform-playlist/NEW-PACKAGE --no-git-checks --access pu
 
 **Key Selectors:** `[data-clip-id]`, `[data-boundary-edge]`, `[data-clip-container]`, `[data-scroll-container]`
 
+**Preventing Flaky Tests:**
+- Always `await expect(locator).toBeVisible()` before `boundingBox()` — returns null if element isn't laid out
+- Use `await expect(locator).toHaveCount(n)` (auto-retrying) instead of `expect(await locator.count()).toBe(n)` (one-shot)
+- Wrap post-interaction state checks with `await expect(async () => { ... }).toPass({ timeout: 5000 })` for timing tolerance
+- Always rebuild (`pnpm build`) after switching branches before running tests — stale artifacts cause false failures
+
+**Git Safety:** Always make intermediate commits before running `git stash` or switching branches. A failed `git stash pop` + `git checkout -- .` can destroy all uncommitted work permanently.
+
 ---
 
 ## Architectural Decisions
@@ -278,6 +286,27 @@ interface AudioClip {
 - Use MutationObserver to detect `data-theme` attribute changes
 - Switch between `defaultTheme` and `darkTheme` based on Docusaurus mode
 - Example: `minimal-app.tsx` detects and responds to theme toggle
+
+### Integration Context Pattern (Spectrogram, Annotations)
+
+**Pattern:** Browser package defines an interface + context, optional packages provide implementation via a Provider component. Used by both `@waveform-playlist/spectrogram` (SpectrogramIntegrationContext) and `@waveform-playlist/annotations` (AnnotationIntegrationContext).
+
+**Flow:** Browser defines `XxxIntegrationContext` → optional package creates `XxxProvider` that supplies components/functions → browser components use `useXxxIntegration()` and gracefully return `null` if unavailable.
+
+**Throwing Context Hooks (Kent C. Dodds Pattern):**
+Both `useAnnotationIntegration()` and `useSpectrogramIntegration()` throw if used without their respective providers. This follows the [Kent C. Dodds context pattern](https://kentcdodds.com/blog/how-to-use-react-context-effectively) — fail fast with a clear error instead of silently rendering nothing.
+
+```typescript
+// Components that need annotations — throws if <AnnotationProvider> missing
+const integration = useAnnotationIntegration();
+
+// Internal components that render with or without annotations/spectrograms
+// use useContext(XxxIntegrationContext) directly to get null when absent
+const annotationIntegration = useContext(AnnotationIntegrationContext);
+const spectrogram = useContext(SpectrogramIntegrationContext);
+```
+
+**Location:** `packages/browser/src/AnnotationIntegrationContext.tsx`, `packages/browser/src/SpectrogramIntegrationContext.tsx`
 
 ### Annotation Provider Pattern
 
@@ -435,6 +464,8 @@ const normalized = Math.max(0, Math.min(1, (dbValue + 100) / 100));
 **Critical:** Call `await Tone.start()` after user interaction and before `Tone.now()`.
 
 Without `Tone.start()`, `Tone.now()` returns null → RangeError in scheduling.
+
+**Safari Latency:** `TonePlayout.init()` already calls `await start()`. Do NOT call `await toneStart()` separately in play handlers — the redundant await adds ~2 seconds of latency on Safari.
 
 **Master volume:** Uses Web Audio standard 0-1.0 range (not 0-100).
 

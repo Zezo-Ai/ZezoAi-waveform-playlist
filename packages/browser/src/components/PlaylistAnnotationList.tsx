@@ -1,14 +1,14 @@
 import React, { useCallback } from 'react';
-import { AnnotationText } from '@waveform-playlist/annotations';
 import type {
-  RenderAnnotationItemProps,
+  AnnotationData,
   AnnotationAction,
   AnnotationActionOptions,
-} from '@waveform-playlist/annotations';
+  RenderAnnotationItemProps,
+} from '@waveform-playlist/core';
+import { useAnnotationIntegration } from '../AnnotationIntegrationContext';
 import { usePlaylistState, usePlaylistControls } from '../WaveformPlaylistContext';
-import type { AnnotationData, OnAnnotationUpdateFn } from '../types/annotations';
+import type { OnAnnotationUpdateFn } from '../types/annotations';
 
-export type { RenderAnnotationItemProps, AnnotationAction, AnnotationActionOptions } from '@waveform-playlist/annotations';
 export type { OnAnnotationUpdateFn } from '../types/annotations';
 
 export interface PlaylistAnnotationListProps {
@@ -43,8 +43,8 @@ export interface PlaylistAnnotationListProps {
 /**
  * Standalone annotation text list component for WaveformPlaylistProvider (WebAudio).
  *
- * Reads annotations and playback state from context and renders AnnotationText
- * unconditionally (even when annotations are empty).
+ * Requires @waveform-playlist/annotations with AnnotationProvider.
+ * Throws if used without `<AnnotationProvider>` wrapping the component tree.
  */
 export const PlaylistAnnotationList: React.FC<PlaylistAnnotationListProps> = ({
   height,
@@ -62,6 +62,7 @@ export const PlaylistAnnotationList: React.FC<PlaylistAnnotationListProps> = ({
     linkEndpoints,
     continuousPlay,
   } = usePlaylistState();
+  const integration = useAnnotationIntegration();
   const { setAnnotations } = usePlaylistControls();
 
   const resolvedConfig = annotationListConfig ?? { linkEndpoints, continuousPlay };
@@ -70,6 +71,8 @@ export const PlaylistAnnotationList: React.FC<PlaylistAnnotationListProps> = ({
     setAnnotations(updatedAnnotations);
     onAnnotationUpdate?.(updatedAnnotations);
   }, [setAnnotations, onAnnotationUpdate]);
+
+  const { AnnotationText } = integration;
 
   return (
     <AnnotationText

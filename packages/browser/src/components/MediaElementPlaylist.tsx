@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useContext, useRef, useState, useCallback } from 'react';
 import { DndContext } from '@dnd-kit/core';
 import { restrictToHorizontalAxis } from '@dnd-kit/modifiers';
 import {
@@ -13,10 +13,7 @@ import {
   useTheme,
   waveformColorToCss,
 } from '@waveform-playlist/ui-components';
-import {
-  AnnotationBoxesWrapper,
-  AnnotationBox,
-} from '@waveform-playlist/annotations';
+import { AnnotationIntegrationContext } from '../AnnotationIntegrationContext';
 import type { Peaks } from '@waveform-playlist/webaudio-peaks';
 import {
   useMediaElementAnimation,
@@ -68,6 +65,7 @@ export const MediaElementPlaylist: React.FC<MediaElementPlaylistProps> = ({
   // MediaElement context hooks
   const { isPlaying, currentTimeRef } = useMediaElementAnimation();
   const { annotations, activeAnnotationId } = useMediaElementState();
+  const annotationIntegration = useContext(AnnotationIntegrationContext);
   const { play, seekTo, setActiveAnnotationId, setAnnotations, setScrollContainer } = useMediaElementControls();
   const {
     duration,
@@ -274,14 +272,14 @@ export const MediaElementPlaylist: React.FC<MediaElementPlaylistProps> = ({
                 </TrackControlsContext.Provider>
               );
             })}
-            {annotations.length > 0 && (
+            {annotations.length > 0 && annotationIntegration && (
               <DndContext
                 onDragStart={onDragStart}
                 onDragMove={onDragMove}
                 onDragEnd={onDragEnd}
                 modifiers={editable ? [restrictToHorizontalAxis] : []}
               >
-                <AnnotationBoxesWrapper height={30} width={tracksFullWidth}>
+                <annotationIntegration.AnnotationBoxesWrapper height={30} width={tracksFullWidth}>
                   {annotations.map((annotation, index) => {
                     const startPosition = (annotation.start * sampleRate) / samplesPerPixel;
                     const endPosition = (annotation.end * sampleRate) / samplesPerPixel;
@@ -289,7 +287,7 @@ export const MediaElementPlaylist: React.FC<MediaElementPlaylistProps> = ({
                       ? getAnnotationBoxLabel(annotation, index)
                       : annotation.id;
                     return (
-                      <AnnotationBox
+                      <annotationIntegration.AnnotationBox
                         key={annotation.id}
                         annotationId={annotation.id}
                         annotationIndex={index}
@@ -303,7 +301,7 @@ export const MediaElementPlaylist: React.FC<MediaElementPlaylistProps> = ({
                       />
                     );
                   })}
-                </AnnotationBoxesWrapper>
+                </annotationIntegration.AnnotationBoxesWrapper>
               </DndContext>
             )}
             {selectionStart !== selectionEnd && (

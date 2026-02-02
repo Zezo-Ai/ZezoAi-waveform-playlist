@@ -1,15 +1,12 @@
 import React from 'react';
-import type { RenderAnnotationItemProps } from '@waveform-playlist/annotations';
+import type { RenderAnnotationItemProps } from '@waveform-playlist/core';
 import { useMediaElementState } from '../MediaElementPlaylistContext';
-import type { GetAnnotationBoxLabelFn, OnAnnotationUpdateFn, AnnotationData } from '../types/annotations';
+import type { GetAnnotationBoxLabelFn, OnAnnotationUpdateFn } from '../types/annotations';
 import { MediaElementPlaylist } from './MediaElementPlaylist';
 import { MediaElementAnnotationList } from './MediaElementAnnotationList';
 
-// Re-export RenderAnnotationItemProps for convenience
-export type { RenderAnnotationItemProps } from '@waveform-playlist/annotations';
-
 // Re-export annotation types for convenience
-export type { GetAnnotationBoxLabelFn, OnAnnotationUpdateFn, AnnotationData } from '../types/annotations';
+export type { GetAnnotationBoxLabelFn, OnAnnotationUpdateFn } from '../types/annotations';
 
 export interface MediaElementWaveformProps {
   /** Height in pixels for the annotation text list */

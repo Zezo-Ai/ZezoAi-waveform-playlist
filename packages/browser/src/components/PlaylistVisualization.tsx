@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo, type ReactNode, useCallback } from 'react';
+import React, { useContext, useRef, useState, useMemo, type ReactNode, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { getContext } from 'tone';
 import {
@@ -26,18 +26,15 @@ import {
   type RenderPlayheadFunction,
   SpectrogramLabels,
 } from '@waveform-playlist/ui-components';
-import {
-  AnnotationBoxesWrapper,
-  AnnotationBox,
-} from '@waveform-playlist/annotations';
-import type { AnnotationAction } from '@waveform-playlist/annotations';
+import { AnnotationIntegrationContext } from '../AnnotationIntegrationContext';
 import { usePlaybackAnimation, usePlaylistState, usePlaylistControls, usePlaylistData } from '../WaveformPlaylistContext';
 import type { Peaks } from '@waveform-playlist/webaudio-peaks';
 import { AnimatedPlayhead } from './AnimatedPlayhead';
 import { ChannelWithProgress } from './ChannelWithProgress';
 import type { SpectrogramConfig } from '@waveform-playlist/core';
+import type { AnnotationAction } from '@waveform-playlist/core';
 import type { AnnotationData, GetAnnotationBoxLabelFn } from '../types/annotations';
-import { useSpectrogramIntegration } from '../SpectrogramIntegrationContext';
+import { SpectrogramIntegrationContext } from '../SpectrogramIntegrationContext';
 
 // Default duration in seconds for empty tracks (used for recording workflow)
 const DEFAULT_EMPTY_TRACK_DURATION = 60;
@@ -116,6 +113,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
     loopEnd,
     isLoopEnabled,
   } = usePlaylistState();
+  const annotationIntegration = useContext(AnnotationIntegrationContext);
   const {
     setAnnotations,
     setActiveAnnotationId,
@@ -148,7 +146,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
   } = usePlaylistData();
 
   // Optional spectrogram integration (only available when SpectrogramProvider is present)
-  const spectrogram = useSpectrogramIntegration();
+  const spectrogram = useContext(SpectrogramIntegrationContext);
 
   // Per-track spectrogram rendering helpers (memoized) — only computed when spectrogram is available
   const perTrackSpectrogramHelpers = useMemo(() => {
@@ -583,8 +581,8 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                   </TrackControlsContext.Provider>
                 );
               })}
-              {annotations.length > 0 && (
-                <AnnotationBoxesWrapper height={30} width={tracksFullWidth}>
+              {annotations.length > 0 && annotationIntegration && (
+                <annotationIntegration.AnnotationBoxesWrapper height={30} width={tracksFullWidth}>
                   {annotations.map((annotation, index) => {
                     const startPosition = (annotation.start * sampleRate) / samplesPerPixel;
                     const endPosition = (annotation.end * sampleRate) / samplesPerPixel;
@@ -592,7 +590,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                       ? getAnnotationBoxLabel(annotation, index)
                       : annotation.id;
                     return (
-                      <AnnotationBox
+                      <annotationIntegration.AnnotationBox
                         key={annotation.id}
                         annotationId={annotation.id}
                         annotationIndex={index}
@@ -606,7 +604,7 @@ export const PlaylistVisualization: React.FC<PlaylistVisualizationProps> = ({
                       />
                     );
                   })}
-                </AnnotationBoxesWrapper>
+                </annotationIntegration.AnnotationBoxesWrapper>
               )}
               {selectionStart !== selectionEnd && (
                 <Selection
