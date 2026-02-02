@@ -98,6 +98,7 @@ export const SmartChannel: FunctionComponent<SmartChannelProps> = ({
       <>
         <SpectrogramChannel
           index={props.index * 2}
+          channelIndex={props.index}
           data={spectrogramData}
           length={props.length}
           waveHeight={halfHeight}

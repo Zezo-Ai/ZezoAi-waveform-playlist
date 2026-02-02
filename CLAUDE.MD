@@ -287,6 +287,10 @@ interface AudioClip {
 - Switch between `defaultTheme` and `darkTheme` based on Docusaurus mode
 - Example: `minimal-app.tsx` detects and responds to theme toggle
 
+### SpectrogramChannel Index vs ChannelIndex
+
+**`SpectrogramChannel`** has two index concerns: `index` (CSS positioning via Wrapper `top` offset) and `channelIndex` (canvas ID construction for worker registration, e.g. `clipId-ch{channelIndex}-chunk0`). In "both" mode, `SmartChannel` passes `index={props.index * 2}` for layout interleaving but `channelIndex={props.index}` for correct canvas identity. When `channelIndex` is omitted it defaults to `index`. Never use the visual `index` for canvas IDs — the worker and SpectrogramProvider registry expect sequential audio channel indices (0, 1).
+
 ### Integration Context Pattern (Spectrogram, Annotations)
 
 **Pattern:** Browser package defines an interface + context, optional packages provide implementation via a Provider component. Used by both `@waveform-playlist/spectrogram` (SpectrogramIntegrationContext) and `@waveform-playlist/annotations` (AnnotationIntegrationContext).

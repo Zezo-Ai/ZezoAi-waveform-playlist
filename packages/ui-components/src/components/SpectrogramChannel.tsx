@@ -58,8 +58,10 @@ export interface SpectrogramWorkerCanvasApi {
 }
 
 export interface SpectrogramChannelProps {
-  /** Channel index (0 = first, 1 = second, etc.) */
+  /** Visual position index — used for CSS positioning (top offset). */
   index: number;
+  /** Audio channel index for canvas ID construction. Defaults to `index` when omitted. */
+  channelIndex?: number;
   /** Computed spectrogram data (not needed when workerApi is provided) */
   data?: SpectrogramData;
   /** Width in CSS pixels */
@@ -88,6 +90,7 @@ export interface SpectrogramChannelProps {
 
 export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
   index,
+  channelIndex: channelIndexProp,
   data,
   length,
   waveHeight,
@@ -101,6 +104,7 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
   clipId,
   onCanvasesReady,
 }) => {
+  const channelIndex = channelIndexProp ?? index;
   const canvasesRef = useRef<HTMLCanvasElement[]>([]);
   const registeredIdsRef = useRef<string[]>([]);
   const transferredCanvasesRef = useRef<WeakSet<HTMLCanvasElement>>(new WeakSet());
@@ -135,7 +139,7 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
       // Skip canvases that have already been transferred to the worker
       if (transferredCanvasesRef.current.has(canvas)) continue;
 
-      const canvasId = `${clipId}-ch${index}-chunk${i}`;
+      const canvasId = `${clipId}-ch${channelIndex}-chunk${i}`;
 
       try {
         const offscreen = canvas.transferControlToOffscreen();
@@ -163,7 +167,7 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
     };
   // Re-run when canvas keys change (length changes cause remount via key prop)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isWorkerMode, clipId, index, length]);
+  }, [isWorkerMode, clipId, channelIndex, length]);
 
   const lut = colorLUT ?? defaultGetColorMap();
   const maxF = maxFrequency ?? (data ? data.sampleRate / 2 : 22050);
