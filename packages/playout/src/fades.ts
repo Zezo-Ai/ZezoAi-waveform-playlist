@@ -5,6 +5,23 @@
  * using various curve types.
  */
 
+/**
+ * Access the underlying Web Audio AudioParam from a Tone.js Signal/Param wrapper.
+ *
+ * Tone.js wraps native AudioParam in its Signal class, but sometimes we need
+ * direct access to the raw AudioParam for setValueAtTime/cancelScheduledValues
+ * (e.g., when the AudioContext is suspended and Tone.js Signal doesn't propagate).
+ *
+ * This uses `_param` which is a private Tone.js 15.x internal.
+ * Pin the Tone.js version carefully if upgrading.
+ *
+ * @param signal - A Tone.js Signal or Param wrapper (e.g., `gain.gain`)
+ * @returns The underlying AudioParam, or undefined if not found
+ */
+export function getUnderlyingAudioParam(signal: unknown): AudioParam | undefined {
+  return (signal as { _param?: AudioParam })._param;
+}
+
 export type FadeType = 'linear' | 'logarithmic' | 'exponential' | 'sCurve';
 
 /**

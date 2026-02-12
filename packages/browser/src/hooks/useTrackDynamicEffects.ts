@@ -9,6 +9,7 @@ import {
   createEffectInstance,
   type EffectInstance,
 } from '../effects/effectFactory';
+import { Gain, ToneAudioNode } from 'tone';
 
 export interface TrackActiveEffect {
   instanceId: string;
@@ -67,8 +68,8 @@ export function useTrackDynamicEffects(): UseTrackDynamicEffectsReturn {
     Map<
       string,
       {
-        graphEnd: any;
-        masterGainNode: any;
+        graphEnd: Gain;
+        masterGainNode: ToneAudioNode;
       }
     >
   >(new Map());
@@ -99,7 +100,7 @@ export function useTrackDynamicEffects(): UseTrackDynamicEffectsReturn {
       graphEnd.connect(masterGainNode);
     } else {
       // Connect: graphEnd -> effect1 -> effect2 -> ... -> masterGainNode
-      let currentNode: any = graphEnd;
+      let currentNode: ToneAudioNode = graphEnd;
 
       instances.forEach((inst) => {
         try {
@@ -284,7 +285,7 @@ export function useTrackDynamicEffects(): UseTrackDynamicEffectsReturn {
           graphEnd.connect(masterGainNode);
         } else {
           // Connect: graphEnd -> effect1 -> effect2 -> ... -> masterGainNode
-          let currentNode: any = graphEnd;
+          let currentNode: ToneAudioNode = graphEnd;
 
           instances.forEach((inst) => {
             currentNode.connect(inst.effect);
@@ -337,7 +338,7 @@ export function useTrackDynamicEffects(): UseTrackDynamicEffectsReturn {
       }
 
       // Return a function that creates fresh effect instances
-      return (graphEnd: any, masterGainNode: any, _isOffline: boolean) => {
+      return (graphEnd: Gain, masterGainNode: ToneAudioNode, _isOffline: boolean) => {
         // Create fresh effect instances for offline context
         const offlineInstances: EffectInstance[] = [];
 
@@ -351,7 +352,7 @@ export function useTrackDynamicEffects(): UseTrackDynamicEffectsReturn {
           graphEnd.connect(masterGainNode);
         } else {
           // Connect: graphEnd -> effect1 -> effect2 -> ... -> masterGainNode
-          let currentNode: any = graphEnd;
+          let currentNode: ToneAudioNode = graphEnd;
 
           offlineInstances.forEach((inst) => {
             currentNode.connect(inst.effect);

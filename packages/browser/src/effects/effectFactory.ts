@@ -22,43 +22,50 @@ import {
   Limiter,
   Gate,
   StereoWidener,
+  ToneAudioNode,
 } from 'tone';
+import type { InputNode } from 'tone';
 import type { EffectDefinition } from './effectDefinitions';
 
 // Type for effect instance with common methods
 export interface EffectInstance {
-  effect: any; // Tone.js effect instance
+  effect: ToneAudioNode; // Tone.js effect instance
   id: string;
   instanceId: string;
   dispose: () => void;
   setParameter: (name: string, value: number | string | boolean) => void;
   getParameter: (name: string) => number | string | boolean | undefined;
-  connect: (destination: any) => void;
+  connect: (destination: InputNode) => void;
   disconnect: () => void;
 }
 
+// Each Tone.js effect constructor accepts different option types (ReverbOptions,
+// ChorusOptions, etc.) but all produce ToneAudioNode subclasses. We use a
+// permissive constructor signature to unify them in a single lookup map.
+type EffectConstructor = new (options?: Record<string, number | string | boolean>) => ToneAudioNode;
+
 // Map of effect IDs to their Tone.js constructors
-const effectConstructors: Record<string, new (options?: any) => any> = {
-  reverb: Reverb,
-  freeverb: Freeverb,
-  jcReverb: JCReverb,
-  feedbackDelay: FeedbackDelay,
-  pingPongDelay: PingPongDelay,
-  chorus: Chorus,
-  phaser: Phaser,
-  tremolo: Tremolo,
-  vibrato: Vibrato,
-  autoPanner: AutoPanner,
-  autoFilter: AutoFilter,
-  autoWah: AutoWah,
-  eq3: EQ3,
-  distortion: Distortion,
-  bitCrusher: BitCrusher,
-  chebyshev: Chebyshev,
-  compressor: Compressor,
-  limiter: Limiter,
-  gate: Gate,
-  stereoWidener: StereoWidener,
+const effectConstructors: Record<string, EffectConstructor> = {
+  reverb: Reverb as unknown as EffectConstructor,
+  freeverb: Freeverb as unknown as EffectConstructor,
+  jcReverb: JCReverb as unknown as EffectConstructor,
+  feedbackDelay: FeedbackDelay as unknown as EffectConstructor,
+  pingPongDelay: PingPongDelay as unknown as EffectConstructor,
+  chorus: Chorus as unknown as EffectConstructor,
+  phaser: Phaser as unknown as EffectConstructor,
+  tremolo: Tremolo as unknown as EffectConstructor,
+  vibrato: Vibrato as unknown as EffectConstructor,
+  autoPanner: AutoPanner as unknown as EffectConstructor,
+  autoFilter: AutoFilter as unknown as EffectConstructor,
+  autoWah: AutoWah as unknown as EffectConstructor,
+  eq3: EQ3 as unknown as EffectConstructor,
+  distortion: Distortion as unknown as EffectConstructor,
+  bitCrusher: BitCrusher as unknown as EffectConstructor,
+  chebyshev: Chebyshev as unknown as EffectConstructor,
+  compressor: Compressor as unknown as EffectConstructor,
+  limiter: Limiter as unknown as EffectConstructor,
+  gate: Gate as unknown as EffectConstructor,
+  stereoWidener: StereoWidener as unknown as EffectConstructor,
 };
 
 // Generate unique instance ID
@@ -80,7 +87,7 @@ export function createEffectInstance(
   }
 
   // Build initial options from definition defaults and any overrides
-  const options: Record<string, any> = {};
+  const options: Record<string, number | string | boolean> = {};
   definition.parameters.forEach((param) => {
     const value = initialParams?.[param.name] ?? param.default;
     options[param.name] = value;
@@ -89,6 +96,11 @@ export function createEffectInstance(
   // Create the effect instance
   const effect = new Constructor(options);
   const instanceId = generateInstanceId();
+
+  // Dynamic property access on Tone.js effects for parameter get/set.
+  // Each effect type (Reverb, Chorus, EQ3, etc.) exposes different parameters as
+  // properties or Signals. We cast to a record type for safe dynamic access.
+  const effectRecord = effect as unknown as Record<string, { value?: unknown } | unknown>;
 
   return {
     effect,
@@ -106,32 +118,42 @@ export function createEffectInstance(
 
     setParameter(name: string, value: number | string | boolean) {
       // Handle special cases for different effect types
-      if (name === 'wet' && effect.wet) {
-        effect.wet.value = value as number;
-      } else if (effect[name] !== undefined) {
+      const prop = effectRecord[name];
+      if (name === 'wet') {
+        const wetProp = effectRecord['wet'] as { value?: number } | undefined;
+        if (wetProp && typeof wetProp === 'object' && 'value' in wetProp) {
+          wetProp.value = value as number;
+          return;
+        }
+      }
+      if (prop !== undefined) {
         // Check if it's a Tone.js Signal (has .value property)
-        if (effect[name]?.value !== undefined) {
-          effect[name].value = value;
+        if (prop && typeof prop === 'object' && 'value' in prop) {
+          (prop as { value: unknown }).value = value;
         } else {
-          effect[name] = value;
+          effectRecord[name] = value;
         }
       }
     },
 
     getParameter(name: string): number | string | boolean | undefined {
-      if (name === 'wet' && effect.wet) {
-        return effect.wet.value;
-      }
-      if (effect[name] !== undefined) {
-        if (effect[name]?.value !== undefined) {
-          return effect[name].value;
+      if (name === 'wet') {
+        const wetProp = effectRecord['wet'] as { value?: number } | undefined;
+        if (wetProp && typeof wetProp === 'object' && 'value' in wetProp) {
+          return wetProp.value;
         }
-        return effect[name];
+      }
+      const prop = effectRecord[name];
+      if (prop !== undefined) {
+        if (prop && typeof prop === 'object' && 'value' in prop) {
+          return (prop as { value: unknown }).value as number | string | boolean;
+        }
+        return prop as number | string | boolean;
       }
       return undefined;
     },
 
-    connect(destination: any) {
+    connect(destination: InputNode) {
       effect.connect(destination);
     },
 
@@ -151,8 +173,8 @@ export function createEffectInstance(
 export function createEffectChain(
   effects: EffectInstance[]
 ): {
-  input: any;
-  output: any;
+  input: ToneAudioNode;
+  output: ToneAudioNode;
   dispose: () => void;
 } {
   if (effects.length === 0) {

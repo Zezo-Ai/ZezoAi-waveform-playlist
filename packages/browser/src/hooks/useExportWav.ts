@@ -6,6 +6,14 @@ import { encodeWav, downloadBlob, type WavEncoderOptions } from '../utils/wavEnc
 /** Function type for per-track effects (same as in @waveform-playlist/core) */
 export type TrackEffectsFunction = (graphEnd: unknown, destination: unknown, isOffline: boolean) => void | (() => void);
 
+/**
+ * Access the underlying Web Audio AudioParam from a Tone.js Signal/Param wrapper.
+ * Tone.js wraps native AudioParam via its Signal class; `_param` is a private Tone.js 15.x internal.
+ */
+function getUnderlyingAudioParam(signal: unknown): AudioParam | undefined {
+  return (signal as { _param?: AudioParam })._param;
+}
+
 export interface ExportOptions extends WavEncoderOptions {
   /** Filename for download (without extension) */
   filename?: string;
@@ -303,18 +311,22 @@ async function renderWithToneEffects(
           if (fadeIn) {
             const fadeInStart = startTime;
             const fadeInEnd = startTime + fadeIn.duration;
-            const audioParam = (fadeGain.gain as any)._param as AudioParam;
-            // Set initial value to 0
-            audioParam.setValueAtTime(0, fadeInStart);
-            audioParam.linearRampToValueAtTime(clipGain, fadeInEnd);
+            const audioParam = getUnderlyingAudioParam(fadeGain.gain);
+            if (audioParam) {
+              // Set initial value to 0
+              audioParam.setValueAtTime(0, fadeInStart);
+              audioParam.linearRampToValueAtTime(clipGain, fadeInEnd);
+            }
           }
 
           if (fadeOut) {
             const fadeOutStart = startTime + clipDuration - fadeOut.duration;
             const fadeOutEnd = startTime + clipDuration;
-            const audioParam = (fadeGain.gain as any)._param as AudioParam;
-            audioParam.setValueAtTime(clipGain, fadeOutStart);
-            audioParam.linearRampToValueAtTime(0, fadeOutEnd);
+            const audioParam = getUnderlyingAudioParam(fadeGain.gain);
+            if (audioParam) {
+              audioParam.setValueAtTime(clipGain, fadeOutStart);
+              audioParam.linearRampToValueAtTime(0, fadeOutEnd);
+            }
           }
 
           // Schedule the player to start

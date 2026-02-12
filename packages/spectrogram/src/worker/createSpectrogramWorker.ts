@@ -57,6 +57,14 @@ type ComputeResponse =
   | { id: string; type: 'done' }
   | { id: string; type: 'error'; error: string };
 
+/** Union of all values that worker resolve callbacks receive. */
+type PendingResolveValue = SpectrogramData[] | { cacheKey: string } | undefined;
+
+interface PendingEntry {
+  resolve: (value: PendingResolveValue) => void;
+  reject: (reason: unknown) => void;
+}
+
 export interface SpectrogramWorkerApi {
   compute(params: SpectrogramWorkerComputeParams): Promise<SpectrogramData[]>;
   computeFFT(params: SpectrogramWorkerFFTParams): Promise<{ cacheKey: string }>;
@@ -84,10 +92,7 @@ let idCounter = 0;
  * ```
  */
 export function createSpectrogramWorker(worker: Worker): SpectrogramWorkerApi {
-  const pending = new Map<string, {
-    resolve: (value: any) => void;
-    reject: (reason: unknown) => void;
-  }>();
+  const pending = new Map<string, PendingEntry>();
 
   // Track which clipIds have pre-registered audio data in the worker
   const registeredClipIds = new Set<string>();
@@ -131,7 +136,7 @@ export function createSpectrogramWorker(worker: Worker): SpectrogramWorkerApi {
       const id = String(++idCounter);
 
       return new Promise<SpectrogramData[]>((resolve, reject) => {
-        pending.set(id, { resolve, reject });
+        pending.set(id, { resolve: resolve as PendingEntry['resolve'], reject });
 
         // Slice channel data so we can transfer without detaching the original AudioBuffer views
         const transferableArrays = params.channelDataArrays.map(arr => arr.slice());
@@ -157,7 +162,7 @@ export function createSpectrogramWorker(worker: Worker): SpectrogramWorkerApi {
       const id = String(++idCounter);
 
       return new Promise<{ cacheKey: string }>((resolve, reject) => {
-        pending.set(id, { resolve, reject });
+        pending.set(id, { resolve: resolve as PendingEntry['resolve'], reject });
 
         // Skip transfer if audio data is pre-registered in the worker
         const isPreRegistered = registeredClipIds.has(params.clipId);
@@ -187,7 +192,7 @@ export function createSpectrogramWorker(worker: Worker): SpectrogramWorkerApi {
       const id = String(++idCounter);
 
       return new Promise<void>((resolve, reject) => {
-        pending.set(id, { resolve, reject });
+        pending.set(id, { resolve: resolve as PendingEntry['resolve'], reject });
 
         worker.postMessage({
           type: 'render-chunks',
@@ -241,7 +246,7 @@ export function createSpectrogramWorker(worker: Worker): SpectrogramWorkerApi {
       const id = String(++idCounter);
 
       return new Promise<void>((resolve, reject) => {
-        pending.set(id, { resolve, reject });
+        pending.set(id, { resolve: resolve as PendingEntry['resolve'], reject });
 
         const transferableArrays = params.channelDataArrays.map(arr => arr.slice());
         const transferables: Transferable[] = transferableArrays.map(arr => arr.buffer);

@@ -9,7 +9,7 @@ import {
   createEffectInstance,
   type EffectInstance,
 } from '../effects/effectFactory';
-import { Analyser } from 'tone';
+import { Analyser, Volume, ToneAudioNode } from 'tone';
 
 export interface ActiveEffect {
   instanceId: string;
@@ -42,7 +42,7 @@ export interface UseDynamicEffectsReturn {
   createOfflineEffectsFunction: () => EffectsFunction | undefined;
 
   // Analyser for visualization
-  analyserRef: React.RefObject<any>;
+  analyserRef: React.RefObject<Analyser | null>;
 }
 
 /**
@@ -60,13 +60,13 @@ export function useDynamicEffects(fftSize: number = 256): UseDynamicEffectsRetur
   const effectInstancesRef = useRef<Map<string, EffectInstance>>(new Map());
 
   // Analyser for visualization
-  const analyserRef = useRef<any>(null);
+  const analyserRef = useRef<Analyser | null>(null);
 
   // Reference to the current audio graph nodes
   const graphNodesRef = useRef<{
-    masterGainNode: any;
-    destination: any;
-    analyserNode: any;
+    masterGainNode: Volume;
+    destination: ToneAudioNode;
+    analyserNode: Analyser;
   } | null>(null);
 
   // Rebuild the effect chain when effects change
@@ -95,7 +95,7 @@ export function useDynamicEffects(fftSize: number = 256): UseDynamicEffectsRetur
       analyserNode.connect(destination);
     } else {
       // Connect: masterGain -> effect1 -> effect2 -> ... -> analyser -> destination
-      let currentNode: any = masterGainNode;
+      let currentNode: ToneAudioNode = masterGainNode;
 
       instances.forEach((inst) => {
         try {
@@ -254,7 +254,7 @@ export function useDynamicEffects(fftSize: number = 256): UseDynamicEffectsRetur
         analyserNode.connect(destination);
       } else {
         // Connect: masterGain -> effect1 -> effect2 -> ... -> analyser -> destination
-        let currentNode: any = masterGainNode;
+        let currentNode: ToneAudioNode = masterGainNode;
 
         instances.forEach((inst) => {
           currentNode.connect(inst.effect);
@@ -297,7 +297,7 @@ export function useDynamicEffects(fftSize: number = 256): UseDynamicEffectsRetur
     }
 
     // Return a function that creates fresh effect instances
-    return (masterGainNode: any, destination: any, _isOffline: boolean) => {
+    return (masterGainNode: Volume, destination: ToneAudioNode, _isOffline: boolean) => {
       // Create fresh effect instances for offline context
       const offlineInstances: EffectInstance[] = [];
 
@@ -311,7 +311,7 @@ export function useDynamicEffects(fftSize: number = 256): UseDynamicEffectsRetur
         masterGainNode.connect(destination);
       } else {
         // Connect: masterGain -> effect1 -> effect2 -> ... -> destination
-        let currentNode: any = masterGainNode;
+        let currentNode: ToneAudioNode = masterGainNode;
 
         offlineInstances.forEach((inst) => {
           currentNode.connect(inst.effect);

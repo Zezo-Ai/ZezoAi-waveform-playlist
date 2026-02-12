@@ -10,6 +10,7 @@ import {
 } from '@waveform-playlist/browser';
 import type { KeyboardShortcut } from '@waveform-playlist/browser';
 import { BaseButton, BaseSlider, BaseSelect } from '../styled';
+import type { TimeFormat } from '../utils/timeFormat';
 
 /**
  * Hook Testing Harness
@@ -58,7 +59,7 @@ const TimeFormatDemo: React.FC = () => {
         <label style={{ display: 'block', marginBottom: '0.5rem' }}>Format:</label>
         <BaseSelect
           value={timeFormat}
-          onChange={(e) => setTimeFormat(e.target.value as any)}
+          onChange={(e) => setTimeFormat(e.target.value as TimeFormat)}
           style={{ width: '200px' }}
         >
           <option value="seconds">Seconds</option>

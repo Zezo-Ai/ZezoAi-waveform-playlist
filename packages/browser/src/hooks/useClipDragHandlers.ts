@@ -1,5 +1,5 @@
 import React from 'react';
-import type { DragEndEvent } from '@dnd-kit/core';
+import type { DragEndEvent, DragStartEvent, DragMoveEvent, Modifier } from '@dnd-kit/core';
 import type { ClipTrack } from '@waveform-playlist/core';
 
 interface UseClipDragHandlersOptions {
@@ -51,7 +51,7 @@ export function useClipDragHandlers({
 
   // Custom modifier for real-time collision detection during clip movement
   const collisionModifier = React.useCallback(
-    (args: { transform: { x: number; y: number }; active: any }) => {
+    (args: Parameters<Modifier>[0]) => {
       const { transform, active } = args;
 
       if (!active?.data?.current) return { ...transform, scaleX: 1, scaleY: 1 };
@@ -123,7 +123,7 @@ export function useClipDragHandlers({
   );
 
   const onDragStart = React.useCallback(
-    (event: { active: any }) => {
+    (event: DragStartEvent) => {
       const { active } = event;
       const { boundary } = active.data.current as { boundary?: 'left' | 'right' };
 
@@ -156,7 +156,7 @@ export function useClipDragHandlers({
   );
 
   const onDragMove = React.useCallback(
-    (event: { active: any; delta: { x: number; y: number } }) => {
+    (event: DragMoveEvent) => {
       const { active, delta } = event;
 
       // Only update for boundary trimming operations (not clip movement)

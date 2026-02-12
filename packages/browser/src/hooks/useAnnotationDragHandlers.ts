@@ -1,4 +1,5 @@
 import React from 'react';
+import type { DragStartEvent, DragMoveEvent } from '@dnd-kit/core';
 import type { AnnotationData } from '@waveform-playlist/core';
 
 const LINK_THRESHOLD = 0.01; // Consider edges "linked" if within 10ms
@@ -57,7 +58,7 @@ export function useAnnotationDragHandlers({
   } | null>(null);
 
   const onDragStart = React.useCallback(
-    (event: { active: any }) => {
+    (event: DragStartEvent) => {
       const { active } = event;
       const data = active.data.current as {
         annotationId: string;
@@ -83,7 +84,7 @@ export function useAnnotationDragHandlers({
   );
 
   const onDragMove = React.useCallback(
-    (event: { active: any; delta: { x: number; y: number } }) => {
+    (event: DragMoveEvent) => {
       const { active, delta } = event;
 
       if (!originalAnnotationStateRef.current) {

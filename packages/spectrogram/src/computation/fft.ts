@@ -3,10 +3,10 @@ import FFT from 'fft.js';
 /**
  * Cache fft.js instances per size (pre-computes twiddle factors).
  */
-const fftInstances = new Map<number, any>();
-const complexBuffers = new Map<number, any>();
+const fftInstances = new Map<number, FFT>();
+const complexBuffers = new Map<number, number[]>();
 
-function getFftInstance(size: number): any {
+function getFftInstance(size: number): FFT {
   let instance = fftInstances.get(size);
   if (!instance) {
     instance = new FFT(size);
@@ -16,8 +16,12 @@ function getFftInstance(size: number): any {
   return instance;
 }
 
-function getComplexBuffer(size: number): any {
-  return complexBuffers.get(size);
+function getComplexBuffer(size: number): number[] {
+  const buffer = complexBuffers.get(size);
+  if (!buffer) {
+    throw new Error(`No complex buffer for size ${size}. Call getFftInstance first.`);
+  }
+  return buffer;
 }
 
 /**

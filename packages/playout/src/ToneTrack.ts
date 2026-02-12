@@ -9,7 +9,7 @@ import {
   now,
 } from 'tone';
 import { Track, type Fade } from '@waveform-playlist/core';
-import { applyFadeIn, applyFadeOut } from './fades';
+import { applyFadeIn, applyFadeOut, getUnderlyingAudioParam } from './fades';
 
 // Effects function no longer receives ToneLib - effects should import Tone themselves
 export type TrackEffectsFunction = (graphEnd: Gain, masterGainNode: ToneAudioNode, isOffline: boolean) => void | (() => void);
@@ -117,7 +117,8 @@ export class ToneTrack {
    */
   private scheduleFades(clipPlayer: ClipPlayer, clipStartTime: number, clipOffset: number = 0): void {
     const { clipInfo, fadeGain } = clipPlayer;
-    const audioParam = (fadeGain.gain as any)._param as AudioParam;
+    const audioParam = getUnderlyingAudioParam(fadeGain.gain);
+    if (!audioParam) return;
 
     // Cancel any previous automation
     audioParam.cancelScheduledValues(0);
@@ -215,8 +216,8 @@ export class ToneTrack {
     // Signal wrapper doesn't propagate to the underlying AudioParam until the
     // context resumes, causing a brief audio glitch (e.g., all tracks audible
     // before solo muting takes effect).
-    const audioParam = (this.muteGain.gain as any)._param as AudioParam;
-    audioParam.setValueAtTime(value, 0);
+    const audioParam = getUnderlyingAudioParam(this.muteGain.gain);
+    audioParam?.setValueAtTime(value, 0);
     this.muteGain.gain.value = value;
   }
 
