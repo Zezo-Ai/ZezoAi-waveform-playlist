@@ -208,9 +208,9 @@ const config: Config = {
 
   themeConfig: {
     announcementBar: {
-      id: 'v6_release',
+      id: 'v7_release',
       content:
-        '🎉 <strong>v6 Released!</strong> — Recording, annotations &amp; spectrogram are now optional peer dependencies. <a href="/waveform-playlist/docs/getting-started/installation">Upgrade guide →</a>',
+        '🎉 <strong>v7 Released!</strong> — Removed combined context hook; use split hooks (usePlaylistData, usePlaylistControls, usePlaybackAnimation, usePlaylistState) for optimal performance. <a href="/waveform-playlist/docs/api/hooks">See hooks API →</a>',
       isCloseable: true,
     },
     // Social card image for Open Graph and Twitter
