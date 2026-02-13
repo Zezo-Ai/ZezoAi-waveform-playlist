@@ -1071,15 +1071,15 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   // Split context values for performance optimization
   // High-frequency updates (currentTime) isolated from other state
 
-  const animationValue: PlaybackAnimationContextValue = {
+  const animationValue: PlaybackAnimationContextValue = useMemo(() => ({
     isPlaying,
     currentTime,
     currentTimeRef,
     playbackStartTimeRef,
     audioStartPositionRef,
-  };
+  }), [isPlaying, currentTime, currentTimeRef, playbackStartTimeRef, audioStartPositionRef]);
 
-  const stateValue: PlaylistStateContextValue = {
+  const stateValue: PlaylistStateContextValue = useMemo(() => ({
     continuousPlay,
     linkEndpoints,
     annotationsEditable,
@@ -1092,18 +1092,24 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     selectedTrackId,
     loopStart,
     loopEnd,
-  };
+  }), [continuousPlay, linkEndpoints, annotationsEditable, isAutomaticScroll, isLoopEnabled, annotations, activeAnnotationId, selectionStart, selectionEnd, selectedTrackId, loopStart, loopEnd]);
 
-  const controlsValue: PlaylistControlsContextValue = {
+  const setCurrentTimeControl = useCallback((time: number) => {
+    currentTimeRef.current = time;
+    setCurrentTime(time);
+  }, [currentTimeRef]);
+
+  const setAutomaticScrollControl = useCallback((enabled: boolean) => {
+    setIsAutomaticScroll(enabled);
+  }, []);
+
+  const controlsValue: PlaylistControlsContextValue = useMemo(() => ({
     // Playback controls
     play,
     pause,
     stop,
     seekTo,
-    setCurrentTime: (time: number) => {
-      currentTimeRef.current = time;
-      setCurrentTime(time);
-    },
+    setCurrentTime: setCurrentTimeControl,
 
     // Track controls
     setTrackMute,
@@ -1127,9 +1133,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     setMasterVolume,
 
     // Automatic scroll
-    setAutomaticScroll: (enabled: boolean) => {
-      setIsAutomaticScroll(enabled);
-    },
+    setAutomaticScroll: setAutomaticScrollControl,
     setScrollContainer,
     scrollContainerRef,
 
@@ -1146,9 +1150,9 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     setLoopRegionFromSelection,
     clearLoopRegion,
 
-  };
+  }), [play, pause, stop, seekTo, setCurrentTimeControl, setTrackMute, setTrackSolo, setTrackVolume, setTrackPan, setSelection, setSelectedTrackId, setTimeFormat, formatTime, zoom.zoomIn, zoom.zoomOut, setMasterVolume, setAutomaticScrollControl, setScrollContainer, scrollContainerRef, setContinuousPlay, setLinkEndpoints, setAnnotationsEditable, setAnnotations, setActiveAnnotationId, setLoopEnabled, setLoopRegion, setLoopRegionFromSelection, clearLoopRegion]);
 
-  const dataValue: PlaylistDataContextValue = {
+  const dataValue: PlaylistDataContextValue = useMemo(() => ({
     duration,
     audioBuffers,
     peaksDataArray,
@@ -1170,15 +1174,15 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     progressBarWidth,
     isReady,
     mono,
-  };
+  }), [duration, audioBuffers, peaksDataArray, trackStates, tracks, sampleRate, waveHeight, timeScaleHeight, minimumPlaylistHeight, controls, playoutRef, samplesPerPixel, timeFormat, masterVolume, zoom.canZoomIn, zoom.canZoomOut, barWidth, barGap, progressBarWidth, isReady, mono]);
 
   // Combined value for backwards compatibility
-  const value: WaveformPlaylistContextValue = {
+  const value: WaveformPlaylistContextValue = useMemo(() => ({
     ...animationValue,
     ...stateValue,
     ...controlsValue,
     ...dataValue,
-  };
+  }), [animationValue, stateValue, controlsValue, dataValue]);
 
   // Merge user theme with default theme
   const mergedTheme = { ...defaultTheme, ...userTheme };
