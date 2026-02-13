@@ -24,6 +24,7 @@ export {
 export {
   applyFadeIn,
   applyFadeOut,
+  getUnderlyingAudioParam,
   type FadeConfig,
   type FadeType,
 } from './fades';

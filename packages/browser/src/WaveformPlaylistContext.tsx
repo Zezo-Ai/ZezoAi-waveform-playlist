@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
 import { ThemeProvider } from 'styled-components';
 import { TonePlayout, type EffectsFunction, type TrackEffectsFunction } from '@waveform-playlist/playout';
-import { type Track, type ClipTrack, type Fade } from '@waveform-playlist/core';
+import { type Track, type ClipTrack, type Fade, type AnnotationAction } from '@waveform-playlist/core';
 import { type TimeFormat, type WaveformPlaylistTheme, defaultTheme } from '@waveform-playlist/ui-components';
 import { getContext } from 'tone';
 import { generatePeaks } from './peaksUtil';
 
 import { extractPeaksFromWaveformData } from './waveformDataLoader';
+import type WaveformData from 'waveform-data';
 import type { PeakData } from '@waveform-playlist/webaudio-peaks';
 import type { AnnotationData } from '@waveform-playlist/core';
 import { useTimeFormat, useZoomControls, useMasterVolume } from './hooks';
@@ -73,7 +74,7 @@ export interface WaveformPlaylistContextValue {
   setSelection: (start: number, end: number) => void;
 
   // Time format
-  timeFormat: string;
+  timeFormat: TimeFormat;
   setTimeFormat: (format: TimeFormat) => void;
   formatTime: (seconds: number) => string;
 
@@ -201,7 +202,7 @@ export interface PlaylistDataContextValue {
   controls: { show: boolean; width: number };
   playoutRef: React.RefObject<TonePlayout | null>;
   samplesPerPixel: number;
-  timeFormat: string;
+  timeFormat: TimeFormat;
   masterVolume: number;
   canZoomIn: boolean;
   canZoomOut: boolean;
@@ -238,11 +239,11 @@ export interface WaveformPlaylistProviderProps {
     width: number;
   };
   annotationList?: {
-    annotations?: any[];
+    annotations?: AnnotationData[];
     editable?: boolean;
     isContinuousPlay?: boolean;
     linkEndpoints?: boolean;
-    controls?: any[];
+    controls?: AnnotationAction[];
   };
   effects?: EffectsFunction;
   onReady?: () => void;
@@ -286,7 +287,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const annotations = useMemo(() => {
     if (!annotationList?.annotations) return [];
     if (process.env.NODE_ENV !== 'production' && annotationList.annotations.length > 0) {
-      const first = annotationList.annotations[0] as Record<string, unknown>;
+      const first = annotationList.annotations[0] as unknown as Record<string, unknown>;
       if (typeof first.start !== 'number' || typeof first.end !== 'number') {
         console.error(
           '[waveform-playlist] Annotations must have numeric start/end values. ' +
@@ -296,7 +297,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         return [];
       }
     }
-    return annotationList.annotations as AnnotationData[];
+    return annotationList.annotations;
   }, [annotationList?.annotations]);
 
   // Ref for animation loop (avoids restarting loop on annotation change)
@@ -620,7 +621,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
           // Use waveform-data.js to resample and slice as needed
           // Pass sample values directly for accuracy
           const extractedPeaks = extractPeaksFromWaveformData(
-            clip.waveformData as any, // Cast to WaveformData type
+            clip.waveformData as WaveformData,
             samplesPerPixel,
             0, // channel index
             clip.offsetSamples,

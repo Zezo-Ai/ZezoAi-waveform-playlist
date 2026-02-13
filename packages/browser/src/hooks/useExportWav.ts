@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { ClipTrack, AudioClip, FadeType } from '@waveform-playlist/core';
-import type { EffectsFunction } from '@waveform-playlist/playout';
+import { type EffectsFunction, getUnderlyingAudioParam } from '@waveform-playlist/playout';
 import { encodeWav, downloadBlob, type WavEncoderOptions } from '../utils/wavEncoder';
 
 /** Function type for per-track effects (same as in @waveform-playlist/core) */
@@ -303,18 +303,22 @@ async function renderWithToneEffects(
           if (fadeIn) {
             const fadeInStart = startTime;
             const fadeInEnd = startTime + fadeIn.duration;
-            const audioParam = (fadeGain.gain as any)._param as AudioParam;
-            // Set initial value to 0
-            audioParam.setValueAtTime(0, fadeInStart);
-            audioParam.linearRampToValueAtTime(clipGain, fadeInEnd);
+            const audioParam = getUnderlyingAudioParam(fadeGain.gain);
+            if (audioParam) {
+              // Set initial value to 0
+              audioParam.setValueAtTime(0, fadeInStart);
+              audioParam.linearRampToValueAtTime(clipGain, fadeInEnd);
+            }
           }
 
           if (fadeOut) {
             const fadeOutStart = startTime + clipDuration - fadeOut.duration;
             const fadeOutEnd = startTime + clipDuration;
-            const audioParam = (fadeGain.gain as any)._param as AudioParam;
-            audioParam.setValueAtTime(clipGain, fadeOutStart);
-            audioParam.linearRampToValueAtTime(0, fadeOutEnd);
+            const audioParam = getUnderlyingAudioParam(fadeGain.gain);
+            if (audioParam) {
+              audioParam.setValueAtTime(clipGain, fadeOutStart);
+              audioParam.linearRampToValueAtTime(0, fadeOutEnd);
+            }
           }
 
           // Schedule the player to start

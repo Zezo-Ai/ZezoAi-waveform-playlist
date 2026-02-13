@@ -1,5 +1,15 @@
 import type { WaveformDataObject } from '@waveform-playlist/core';
 
+/**
+ * Extended HTMLAudioElement with vendor-prefixed preservesPitch properties.
+ * `preservesPitch` is standard; the `moz` and `webkit` prefixes are for older browsers.
+ */
+interface VendorPrefixedPitch {
+  preservesPitch?: boolean;
+  mozPreservesPitch?: boolean;
+  webkitPreservesPitch?: boolean;
+}
+
 export interface MediaElementTrackOptions {
   /** The audio source - can be a URL, Blob URL, or HTMLAudioElement */
   source: string | HTMLAudioElement;
@@ -60,14 +70,16 @@ export class MediaElementTrack {
 
     // Preserve pitch when changing playback rate (default in modern browsers)
     // Some older browsers may not support this, but it's the default behavior
+    // Vendor-prefixed properties are non-standard; cast once for type safety.
+    const audio = this.audioElement as unknown as VendorPrefixedPitch;
     if ('preservesPitch' in this.audioElement) {
-      (this.audioElement as any).preservesPitch = true;
+      audio.preservesPitch = true;
     } else if ('mozPreservesPitch' in this.audioElement) {
       // Firefox prefix
-      (this.audioElement as any).mozPreservesPitch = true;
+      audio.mozPreservesPitch = true;
     } else if ('webkitPreservesPitch' in this.audioElement) {
       // Safari prefix
-      (this.audioElement as any).webkitPreservesPitch = true;
+      audio.webkitPreservesPitch = true;
     }
 
     // Set up event listeners

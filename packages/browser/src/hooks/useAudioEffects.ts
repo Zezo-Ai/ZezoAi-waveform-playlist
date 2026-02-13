@@ -10,7 +10,7 @@ import { Analyser } from 'tone';
  * For more advanced effects (reverb, delay, filters, etc.), use useDynamicEffects instead.
  */
 export const useMasterAnalyser = (fftSize: number = 256) => {
-  const analyserRef = useRef<any>(null);
+  const analyserRef = useRef<Analyser | null>(null);
 
   const masterEffects: EffectsFunction = useCallback((masterGainNode, destination, _isOffline) => {
     // Create analyser and connect it in parallel to monitor the output

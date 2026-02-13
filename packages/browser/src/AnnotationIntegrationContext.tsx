@@ -1,5 +1,54 @@
 import { createContext, useContext } from 'react';
-import type { AnnotationData } from '@waveform-playlist/core';
+import type {
+  AnnotationData,
+  AnnotationAction,
+  AnnotationActionOptions,
+  RenderAnnotationItemProps,
+} from '@waveform-playlist/core';
+
+/**
+ * Props the browser package passes to the AnnotationText component.
+ * Mirrors what PlaylistAnnotationList and MediaElementAnnotationList actually use.
+ */
+export interface AnnotationTextIntegrationProps {
+  annotations: AnnotationData[];
+  activeAnnotationId?: string;
+  shouldScrollToActive?: boolean;
+  scrollActivePosition?: ScrollLogicalPosition;
+  scrollActiveContainer?: 'nearest' | 'all';
+  editable?: boolean;
+  controls?: AnnotationAction[];
+  annotationListConfig?: AnnotationActionOptions;
+  height?: number;
+  onAnnotationUpdate?: (updatedAnnotations: AnnotationData[]) => void;
+  renderAnnotationItem?: (props: RenderAnnotationItemProps) => React.ReactNode;
+}
+
+/**
+ * Props the browser package passes to the AnnotationBox component.
+ * Mirrors what PlaylistVisualization and MediaElementPlaylist actually use.
+ */
+export interface AnnotationBoxIntegrationProps {
+  annotationId: string;
+  annotationIndex: number;
+  startPosition: number;
+  endPosition: number;
+  label?: string;
+  color?: string;
+  isActive?: boolean;
+  onClick?: () => void;
+  editable?: boolean;
+}
+
+/**
+ * Props the browser package passes to the AnnotationBoxesWrapper component.
+ * Mirrors what PlaylistVisualization and MediaElementPlaylist actually use.
+ */
+export interface AnnotationBoxesWrapperIntegrationProps {
+  children?: React.ReactNode;
+  height?: number;
+  width?: number;
+}
 
 /**
  * Interface for annotation integration provided by @waveform-playlist/annotations.
@@ -12,13 +61,10 @@ export interface AnnotationIntegration {
   parseAeneas: (data: unknown) => AnnotationData;
   serializeAeneas: (annotation: AnnotationData) => unknown;
 
-  // Visualization components (typed loosely since browser controls invocation)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  AnnotationText: React.ComponentType<any>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  AnnotationBox: React.ComponentType<any>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  AnnotationBoxesWrapper: React.ComponentType<any>;
+  // Visualization components (typed with the props the browser package actually passes)
+  AnnotationText: React.ComponentType<AnnotationTextIntegrationProps>;
+  AnnotationBox: React.ComponentType<AnnotationBoxIntegrationProps>;
+  AnnotationBoxesWrapper: React.ComponentType<AnnotationBoxesWrapperIntegrationProps>;
 
   // Control components
   ContinuousPlayCheckbox: React.ComponentType<{ checked: boolean; onChange: (checked: boolean) => void; className?: string }>;

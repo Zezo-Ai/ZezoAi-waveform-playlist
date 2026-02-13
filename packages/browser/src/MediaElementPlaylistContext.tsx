@@ -20,6 +20,7 @@ import {
 } from '@waveform-playlist/ui-components';
 import type { AnnotationData } from '@waveform-playlist/core';
 import { extractPeaksFromWaveformData } from './waveformDataLoader';
+import type WaveformData from 'waveform-data';
 import type { PeakData } from '@waveform-playlist/webaudio-peaks';
 import type { ClipPeaks, TrackClipPeaks } from './WaveformPlaylistContext';
 
@@ -108,7 +109,7 @@ export interface MediaElementPlaylistProviderProps {
   controls?: { show: boolean; width: number };
   /** Annotations */
   annotationList?: {
-    annotations?: any[];
+    annotations?: AnnotationData[];
     isContinuousPlay?: boolean;
   };
   /** Width of waveform bars */
@@ -172,7 +173,7 @@ export const MediaElementPlaylistProvider: React.FC<
   const annotations = useMemo(() => {
     if (!annotationList?.annotations) return [];
     if (process.env.NODE_ENV !== 'production' && annotationList.annotations.length > 0) {
-      const first = annotationList.annotations[0] as Record<string, unknown>;
+      const first = annotationList.annotations[0] as unknown as Record<string, unknown>;
       if (typeof first.start !== 'number' || typeof first.end !== 'number') {
         console.error(
           '[waveform-playlist] Annotations must have numeric start/end values. ' +
@@ -182,7 +183,7 @@ export const MediaElementPlaylistProvider: React.FC<
         return [];
       }
     }
-    return annotationList.annotations as AnnotationData[];
+    return annotationList.annotations;
   }, [annotationList?.annotations]);
 
   // Ref for animation loop (avoids restarting loop on annotation change)
@@ -283,7 +284,7 @@ export const MediaElementPlaylistProvider: React.FC<
   // Generate peaks from waveform data
   useEffect(() => {
     const extractedPeaks = extractPeaksFromWaveformData(
-      track.waveformData as any,
+      track.waveformData as WaveformData,
       samplesPerPixel,
       0, // channel index
       0, // offset

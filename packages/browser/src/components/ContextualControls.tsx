@@ -6,7 +6,6 @@ import {
   AutomaticScrollCheckbox as BaseAutomaticScrollCheckbox,
   SelectionTimeInputs as BaseSelectionTimeInputs,
   formatTime,
-  type TimeFormat,
 } from '@waveform-playlist/ui-components';
 import styled from 'styled-components';
 import { usePlaybackAnimation, usePlaylistState, usePlaylistControls, usePlaylistData } from '../WaveformPlaylistContext';
@@ -36,8 +35,8 @@ export const TimeFormatSelect: React.FC<{ className?: string }> = ({ className }
 
   return (
     <BaseTimeFormatSelect
-      value={timeFormat as any}
-      onChange={setTimeFormat as any}
+      value={timeFormat}
+      onChange={setTimeFormat}
       className={className}
     />
   );
@@ -60,8 +59,7 @@ export const AudioPosition: React.FC<{ className?: string }> = ({ className }) =
   const timeRef = useRef<HTMLSpanElement>(null);
   const animationFrameRef = useRef<number | null>(null);
   const { isPlaying, currentTimeRef, playbackStartTimeRef, audioStartPositionRef } = usePlaybackAnimation();
-  const { timeFormat } = usePlaylistData();
-  const format = timeFormat as TimeFormat;
+  const { timeFormat: format } = usePlaylistData();
 
   useEffect(() => {
     const updateTime = () => {
