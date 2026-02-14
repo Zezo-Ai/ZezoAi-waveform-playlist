@@ -3,7 +3,7 @@ import styled from 'styled-components';
 import type { SpectrogramData } from '@waveform-playlist/core';
 import { useVisibleChunkIndices } from '../contexts/ScrollViewport';
 import { useChunkedCanvasRefs } from '../hooks/useChunkedCanvasRefs';
-import { MAX_CANVAS_WIDTH } from '../constants';
+import { MAX_CANVAS_WIDTH } from '@waveform-playlist/core';
 const LINEAR_FREQUENCY_SCALE = (f: number, minF: number, maxF: number) => (f - minF) / (maxF - minF);
 
 interface WrapperProps {
@@ -49,7 +49,7 @@ const SpectrogramCanvas = styled.canvas.attrs<CanvasProps>((props) => ({
 // Inline getColorMap to avoid cross-package import at component level
 // This avoids needing browser package as dependency of ui-components
 function defaultGetColorMap(): Uint8Array {
-  // Viridis fallback — 256-entry grayscale
+  // Grayscale fallback — 256-entry LUT (used when no colorLUT prop provided)
   const lut = new Uint8Array(256 * 3);
   for (let i = 0; i < 256; i++) {
     lut[i * 3] = lut[i * 3 + 1] = lut[i * 3 + 2] = i;
@@ -136,62 +136,19 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
     onCanvasesReadyRef.current = onCanvasesReady;
   }, [onCanvasesReady]);
 
-  // Worker mode: transfer new canvases to worker.
-  // Uses visibleChunkIndices so it only re-runs when chunks mount/unmount,
-  // not on every scroll pixel. No cleanup — stale registrations are
-  // handled by the effect below, and full cleanup happens on unmount.
+  // Worker mode: clean up stale canvases, then transfer new ones.
+  // Cleanup and registration are combined in a single effect so that
+  // `onCanvasesReady` always receives a clean list without stale IDs.
+  // Uses visibleChunkIndices so it only re-runs when chunks mount/unmount.
   useEffect(() => {
     if (!isWorkerMode) return;
     const currentWorkerApi = workerApiRef.current;
     if (!currentWorkerApi || !clipId) return;
 
-    const newIds: string[] = [];
-    const newWidths: number[] = [];
-
-    for (const [canvasIdx, canvas] of canvasMapRef.current.entries()) {
-      // Skip canvases that have already been transferred to the worker
-      if (transferredCanvasesRef.current.has(canvas)) continue;
-
-      const canvasId = `${clipId}-ch${channelIndex}-chunk${canvasIdx}`;
-
-      let offscreen: OffscreenCanvas;
-      try {
-        offscreen = canvas.transferControlToOffscreen();
-      } catch (err) {
-        console.warn(`[spectrogram] transferControlToOffscreen failed for ${canvasId}:`, err);
-        continue;
-      }
-
-      // Mark transferred immediately — transferControlToOffscreen is irreversible,
-      // so the canvas must never be attempted again even if registerCanvas fails.
-      transferredCanvasesRef.current.add(canvas);
-
-      try {
-        currentWorkerApi.registerCanvas(canvasId, offscreen);
-        newIds.push(canvasId);
-        newWidths.push(Math.min(length - canvasIdx * MAX_CANVAS_WIDTH, MAX_CANVAS_WIDTH));
-      } catch (err) {
-        console.warn(`[spectrogram] registerCanvas failed for ${canvasId}:`, err);
-        continue;
-      }
-    }
-
-    if (newIds.length > 0) {
-      registeredIdsRef.current = [...registeredIdsRef.current, ...newIds];
-      onCanvasesReadyRef.current?.(newIds, newWidths);
-    }
-  }, [canvasMapRef, isWorkerMode, clipId, channelIndex, length, visibleChunkIndices]);
-
-  // Clean up stale worker registrations for canvases that unmounted
-  useEffect(() => {
-    if (!isWorkerMode) return;
-    const currentWorkerApi = workerApiRef.current;
-    if (!currentWorkerApi) return;
-
+    // Step 1: Remove stale registrations for unmounted canvases.
+    const previousCount = registeredIdsRef.current.length;
     const remaining: string[] = [];
     for (const id of registeredIdsRef.current) {
-      // Canvas IDs follow the format `${clipId}-ch${channelIndex}-chunk${chunkIdx}`.
-      // Extract the chunk index to look up the corresponding canvas element.
       const match = id.match(/chunk(\d+)$/);
       if (!match) { remaining.push(id); continue; }
       const chunkIdx = parseInt(match[1], 10);
@@ -207,7 +164,55 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
       }
     }
     registeredIdsRef.current = remaining;
-  });
+
+    // Step 2: Transfer new canvases to the worker.
+    const newIds: string[] = [];
+
+    for (const [canvasIdx, canvas] of canvasMapRef.current.entries()) {
+      if (transferredCanvasesRef.current.has(canvas)) continue;
+
+      const canvasId = `${clipId}-ch${channelIndex}-chunk${canvasIdx}`;
+
+      let offscreen: OffscreenCanvas;
+      try {
+        offscreen = canvas.transferControlToOffscreen();
+      } catch (err) {
+        console.warn(`[spectrogram] transferControlToOffscreen failed for ${canvasId}:`, err);
+        continue;
+      }
+
+      // Mark transferred immediately — transferControlToOffscreen is irreversible.
+      transferredCanvasesRef.current.add(canvas);
+
+      try {
+        currentWorkerApi.registerCanvas(canvasId, offscreen);
+        newIds.push(canvasId);
+      } catch (err) {
+        console.warn(`[spectrogram] registerCanvas failed for ${canvasId}:`, err);
+        continue;
+      }
+    }
+
+    if (newIds.length > 0) {
+      registeredIdsRef.current = [...registeredIdsRef.current, ...newIds];
+    }
+
+    // Step 3: Notify provider when canvas set changed (added or removed).
+    const canvasSetChanged = newIds.length > 0 || remaining.length < previousCount;
+    if (canvasSetChanged) {
+      const allIds = registeredIdsRef.current;
+      const allWidths = allIds.map(id => {
+        const match = id.match(/chunk(\d+)$/);
+        if (!match) {
+          console.warn(`[spectrogram] Unexpected canvas ID format: ${id}`);
+          return MAX_CANVAS_WIDTH;
+        }
+        const chunkIdx = parseInt(match[1], 10);
+        return Math.min(length - chunkIdx * MAX_CANVAS_WIDTH, MAX_CANVAS_WIDTH);
+      });
+      onCanvasesReadyRef.current?.(allIds, allWidths);
+    }
+  }, [canvasMapRef, isWorkerMode, clipId, channelIndex, length, visibleChunkIndices]);
 
   // Unregister all canvases from worker on component unmount
   useEffect(() => {
