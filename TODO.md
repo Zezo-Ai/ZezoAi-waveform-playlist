@@ -38,9 +38,9 @@ Multi-track audio editor roadmap for waveform-playlist.
 
 ### Phase 4: Performance & Virtual Scrolling
 
-- Horizontal virtual scrolling (2+ hour timelines)
-- Vertical virtual scrolling (20+ tracks)
-- RAF batching
+- [x] Horizontal virtual scrolling (2+ hour timelines) — ScrollViewportContext, chunked TimeScale, viewport-aware Channel/SpectrogramChannel
+- [ ] Vertical virtual scrolling (20+ tracks)
+- [ ] RAF batching
 
 ### Phase 5: Polish & Usability
 
