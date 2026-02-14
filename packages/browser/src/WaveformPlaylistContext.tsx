@@ -547,31 +547,42 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
         // Path A: External pre-computed waveform data (e.g. from audiowaveform .dat file)
         if (clip.waveformData) {
-          peaks = extractPeaksFromWaveformDataFull(
-            clip.waveformData as WaveformData,
-            samplesPerPixel,
-            mono,
-            clip.offsetSamples,
-            clip.durationSamples,
-          );
+          try {
+            peaks = extractPeaksFromWaveformDataFull(
+              clip.waveformData as WaveformData,
+              samplesPerPixel,
+              mono,
+              clip.offsetSamples,
+              clip.durationSamples,
+            );
+          } catch (err) {
+            console.warn('[waveform-playlist] Failed to extract peaks from waveformData:', err);
+          }
         }
 
         // Path B: Worker-generated WaveformData cache (fast resample on zoom)
         if (!peaks) {
           const cached = waveformDataCache.get(clip.id);
           if (cached) {
-            peaks = extractPeaksFromWaveformDataFull(
-              cached,
-              samplesPerPixel,
-              mono,
-              clip.offsetSamples,
-              clip.durationSamples,
-            );
+            try {
+              peaks = extractPeaksFromWaveformDataFull(
+                cached,
+                samplesPerPixel,
+                mono,
+                clip.offsetSamples,
+                clip.durationSamples,
+              );
+            } catch (err) {
+              console.warn('[waveform-playlist] Failed to extract peaks from cache:', err);
+            }
           }
         }
 
         // Path C: No peaks data available yet — render empty while worker processes
         if (!peaks) {
+          if (!clip.audioBuffer && !clip.waveformData) {
+            console.warn(`[waveform-playlist] Clip "${clip.id}" has no audio data or waveform data`);
+          }
           peaks = { length: 0, data: [], bits: 16 };
         }
 

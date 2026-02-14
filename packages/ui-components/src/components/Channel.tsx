@@ -3,12 +3,11 @@ import styled from 'styled-components';
 import { Peaks, Bits } from '@waveform-playlist/webaudio-peaks';
 import { WaveformColor, WaveformDrawMode, isWaveformGradient, waveformColorToCss } from '../wfpl-theme';
 import { useScrollViewportSelector } from '../contexts/ScrollViewport';
+import { MAX_CANVAS_WIDTH } from '../constants';
 
 // Re-export WaveformColor for consumers
 export type { WaveformColor } from '../wfpl-theme';
 export type { WaveformDrawMode } from '../wfpl-theme';
-
-const MAX_CANVAS_WIDTH = 1000;
 
 /**
  * Creates a Canvas gradient from a WaveformColor configuration

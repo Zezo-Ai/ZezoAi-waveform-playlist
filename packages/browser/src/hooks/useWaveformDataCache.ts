@@ -18,7 +18,7 @@ import type WaveformData from 'waveform-data';
 import { createPeaksWorker, type PeaksWorkerApi } from '../workers/peaksWorker';
 
 export interface UseWaveformDataCacheReturn {
-  cache: Map<string, WaveformData>;
+  cache: ReadonlyMap<string, WaveformData>;
   isGenerating: boolean;
 }
 
@@ -43,6 +43,7 @@ export function useWaveformDataCache(
 
   useEffect(() => {
     let cancelled = false;
+    const submitted = submittedRef.current;
 
     // Find clips that have audioBuffer but no waveformData and haven't been submitted
     const clipsToProcess: { clipId: string; audioBuffer: AudioBuffer }[] = [];
@@ -52,7 +53,7 @@ export function useWaveformDataCache(
         if (
           clip.audioBuffer &&
           !clip.waveformData &&
-          !submittedRef.current.has(clip.id)
+          !submitted.has(clip.id)
         ) {
           clipsToProcess.push({
             clipId: clip.id,
@@ -65,8 +66,10 @@ export function useWaveformDataCache(
     if (clipsToProcess.length === 0) return;
 
     // Mark all as submitted before starting async work
+    const submittedThisRun = new Set<string>();
     for (const { clipId } of clipsToProcess) {
-      submittedRef.current.add(clipId);
+      submitted.add(clipId);
+      submittedThisRun.add(clipId);
     }
 
     pendingCountRef.current += clipsToProcess.length;
@@ -110,7 +113,7 @@ export function useWaveformDataCache(
           if (cancelled) return;
           console.warn('[waveform-playlist] Worker peak generation failed:', err);
           // Remove from submitted so it can be retried on next effect run
-          submittedRef.current.delete(clipId);
+          submitted.delete(clipId);
           pendingCountRef.current--;
           if (pendingCountRef.current <= 0) {
             pendingCountRef.current = 0;
@@ -121,6 +124,11 @@ export function useWaveformDataCache(
 
     return () => {
       cancelled = true;
+      // Clear IDs submitted by this effect run so they can be resubmitted
+      // if the effect re-runs with new deps (e.g., tracks changed)
+      for (const clipId of submittedThisRun) {
+        submitted.delete(clipId);
+      }
     };
     // submittedRef guards against duplicate submissions — no need for cache in deps
   }, [tracks, baseScale, getWorker]);

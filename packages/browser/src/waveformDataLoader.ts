@@ -170,7 +170,7 @@ export function extractPeaksFromWaveformData(
 
 /**
  * Extract peaks from a WaveformData object, handling ALL channels, mono merging,
- * slicing, and resampling. Returns the same PeakData format as generatePeaks().
+ * slicing, and resampling.
  *
  * Bit depth is determined by the WaveformData source — all typed arrays match
  * the source's bit depth for consistent data/metadata.
@@ -180,7 +180,7 @@ export function extractPeaksFromWaveformData(
  * @param isMono - Whether to merge channels to mono
  * @param offsetSamples - Optional start offset in samples (for clip trimming)
  * @param durationSamples - Optional duration in samples (for clip trimming)
- * @returns PeakData matching the generatePeaks() return format
+ * @returns PeakData matching the interface from @waveform-playlist/webaudio-peaks
  */
 export function extractPeaksFromWaveformDataFull(
   waveformData: WaveformData,

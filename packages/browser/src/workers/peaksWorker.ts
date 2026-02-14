@@ -193,10 +193,23 @@ interface PendingEntry {
 let idCounter = 0;
 
 export function createPeaksWorker(): PeaksWorkerApi {
-  const blob = new Blob([workerSource], { type: 'application/javascript' });
-  const url = URL.createObjectURL(blob);
-  const worker = new Worker(url);
-  URL.revokeObjectURL(url);
+  let worker: Worker;
+  try {
+    const blob = new Blob([workerSource], { type: 'application/javascript' });
+    const url = URL.createObjectURL(blob);
+    worker = new Worker(url);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    // Worker creation can fail in CSP-restricted environments that block blob: URLs.
+    // Return a no-op API that rejects all generate calls gracefully.
+    console.warn('[waveform-playlist] Failed to create peaks worker (CSP restriction?):', err);
+    return {
+      generate() {
+        return Promise.reject(new Error('Worker creation failed'));
+      },
+      terminate() { /* no-op */ },
+    };
+  }
 
   const pending = new Map<string, PendingEntry>();
   let terminated = false;

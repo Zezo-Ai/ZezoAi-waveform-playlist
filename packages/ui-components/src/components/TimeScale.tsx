@@ -4,8 +4,7 @@ import { PlaylistInfoContext } from '../contexts/PlaylistInfo';
 import { useDevicePixelRatio } from '../contexts/DevicePixelRatio';
 import { useScrollViewportSelector } from '../contexts/ScrollViewport';
 import { secondsToPixels } from '../utils/conversions';
-
-const MAX_CANVAS_WIDTH = 1000;
+import { MAX_CANVAS_WIDTH } from '../constants';
 
 function formatTime(milliseconds: number) {
   const seconds = Math.floor(milliseconds / 1000);

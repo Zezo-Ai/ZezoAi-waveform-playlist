@@ -2,8 +2,7 @@ import React, { FunctionComponent, useLayoutEffect, useCallback, useRef, useEffe
 import styled from 'styled-components';
 import type { SpectrogramData } from '@waveform-playlist/core';
 import { useScrollViewportSelector } from '../contexts/ScrollViewport';
-
-const MAX_CANVAS_WIDTH = 1000;
+import { MAX_CANVAS_WIDTH } from '../constants';
 const LINEAR_FREQUENCY_SCALE = (f: number, minF: number, maxF: number) => (f - minF) / (maxF - minF);
 
 interface WrapperProps {
