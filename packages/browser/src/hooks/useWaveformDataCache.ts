@@ -7,8 +7,8 @@
  *
  * Behavior:
  * - Creates the worker lazily on first clip needing generation
- * - Tracks submitted clip IDs to avoid duplicate worker jobs
- * - Uses a cancelled flag to ignore responses after unmount
+ * - Tracks submitted clip IDs via ref to avoid duplicate worker jobs
+ * - Uses a cancelled flag to ignore responses after effect cleanup
  * - Terminates the worker on unmount
  */
 
@@ -17,10 +17,15 @@ import type { ClipTrack } from '@waveform-playlist/core';
 import type WaveformData from 'waveform-data';
 import { createPeaksWorker, type PeaksWorkerApi } from '../workers/peaksWorker';
 
+export interface UseWaveformDataCacheReturn {
+  cache: Map<string, WaveformData>;
+  isGenerating: boolean;
+}
+
 export function useWaveformDataCache(
   tracks: ClipTrack[],
   baseScale: number,
-): { cache: Map<string, WaveformData>; isGenerating: boolean } {
+): UseWaveformDataCacheReturn {
   const [cache, setCache] = useState<Map<string, WaveformData>>(() => new Map());
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -47,8 +52,7 @@ export function useWaveformDataCache(
         if (
           clip.audioBuffer &&
           !clip.waveformData &&
-          !submittedRef.current.has(clip.id) &&
-          !cache.has(clip.id)
+          !submittedRef.current.has(clip.id)
         ) {
           clipsToProcess.push({
             clipId: clip.id,
@@ -105,7 +109,7 @@ export function useWaveformDataCache(
         .catch((err) => {
           if (cancelled) return;
           console.warn('[waveform-playlist] Worker peak generation failed:', err);
-          // Remove from submitted so it can be retried
+          // Remove from submitted so it can be retried on next effect run
           submittedRef.current.delete(clipId);
           pendingCountRef.current--;
           if (pendingCountRef.current <= 0) {
@@ -118,7 +122,8 @@ export function useWaveformDataCache(
     return () => {
       cancelled = true;
     };
-  }, [tracks, baseScale, cache, getWorker]);
+    // submittedRef guards against duplicate submissions — no need for cache in deps
+  }, [tracks, baseScale, getWorker]);
 
   // Terminate worker on unmount
   useEffect(() => {

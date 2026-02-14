@@ -541,8 +541,6 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   useEffect(() => {
     if (tracks.length === 0) return;
 
-    const bits: 8 | 16 = 16;
-
     const allTrackPeaks: TrackClipPeaks[] = tracks.map((track) => {
       const clipPeaks: ClipPeaks[] = track.clips.map((clip) => {
         let peaks: PeakData | undefined;
@@ -553,7 +551,6 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
             clip.waveformData as WaveformData,
             samplesPerPixel,
             mono,
-            bits,
             clip.offsetSamples,
             clip.durationSamples,
           );
@@ -567,7 +564,6 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
               cached,
               samplesPerPixel,
               mono,
-              bits,
               clip.offsetSamples,
               clip.durationSamples,
             );
@@ -576,7 +572,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
         // Path C: No peaks data available yet — render empty while worker processes
         if (!peaks) {
-          peaks = { length: 0, data: [], bits };
+          peaks = { length: 0, data: [], bits: 16 };
         }
 
         return {

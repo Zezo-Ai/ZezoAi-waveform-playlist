@@ -172,10 +172,12 @@ export function extractPeaksFromWaveformData(
  * Extract peaks from a WaveformData object, handling ALL channels, mono merging,
  * slicing, and resampling. Returns the same PeakData format as generatePeaks().
  *
+ * Bit depth is determined by the WaveformData source — all typed arrays match
+ * the source's bit depth for consistent data/metadata.
+ *
  * @param waveformData - WaveformData instance (should be generated with split_channels: true)
  * @param samplesPerPixel - Target samples per pixel
  * @param isMono - Whether to merge channels to mono
- * @param bits - Bit depth (8 or 16), used for mono merge output type
  * @param offsetSamples - Optional start offset in samples (for clip trimming)
  * @param durationSamples - Optional duration in samples (for clip trimming)
  * @returns PeakData matching the generatePeaks() return format
@@ -184,7 +186,6 @@ export function extractPeaksFromWaveformDataFull(
   waveformData: WaveformData,
   samplesPerPixel: number,
   isMono: boolean,
-  bits: 8 | 16,
   offsetSamples?: number,
   durationSamples?: number,
 ): PeakData {
@@ -204,7 +205,7 @@ export function extractPeaksFromWaveformDataFull(
   }
 
   const numChannels = processedData.channels;
-  const sourceBits = processedData.bits as 8 | 16;
+  const bits = processedData.bits as 8 | 16;
 
   // Extract peaks for all channels
   const channelPeaks: Peaks[] = [];
@@ -214,7 +215,7 @@ export function extractPeaksFromWaveformDataFull(
     const maxArray = channel.max_array();
     const len = minArray.length;
 
-    const peaks: Peaks = sourceBits === 8
+    const peaks: Peaks = bits === 8
       ? new Int8Array(len * 2)
       : new Int16Array(len * 2);
 
@@ -247,7 +248,7 @@ export function extractPeaksFromWaveformDataFull(
     return {
       length: numPeaks,
       data: [monoPeaks],
-      bits: sourceBits,
+      bits,
     };
   }
 
@@ -256,6 +257,6 @@ export function extractPeaksFromWaveformDataFull(
   return {
     length: peakLength,
     data: channelPeaks,
-    bits: sourceBits,
+    bits,
   };
 }
