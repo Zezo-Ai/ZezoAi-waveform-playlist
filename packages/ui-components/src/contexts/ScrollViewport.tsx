@@ -1,11 +1,10 @@
 import React, {
   createContext,
   useContext,
-  useState,
   useEffect,
   useCallback,
-  useMemo,
   useRef,
+  useSyncExternalStore,
   ReactNode,
 } from 'react';
 
@@ -18,7 +17,53 @@ export interface ScrollViewport {
   visibleEnd: number;
 }
 
-const ScrollViewportContext = createContext<ScrollViewport | null>(null);
+/**
+ * External store for viewport state. Using useSyncExternalStore instead of
+ * React context state allows consumers to use selectors — they only re-render
+ * when their derived value changes, not on every viewport update.
+ */
+class ViewportStore {
+  private _state: ScrollViewport | null = null;
+  private _listeners = new Set<() => void>();
+
+  subscribe = (callback: () => void): (() => void) => {
+    this._listeners.add(callback);
+    return () => this._listeners.delete(callback);
+  };
+
+  getSnapshot = (): ScrollViewport | null => this._state;
+
+  /**
+   * Update viewport state. Applies a 100px scroll threshold to skip updates
+   * that don't affect chunk visibility (1000px chunks with 1.5× overscan buffer).
+   * Only notifies listeners when the state actually changes.
+   */
+  update(scrollLeft: number, containerWidth: number): void {
+    const buffer = containerWidth * 1.5;
+    const visibleStart = Math.max(0, scrollLeft - buffer);
+    const visibleEnd = scrollLeft + containerWidth + buffer;
+
+    // Skip update if scroll hasn't moved enough to matter for chunk visibility.
+    if (
+      this._state &&
+      this._state.containerWidth === containerWidth &&
+      Math.abs(this._state.scrollLeft - scrollLeft) < 100
+    ) {
+      return;
+    }
+
+    this._state = { scrollLeft, containerWidth, visibleStart, visibleEnd };
+    for (const listener of this._listeners) {
+      listener();
+    }
+  }
+}
+
+const ViewportStoreContext = createContext<ViewportStore | null>(null);
+
+// Stable no-op subscribe for when no provider exists
+const EMPTY_SUBSCRIBE = () => () => {};
+const NULL_SNAPSHOT = () => null;
 
 type ScrollViewportProviderProps = {
   containerRef: React.RefObject<HTMLElement | null>;
@@ -29,33 +74,18 @@ export const ScrollViewportProvider = ({
   containerRef,
   children,
 }: ScrollViewportProviderProps) => {
-  const [viewport, setViewport] = useState<ScrollViewport | null>(null);
+  const storeRef = useRef<ViewportStore | null>(null);
+  if (storeRef.current === null) {
+    storeRef.current = new ViewportStore();
+  }
+  const store = storeRef.current;
   const rafIdRef = useRef<number | null>(null);
 
   const measure = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-
-    const scrollLeft = el.scrollLeft;
-    const containerWidth = el.clientWidth;
-    const buffer = containerWidth * 1.5;
-    const visibleStart = Math.max(0, scrollLeft - buffer);
-    const visibleEnd = scrollLeft + containerWidth + buffer;
-
-    // Skip update if scroll hasn't moved enough to matter for chunk visibility.
-    // Canvas chunks are 1000px wide, and the 1.5× buffer covers well beyond the
-    // viewport edges, so small scroll deltas don't change which chunks are visible.
-    setViewport((prev) => {
-      if (
-        prev &&
-        prev.containerWidth === containerWidth &&
-        Math.abs(prev.scrollLeft - scrollLeft) < 100
-      ) {
-        return prev; // Same reference — React skips re-render of consumers
-      }
-      return { scrollLeft, containerWidth, visibleStart, visibleEnd };
-    });
-  }, [containerRef]);
+    store.update(el.scrollLeft, el.clientWidth);
+  }, [containerRef, store]);
 
   const scheduleUpdate = useCallback(() => {
     if (rafIdRef.current !== null) return;
@@ -91,14 +121,41 @@ export const ScrollViewportProvider = ({
     };
   }, [containerRef, measure, scheduleUpdate]);
 
-  const contextValue = useMemo(() => viewport, [viewport]);
-
   return (
-    <ScrollViewportContext.Provider value={contextValue}>
+    <ViewportStoreContext.Provider value={store}>
       {children}
-    </ScrollViewportContext.Provider>
+    </ViewportStoreContext.Provider>
   );
 };
 
-export const useScrollViewport = (): ScrollViewport | null =>
-  useContext(ScrollViewportContext);
+/**
+ * Full viewport hook — re-renders on every viewport update (after threshold).
+ * Use useScrollViewportSelector() instead when you only need derived state.
+ */
+export const useScrollViewport = (): ScrollViewport | null => {
+  const store = useContext(ViewportStoreContext);
+  return useSyncExternalStore(
+    store ? store.subscribe : EMPTY_SUBSCRIBE,
+    store ? store.getSnapshot : NULL_SNAPSHOT,
+    NULL_SNAPSHOT,
+  );
+};
+
+/**
+ * Selector hook — only re-renders when the selector's return value changes
+ * (compared via Object.is). Return primitive values (strings, numbers) for
+ * best results, since objects/arrays create new references each call.
+ *
+ * Example: compute visible chunk key so the component only re-renders when
+ * the set of visible chunks actually changes, not on every scroll update.
+ */
+export function useScrollViewportSelector<T>(
+  selector: (viewport: ScrollViewport | null) => T,
+): T {
+  const store = useContext(ViewportStoreContext);
+  return useSyncExternalStore(
+    store ? store.subscribe : EMPTY_SUBSCRIBE,
+    () => selector(store ? store.getSnapshot() : null),
+    () => selector(null),
+  );
+}

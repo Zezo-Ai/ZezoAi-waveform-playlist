@@ -1,7 +1,7 @@
 import React, { FunctionComponent, useLayoutEffect, useCallback, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import type { SpectrogramData } from '@waveform-playlist/core';
-import { useScrollViewport } from '../contexts/ScrollViewport';
+import { useScrollViewportSelector } from '../contexts/ScrollViewport';
 
 const MAX_CANVAS_WIDTH = 1000;
 const LINEAR_FREQUENCY_SCALE = (f: number, minF: number, maxF: number) => (f - minF) / (maxF - minF);
@@ -111,7 +111,6 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
   onCanvasesReady,
 }) => {
   const channelIndex = channelIndexProp ?? index;
-  const viewport = useScrollViewport();
   const canvasesRef = useRef<HTMLCanvasElement[]>([]);
   const registeredIdsRef = useRef<string[]>([]);
   const transferredCanvasesRef = useRef<WeakSet<HTMLCanvasElement>>(new WeakSet());
@@ -120,6 +119,33 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
 
   // Track whether we're in worker mode (canvas transferred)
   const isWorkerMode = !!(workerApi && clipId);
+
+  // Selector returns comma-joined visible chunk indices. Component only
+  // re-renders when the set of visible chunks actually changes.
+  const visibleChunkKey = useScrollViewportSelector((viewport) => {
+    const totalChunks = Math.ceil(length / MAX_CANVAS_WIDTH);
+    const indices: number[] = [];
+
+    for (let i = 0; i < totalChunks; i++) {
+      const chunkLeft = i * MAX_CANVAS_WIDTH;
+      const chunkWidth = Math.min(length - chunkLeft, MAX_CANVAS_WIDTH);
+
+      if (viewport) {
+        const chunkEnd = chunkLeft + chunkWidth;
+        if (chunkEnd <= viewport.visibleStart || chunkLeft >= viewport.visibleEnd) {
+          continue;
+        }
+      }
+
+      indices.push(i);
+    }
+
+    return indices.join(',');
+  });
+
+  const visibleChunkIndices = visibleChunkKey
+    ? visibleChunkKey.split(',').map(Number)
+    : [];
 
   const canvasRef = useCallback(
     (canvas: HTMLCanvasElement | null) => {
@@ -135,28 +161,6 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
   const maxF = maxFrequency ?? (data ? data.sampleRate / 2 : 22050);
   const scaleFn = frequencyScaleFn ?? LINEAR_FREQUENCY_SCALE;
   const hasCustomFrequencyScale = Boolean(frequencyScaleFn);
-
-  // Compute which chunk indices are visible — derive a stable key so
-  // effects only re-run when the actual set of chunks changes,
-  // not on every scroll pixel.
-  const totalChunks = Math.ceil(length / MAX_CANVAS_WIDTH);
-  const visibleChunkIndices: number[] = [];
-
-  for (let i = 0; i < totalChunks; i++) {
-    const chunkLeft = i * MAX_CANVAS_WIDTH;
-    const chunkWidth = Math.min(length - chunkLeft, MAX_CANVAS_WIDTH);
-
-    if (viewport) {
-      const chunkEnd = chunkLeft + chunkWidth;
-      if (chunkEnd <= viewport.visibleStart || chunkLeft >= viewport.visibleEnd) {
-        continue;
-      }
-    }
-
-    visibleChunkIndices.push(i);
-  }
-
-  const visibleChunkKey = visibleChunkIndices.join(',');
 
   // Keep refs in sync with latest props
   useEffect(() => {

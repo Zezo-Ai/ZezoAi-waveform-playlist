@@ -2,7 +2,7 @@ import React, { FunctionComponent, useRef, useEffect, useLayoutEffect, useContex
 import styled, { withTheme, DefaultTheme } from 'styled-components';
 import { PlaylistInfoContext } from '../contexts/PlaylistInfo';
 import { useDevicePixelRatio } from '../contexts/DevicePixelRatio';
-import { useScrollViewport } from '../contexts/ScrollViewport';
+import { useScrollViewportSelector } from '../contexts/ScrollViewport';
 import { secondsToPixels } from '../utils/conversions';
 
 const MAX_CANVAS_WIDTH = 1000;
@@ -145,29 +145,32 @@ export const TimeScale: FunctionComponent<TimeScalePropsWithTheme> = (props) => 
     };
   }, [duration, samplesPerPixel, sampleRate, marker, bigStep, secondStep, renderTimestamp, timeScaleHeight]);
 
-  const viewport = useScrollViewport();
+  // Selector returns comma-joined visible chunk indices. Component only
+  // re-renders when the set of visible chunks actually changes.
+  const visibleChunkKey = useScrollViewportSelector((viewport) => {
+    const totalChunks = Math.ceil(widthX / MAX_CANVAS_WIDTH);
+    const indices: number[] = [];
 
-  // Compute which chunk indices are visible — derive a stable key so
-  // the drawing effect only re-runs when the actual set of chunks changes,
-  // not on every scroll pixel.
-  const totalChunks = Math.ceil(widthX / MAX_CANVAS_WIDTH);
-  const visibleChunkIndices: number[] = [];
+    for (let i = 0; i < totalChunks; i++) {
+      const chunkLeft = i * MAX_CANVAS_WIDTH;
+      const chunkWidth = Math.min(widthX - chunkLeft, MAX_CANVAS_WIDTH);
 
-  for (let i = 0; i < totalChunks; i++) {
-    const chunkLeft = i * MAX_CANVAS_WIDTH;
-    const chunkWidth = Math.min(widthX - chunkLeft, MAX_CANVAS_WIDTH);
-
-    if (viewport) {
-      const chunkEnd = chunkLeft + chunkWidth;
-      if (chunkEnd <= viewport.visibleStart || chunkLeft >= viewport.visibleEnd) {
-        continue;
+      if (viewport) {
+        const chunkEnd = chunkLeft + chunkWidth;
+        if (chunkEnd <= viewport.visibleStart || chunkLeft >= viewport.visibleEnd) {
+          continue;
+        }
       }
+
+      indices.push(i);
     }
 
-    visibleChunkIndices.push(i);
-  }
+    return indices.join(',');
+  });
 
-  const visibleChunkKey = visibleChunkIndices.join(',');
+  const visibleChunkIndices = visibleChunkKey
+    ? visibleChunkKey.split(',').map(Number)
+    : [];
 
   // Build visible canvas chunk elements
   const visibleChunks = visibleChunkIndices.map((i) => {
@@ -188,10 +191,18 @@ export const TimeScale: FunctionComponent<TimeScalePropsWithTheme> = (props) => 
     );
   });
 
-  // Filter time markers to visible range
-  const visibleMarkers = viewport
+  // Filter time markers to visible chunk range. Uses chunk boundaries
+  // rather than exact viewport pixels — sufficient given the 1.5× overscan buffer.
+  const firstChunkLeft = visibleChunkIndices.length > 0
+    ? visibleChunkIndices[0] * MAX_CANVAS_WIDTH
+    : 0;
+  const lastChunkRight = visibleChunkIndices.length > 0
+    ? (visibleChunkIndices[visibleChunkIndices.length - 1] + 1) * MAX_CANVAS_WIDTH
+    : Infinity;
+
+  const visibleMarkers = visibleChunkIndices.length > 0
     ? timeMarkersWithPositions
-        .filter(({ pix }) => pix >= viewport.visibleStart && pix < viewport.visibleEnd)
+        .filter(({ pix }) => pix >= firstChunkLeft && pix < lastChunkRight)
         .map(({ element }) => element)
     : timeMarkersWithPositions.map(({ element }) => element);
 
