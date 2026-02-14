@@ -1,4 +1,4 @@
-import React, { FunctionComponent, useLayoutEffect, useCallback, useRef } from 'react';
+import React, { FunctionComponent, useLayoutEffect, useEffect, useCallback, useRef } from 'react';
 import styled from 'styled-components';
 import { Peaks, Bits } from '@waveform-playlist/webaudio-peaks';
 import { WaveformColor, WaveformDrawMode, isWaveformGradient, waveformColorToCss } from '../wfpl-theme';
@@ -157,6 +157,16 @@ export const Channel: FunctionComponent<ChannelProps> = (props) => {
 
   const visibleChunkKey = visibleChunkIndices.join(',');
 
+  // Clean up stale refs for unmounted chunks
+  useEffect(() => {
+    const canvases = canvasesRef.current;
+    for (let i = canvases.length - 1; i >= 0; i--) {
+      if (canvases[i] && !canvases[i].isConnected) {
+        delete canvases[i];
+      }
+    }
+  });
+
   // Draw waveform bars on visible canvas chunks.
   // visibleChunkKey changes only when chunks mount/unmount, not on every scroll pixel.
   useLayoutEffect(() => {
@@ -243,7 +253,6 @@ export const Channel: FunctionComponent<ChannelProps> = (props) => {
         }
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     data,
     bits,

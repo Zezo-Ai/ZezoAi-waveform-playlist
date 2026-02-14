@@ -190,7 +190,7 @@ export const TimeScale: FunctionComponent<TimeScalePropsWithTheme> = (props) => 
   // Filter time markers to visible range
   const visibleMarkers = viewport
     ? timeMarkersWithPositions
-        .filter(({ pix }) => pix >= viewport.visibleStart && pix <= viewport.visibleEnd)
+        .filter(({ pix }) => pix >= viewport.visibleStart && pix < viewport.visibleEnd)
         .map(({ element }) => element)
     : timeMarkersWithPositions.map(({ element }) => element);
 
@@ -229,7 +229,6 @@ export const TimeScale: FunctionComponent<TimeScalePropsWithTheme> = (props) => 
         ctx.fillRect(localX, scaleY, 1, scaleHeight);
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [duration, devicePixelRatio, timeColor, timeScaleHeight, canvasInfo, visibleChunkKey]);
 
   return (

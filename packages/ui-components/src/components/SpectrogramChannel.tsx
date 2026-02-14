@@ -205,7 +205,6 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
       registeredIdsRef.current = [...registeredIdsRef.current, ...newIds];
       onCanvasesReadyRef.current?.(newIds, newWidths);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isWorkerMode, clipId, channelIndex, length, visibleChunkKey]);
 
   // Clean up stale worker registrations for canvases that unmounted
@@ -350,7 +349,6 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
 
     }
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isWorkerMode, data, length, waveHeight, devicePixelRatio, samplesPerPixel, lut, minFrequency, maxF, scaleFn, hasCustomFrequencyScale, visibleChunkKey]);
 
   // Build visible canvas chunk elements
