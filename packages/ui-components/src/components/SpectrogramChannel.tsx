@@ -1,7 +1,8 @@
-import React, { FunctionComponent, useLayoutEffect, useCallback, useRef, useEffect } from 'react';
+import React, { FunctionComponent, useLayoutEffect, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import type { SpectrogramData } from '@waveform-playlist/core';
 import { useVisibleChunkIndices } from '../contexts/ScrollViewport';
+import { useChunkedCanvasRefs } from '../hooks/useChunkedCanvasRefs';
 import { MAX_CANVAS_WIDTH } from '../constants';
 const LINEAR_FREQUENCY_SCALE = (f: number, minF: number, maxF: number) => (f - minF) / (maxF - minF);
 
@@ -110,7 +111,7 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
   onCanvasesReady,
 }) => {
   const channelIndex = channelIndexProp ?? index;
-  const canvasesRef = useRef<HTMLCanvasElement[]>([]);
+  const { canvasRef, canvasMapRef } = useChunkedCanvasRefs();
   const registeredIdsRef = useRef<string[]>([]);
   const transferredCanvasesRef = useRef<WeakSet<HTMLCanvasElement>>(new WeakSet());
   const workerApiRef = useRef(workerApi);
@@ -120,16 +121,6 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
   const isWorkerMode = !!(workerApi && clipId);
 
   const visibleChunkIndices = useVisibleChunkIndices(length, MAX_CANVAS_WIDTH);
-
-  const canvasRef = useCallback(
-    (canvas: HTMLCanvasElement | null) => {
-      if (canvas !== null) {
-        const idx = parseInt(canvas.dataset.index!, 10);
-        canvasesRef.current[idx] = canvas;
-      }
-    },
-    []
-  );
 
   const lut = colorLUT ?? DEFAULT_COLOR_LUT;
   const maxF = maxFrequency ?? (data ? data.sampleRate / 2 : 22050);
@@ -154,18 +145,13 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
     const currentWorkerApi = workerApiRef.current;
     if (!currentWorkerApi || !clipId) return;
 
-    const canvases = canvasesRef.current;
     const newIds: string[] = [];
     const newWidths: number[] = [];
 
-    for (let i = 0; i < canvases.length; i++) {
-      const canvas = canvases[i];
-      if (!canvas) continue;
-
+    for (const [canvasIdx, canvas] of canvasMapRef.current.entries()) {
       // Skip canvases that have already been transferred to the worker
       if (transferredCanvasesRef.current.has(canvas)) continue;
 
-      const canvasIdx = parseInt(canvas.dataset.index!, 10);
       const canvasId = `${clipId}-ch${channelIndex}-chunk${canvasIdx}`;
 
       let offscreen: OffscreenCanvas;
@@ -194,7 +180,7 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
       registeredIdsRef.current = [...registeredIdsRef.current, ...newIds];
       onCanvasesReadyRef.current?.(newIds, newWidths);
     }
-  }, [isWorkerMode, clipId, channelIndex, length, visibleChunkIndices]);
+  }, [canvasMapRef, isWorkerMode, clipId, channelIndex, length, visibleChunkIndices]);
 
   // Clean up stale worker registrations for canvases that unmounted
   useEffect(() => {
@@ -209,7 +195,7 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
       const match = id.match(/chunk(\d+)$/);
       if (!match) { remaining.push(id); continue; }
       const chunkIdx = parseInt(match[1], 10);
-      const canvas = canvasesRef.current[chunkIdx];
+      const canvas = canvasMapRef.current.get(chunkIdx);
       if (canvas && canvas.isConnected) {
         remaining.push(id);
       } else {
@@ -244,19 +230,14 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
   useLayoutEffect(() => {
     if (isWorkerMode || !data) return;
 
-    const canvases = canvasesRef.current;
     const { frequencyBinCount, frameCount, hopSize, sampleRate, gainDb, rangeDb: rawRangeDb } = data;
     const rangeDb = rawRangeDb === 0 ? 1 : rawRangeDb;
 
     // Pre-compute Y mapping: for each pixel row, which frequency bin(s) to sample
     const binToFreq = (bin: number) => (bin / frequencyBinCount) * (sampleRate / 2);
 
-    for (let i = 0; i < canvases.length; i++) {
-      const canvas = canvases[i];
-      if (!canvas) continue;  // Skip unmounted chunks
-
-      const canvasIdx = parseInt(canvas.dataset.index!, 10);
-      const globalPixelOffset = canvasIdx * MAX_CANVAS_WIDTH;  // Compute from index
+    for (const [canvasIdx, canvas] of canvasMapRef.current.entries()) {
+      const globalPixelOffset = canvasIdx * MAX_CANVAS_WIDTH;
 
       const ctx = canvas.getContext('2d');
       if (!ctx) continue;
@@ -348,7 +329,7 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
 
     }
 
-  }, [isWorkerMode, data, length, waveHeight, devicePixelRatio, samplesPerPixel, lut, minFrequency, maxF, scaleFn, hasCustomFrequencyScale, visibleChunkIndices]);
+  }, [canvasMapRef, isWorkerMode, data, length, waveHeight, devicePixelRatio, samplesPerPixel, lut, minFrequency, maxF, scaleFn, hasCustomFrequencyScale, visibleChunkIndices]);
 
   // Build visible canvas chunk elements
   const canvases = visibleChunkIndices.map((i) => {

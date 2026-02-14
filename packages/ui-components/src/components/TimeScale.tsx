@@ -1,8 +1,9 @@
-import React, { FunctionComponent, useRef, useEffect, useLayoutEffect, useContext, useMemo, useCallback } from 'react';
+import React, { FunctionComponent, useLayoutEffect, useContext, useMemo } from 'react';
 import styled, { withTheme, DefaultTheme } from 'styled-components';
 import { PlaylistInfoContext } from '../contexts/PlaylistInfo';
 import { useDevicePixelRatio } from '../contexts/DevicePixelRatio';
 import { useVisibleChunkIndices } from '../contexts/ScrollViewport';
+import { useChunkedCanvasRefs } from '../hooks/useChunkedCanvasRefs';
 import { secondsToPixels } from '../utils/conversions';
 import { MAX_CANVAS_WIDTH } from '../constants';
 
@@ -86,7 +87,7 @@ export const TimeScale: FunctionComponent<TimeScalePropsWithTheme> = (props) => 
     secondStep,
     renderTimestamp,
   } = props;
-  const canvasRefsMap = useRef<Map<number, HTMLCanvasElement>>(new Map());
+  const { canvasRef, canvasMapRef } = useChunkedCanvasRefs();
   const {
     sampleRate,
     samplesPerPixel,
@@ -94,13 +95,6 @@ export const TimeScale: FunctionComponent<TimeScalePropsWithTheme> = (props) => 
     controls: { show: showControls, width: controlWidth },
   } = useContext(PlaylistInfoContext);
   const devicePixelRatio = useDevicePixelRatio();
-
-  const canvasRefCallback = useCallback((canvas: HTMLCanvasElement | null) => {
-    if (canvas !== null) {
-      const idx = parseInt(canvas.dataset.index!, 10);
-      canvasRefsMap.current.set(idx, canvas);
-    }
-  }, []);
 
   const { widthX, canvasInfo, timeMarkersWithPositions } = useMemo(() => {
     const nextCanvasInfo = new Map<number, number>();
@@ -160,7 +154,7 @@ export const TimeScale: FunctionComponent<TimeScalePropsWithTheme> = (props) => 
         width={chunkWidth * devicePixelRatio}
         height={timeScaleHeight * devicePixelRatio}
         data-index={i}
-        ref={canvasRefCallback}
+        ref={canvasRef}
       />
     );
   });
@@ -180,20 +174,10 @@ export const TimeScale: FunctionComponent<TimeScalePropsWithTheme> = (props) => 
         .map(({ element }) => element)
     : timeMarkersWithPositions.map(({ element }) => element);
 
-  // Clean up stale refs for unmounted chunks
-  useEffect(() => {
-    const currentMap = canvasRefsMap.current;
-    for (const [idx, canvas] of currentMap.entries()) {
-      if (!canvas.isConnected) {
-        currentMap.delete(idx);
-      }
-    }
-  });
-
   // Draw tick marks on visible canvas chunks.
-  // visibleChunkKey changes only when chunks mount/unmount, not on every scroll pixel.
+  // visibleChunkIndices changes only when chunks mount/unmount, not on every scroll pixel.
   useLayoutEffect(() => {
-    for (const [chunkIdx, canvas] of canvasRefsMap.current.entries()) {
+    for (const [chunkIdx, canvas] of canvasMapRef.current.entries()) {
       const ctx = canvas.getContext('2d');
       if (!ctx) continue;
 
@@ -215,7 +199,7 @@ export const TimeScale: FunctionComponent<TimeScalePropsWithTheme> = (props) => 
         ctx.fillRect(localX, scaleY, 1, scaleHeight);
       }
     }
-  }, [duration, devicePixelRatio, timeColor, timeScaleHeight, canvasInfo, visibleChunkIndices]);
+  }, [canvasMapRef, duration, devicePixelRatio, timeColor, timeScaleHeight, canvasInfo, visibleChunkIndices]);
 
   return (
     <PlaylistTimeScaleScroll

@@ -467,6 +467,10 @@ const LazyExample = createLazyExample(
 - `SpectrogramChannel` — only mounts visible chunks (biggest memory win)
 - All use absolute positioning (`left: chunkIndex * 1000px`) instead of `float: left`
 
+**Shared hooks:**
+- `useVisibleChunkIndices(totalWidth, chunkWidth)` — returns memoized array of visible chunk indices. Uses string-key comparison internally for re-render gating. Exported from `ui-components`.
+- `useChunkedCanvasRefs()` — callback ref + Map storage + stale cleanup for chunked canvases. Internal only (not exported from package public API). Uses `Map<number, HTMLCanvasElement>` instead of sparse arrays.
+
 **Backwards compatibility:** `useScrollViewport()` returns `null` without provider. All components default to rendering everything when viewport is `null`.
 
 ### Web Worker Peak Generation (2026-02-13)
@@ -634,6 +638,8 @@ const analyser = context.createAnalyser();
 17. **Fetch Cleanup with AbortController** - `useAudioTracks` uses AbortController to cancel in-flight fetches on cleanup. Follow this pattern for any fetch in useEffect. For per-item abort (e.g., removing one loading track), use `Map<id, AbortController>` instead of `Set<AbortController>`.
 18. **Derive Render Guards from Props, Not Effect State** - Don't use effect-set state (e.g., `audioBuffers`) in render guards. Effect state lags props by one+ renders, causing content to flash/disappear. Compute values synchronously from props instead.
 19. **Copy Refs in useEffect Body** - When accessing a ref in `useEffect` cleanup, copy `.current` to a local variable inside the effect body. ESLint's `react-hooks/exhaustive-deps` rule flags refs that may change between render and cleanup.
+20. **Refs from Custom Hooks in Dep Arrays** - When a `useRef` is returned from a custom hook, ESLint's `exhaustive-deps` can't trace its stability. Include it in the dep array (harmless, never triggers) rather than using `eslint-disable-next-line` which would mask real missing dependencies.
+21. **Every-Render Cleanup Effects** - `useChunkedCanvasRefs` and SpectrogramChannel's worker cleanup use `useEffect` with no dependency array intentionally. The virtualizer can unmount canvases between any render. Do NOT add `[]` or other deps — this would break stale ref pruning.
 
 ### Playlist Loading Detection
 

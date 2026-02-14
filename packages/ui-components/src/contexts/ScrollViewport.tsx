@@ -166,7 +166,7 @@ export function useScrollViewportSelector<T>(
  * Only triggers a re-render when the set of visible chunks changes, not on every scroll pixel.
  *
  * @param totalWidth Total width in CSS pixels of the content being chunked.
- * @param chunkWidth Width of each chunk in CSS pixels. Defaults to MAX_CANVAS_WIDTH (1000).
+ * @param chunkWidth Width of each chunk in CSS pixels (typically MAX_CANVAS_WIDTH, 1000).
  */
 export function useVisibleChunkIndices(totalWidth: number, chunkWidth: number): number[] {
   const visibleChunkKey = useScrollViewportSelector((viewport) => {

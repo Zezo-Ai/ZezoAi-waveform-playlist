@@ -1,8 +1,9 @@
-import React, { FunctionComponent, useLayoutEffect, useEffect, useCallback, useRef } from 'react';
+import React, { FunctionComponent, useLayoutEffect } from 'react';
 import styled from 'styled-components';
 import type { Peaks, Bits } from '@waveform-playlist/core';
 import { WaveformColor, WaveformDrawMode, isWaveformGradient, waveformColorToCss } from '../wfpl-theme';
 import { useVisibleChunkIndices } from '../contexts/ScrollViewport';
+import { useChunkedCanvasRefs } from '../hooks/useChunkedCanvasRefs';
 import { MAX_CANVAS_WIDTH } from '../constants';
 
 // Re-export WaveformColor for consumers
@@ -121,41 +122,16 @@ export const Channel: FunctionComponent<ChannelProps> = (props) => {
     transparentBackground = false,
     drawMode = 'inverted',
   } = props;
-  const canvasesRef = useRef<HTMLCanvasElement[]>([]);
+  const { canvasRef, canvasMapRef } = useChunkedCanvasRefs();
 
   const visibleChunkIndices = useVisibleChunkIndices(length, MAX_CANVAS_WIDTH);
 
-  const canvasRef = useCallback(
-    (canvas: HTMLCanvasElement | null) => {
-      if (canvas !== null) {
-        const index: number = parseInt(canvas.dataset.index!, 10);
-        canvasesRef.current[index] = canvas;
-      }
-    },
-    []
-  );
-
-  // Clean up stale refs for unmounted chunks
-  useEffect(() => {
-    const canvases = canvasesRef.current;
-    for (let i = canvases.length - 1; i >= 0; i--) {
-      if (canvases[i] && !canvases[i].isConnected) {
-        delete canvases[i];
-      }
-    }
-  });
-
   // Draw waveform bars on visible canvas chunks.
-  // visibleChunkKey changes only when chunks mount/unmount, not on every scroll pixel.
+  // visibleChunkIndices changes only when chunks mount/unmount, not on every scroll pixel.
   useLayoutEffect(() => {
-    const canvases = canvasesRef.current;
     const step = barWidth + barGap;
 
-    for (let i = 0; i < canvases.length; i++) {
-      const canvas = canvases[i];
-      if (!canvas) continue; // Skip unmounted chunks (sparse array from virtualization)
-
-      const canvasIdx = parseInt(canvas.dataset.index!, 10);
+    for (const [canvasIdx, canvas] of canvasMapRef.current.entries()) {
       const globalPixelOffset = canvasIdx * MAX_CANVAS_WIDTH;
 
       const ctx = canvas.getContext('2d');
@@ -232,6 +208,7 @@ export const Channel: FunctionComponent<ChannelProps> = (props) => {
       }
     }
   }, [
+    canvasMapRef,
     data,
     bits,
     waveHeight,
