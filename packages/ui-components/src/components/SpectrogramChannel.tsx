@@ -49,7 +49,7 @@ const SpectrogramCanvas = styled.canvas.attrs<CanvasProps>((props) => ({
 // Inline getColorMap to avoid cross-package import at component level
 // This avoids needing browser package as dependency of ui-components
 function defaultGetColorMap(): Uint8Array {
-  // Viridis fallback — 256-entry grayscale
+  // Grayscale fallback — 256-entry LUT (used when no colorLUT prop provided)
   const lut = new Uint8Array(256 * 3);
   for (let i = 0; i < 256; i++) {
     lut[i * 3] = lut[i * 3 + 1] = lut[i * 3 + 2] = i;
@@ -146,6 +146,7 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
     if (!currentWorkerApi || !clipId) return;
 
     // Step 1: Remove stale registrations for unmounted canvases.
+    const previousCount = registeredIdsRef.current.length;
     const remaining: string[] = [];
     for (const id of registeredIdsRef.current) {
       const match = id.match(/chunk(\d+)$/);
@@ -196,12 +197,16 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
       registeredIdsRef.current = [...registeredIdsRef.current, ...newIds];
     }
 
-    // Step 3: Notify provider with clean, complete list of active canvas IDs.
-    if (newIds.length > 0 || remaining.length < registeredIdsRef.current.length) {
+    // Step 3: Notify provider when canvas set changed (added or removed).
+    const canvasSetChanged = newIds.length > 0 || remaining.length < previousCount;
+    if (canvasSetChanged) {
       const allIds = registeredIdsRef.current;
       const allWidths = allIds.map(id => {
         const match = id.match(/chunk(\d+)$/);
-        if (!match) return MAX_CANVAS_WIDTH;
+        if (!match) {
+          console.warn(`[spectrogram] Unexpected canvas ID format: ${id}`);
+          return MAX_CANVAS_WIDTH;
+        }
         const chunkIdx = parseInt(match[1], 10);
         return Math.min(length - chunkIdx * MAX_CANVAS_WIDTH, MAX_CANVAS_WIDTH);
       });

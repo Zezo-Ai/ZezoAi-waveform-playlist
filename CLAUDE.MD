@@ -639,7 +639,9 @@ const analyser = context.createAnalyser();
 18. **Derive Render Guards from Props, Not Effect State** - Don't use effect-set state (e.g., `audioBuffers`) in render guards. Effect state lags props by one+ renders, causing content to flash/disappear. Compute values synchronously from props instead.
 19. **Copy Refs in useEffect Body** - When accessing a ref in `useEffect` cleanup, copy `.current` to a local variable inside the effect body. ESLint's `react-hooks/exhaustive-deps` rule flags refs that may change between render and cleanup.
 20. **Refs from Custom Hooks in Dep Arrays** - When a `useRef` is returned from a custom hook, ESLint's `exhaustive-deps` can't trace its stability. Include it in the dep array (harmless, never triggers) rather than using `eslint-disable-next-line` which would mask real missing dependencies.
-21. **Every-Render Cleanup Effects** - `useChunkedCanvasRefs` and SpectrogramChannel's worker cleanup use `useEffect` with no dependency array intentionally. The virtualizer can unmount canvases between any render. Do NOT add `[]` or other deps — this would break stale ref pruning.
+21. **Canvas Cleanup on Chunk Changes** - `useChunkedCanvasRefs` runs cleanup on every render (no dependency array) because the virtualizer can unmount canvases between any render. SpectrogramChannel's worker registration effect uses `visibleChunkIndices` as a dependency so it re-runs when chunks mount/unmount, cleaning stale registrations and transferring new canvases in a single pass.
+22. **Virtual Scrolling Chunk Offsets** - Canvas registries may contain non-consecutive chunks (e.g., chunks 50-55). Use `extractChunkNumber(canvasId)` to get the real chunk index — never compute offsets by summing widths from array index 0.
+23. **Multi-Channel Rendering Fairness** - Render visible chunks for ALL channels before background batches. Sequential per-channel rendering causes channel starvation when generation aborts interrupt background work.
 
 ### Playlist Loading Detection
 

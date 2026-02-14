@@ -10,7 +10,11 @@ import { usePlaylistData, usePlaylistControls } from '@waveform-playlist/browser
 /** Extract the chunk number from a canvas ID like "clipId-ch0-chunk5" → 5 */
 function extractChunkNumber(canvasId: string): number {
   const match = canvasId.match(/chunk(\d+)$/);
-  return match ? parseInt(match[1], 10) : 0;
+  if (!match) {
+    console.warn(`[spectrogram] Unexpected canvas ID format: ${canvasId}`);
+    return 0;
+  }
+  return parseInt(match[1], 10);
 }
 
 export interface SpectrogramProviderProps {
@@ -380,6 +384,36 @@ export const SpectrogramProvider: React.FC<SpectrogramProviderProps> = ({
       const abortToken = { aborted: false };
       backgroundRenderAbortRef.current = abortToken;
 
+      // Render off-screen chunks in idle-callback batches.
+      // Returns true if aborted (caller should return early).
+      const renderBackgroundBatches = async (
+        channelRanges: Array<{ ch: number; channelInfo: { canvasIds: string[]; canvasWidths: number[] }; remainingIndices: number[] }>,
+        cacheKey: string,
+        item: { config: SpectrogramConfig; colorMap: ColorMapValue },
+      ): Promise<boolean> => {
+        const BATCH_SIZE = 4;
+        for (const { ch, channelInfo, remainingIndices } of channelRanges) {
+          for (let batchStart = 0; batchStart < remainingIndices.length; batchStart += BATCH_SIZE) {
+            if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return true;
+
+            const batch = remainingIndices.slice(batchStart, batchStart + BATCH_SIZE);
+
+            await new Promise<void>(resolve => {
+              if (typeof requestIdleCallback === 'function') {
+                requestIdleCallback(() => resolve());
+              } else {
+                setTimeout(resolve, 0);
+              }
+            });
+
+            if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return true;
+
+            await renderChunkSubset(workerApi!, cacheKey, channelInfo, batch, item, ch);
+          }
+        }
+        return false;
+      };
+
       for (const item of clipsNeedingFFT) {
         if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
 
@@ -477,27 +511,8 @@ export const SpectrogramProvider: React.FC<SpectrogramProviderProps> = ({
 
             if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
 
-            // Phase 2: Background batches for all channels.
-            const BATCH_SIZE = 4;
-            for (const { ch, channelInfo, remainingIndices } of channelRanges) {
-              for (let batchStart = 0; batchStart < remainingIndices.length; batchStart += BATCH_SIZE) {
-                if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
-
-                const batch = remainingIndices.slice(batchStart, batchStart + BATCH_SIZE);
-
-                await new Promise<void>(resolve => {
-                  if (typeof requestIdleCallback === 'function') {
-                    requestIdleCallback(() => resolve());
-                  } else {
-                    setTimeout(resolve, 0);
-                  }
-                });
-
-                if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
-
-                await renderChunkSubset(workerApi!, cacheKey, channelInfo, batch, item, ch);
-              }
-            }
+            // Phase 2: Render off-screen chunks in background batches.
+            if (await renderBackgroundBatches(channelRanges, cacheKey, item)) return;
           } else {
             const spectrograms = await workerApi!.compute({
               channelDataArrays: item.channelDataArrays,
@@ -533,7 +548,7 @@ export const SpectrogramProvider: React.FC<SpectrogramProviderProps> = ({
         try {
           const clipPixelOffset = Math.floor(item.clipStartSample / samplesPerPixel);
 
-          // Phase 1: Render visible chunks for ALL channels first.
+          // Two-phase rendering: visible chunks first, then background (same as FFT path above).
           const channelRanges: Array<{ ch: number; channelInfo: { canvasIds: string[]; canvasWidths: number[] }; remainingIndices: number[] }> = [];
           for (let ch = 0; ch < item.numChannels; ch++) {
             const channelInfo = clipCanvasInfo.get(ch);
@@ -545,27 +560,8 @@ export const SpectrogramProvider: React.FC<SpectrogramProviderProps> = ({
 
           if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
 
-          // Phase 2: Background batches for all channels.
-          const BATCH_SIZE = 4;
-          for (const { ch, channelInfo, remainingIndices } of channelRanges) {
-            for (let batchStart = 0; batchStart < remainingIndices.length; batchStart += BATCH_SIZE) {
-              if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
-
-              const batch = remainingIndices.slice(batchStart, batchStart + BATCH_SIZE);
-
-              await new Promise<void>(resolve => {
-                if (typeof requestIdleCallback === 'function') {
-                  requestIdleCallback(() => resolve());
-                } else {
-                  setTimeout(resolve, 0);
-                }
-              });
-
-              if (spectrogramGenerationRef.current !== generation || abortToken.aborted) return;
-
-              await renderChunkSubset(workerApi!, cacheKey, channelInfo, batch, item, ch);
-            }
-          }
+          // Phase 2: Render off-screen chunks in background batches.
+          if (await renderBackgroundBatches(channelRanges, cacheKey, item)) return;
         } catch (err) {
           console.warn('Spectrogram display re-render error for clip', item.clipId, err);
         }
