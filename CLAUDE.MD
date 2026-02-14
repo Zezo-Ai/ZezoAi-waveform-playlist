@@ -445,6 +445,25 @@ const LazyExample = createLazyExample(
 
 **Status:** TypeScript checks pass (`pnpm typecheck`). Lint execution is currently blocked in offline environments until dependencies are installable (`pnpm install` needed when network is available).
 
+### Horizontal Virtual Scrolling (Phase 4, 2026-02-13)
+
+**Decision:** Viewport-aware canvas rendering — only mount canvas chunks visible in the scroll container + buffer.
+
+**Implementation:**
+- `ScrollViewportContext` in `packages/ui-components/src/contexts/ScrollViewport.tsx`
+- `ScrollViewportProvider` wraps content inside `Playlist.tsx`, observes `Wrapper` scroll element
+- `useScrollViewport()` returns `{ scrollLeft, containerWidth, visibleStart, visibleEnd }` or `null`
+- Buffer: 1.5x viewport width on each side
+- RAF-throttled scroll listener + ResizeObserver
+
+**Components affected:**
+- `TimeScale` — chunked into 1000px canvases (was single canvas, crashed with long files)
+- `Channel` — absolute positioning, only renders visible chunks
+- `SpectrogramChannel` — only mounts visible chunks (biggest memory win)
+- All use absolute positioning (`left: chunkIndex * 1000px`) instead of `float: left`
+
+**Backwards compatibility:** `useScrollViewport()` returns `null` without provider. All components default to rendering everything when viewport is `null`.
+
 ---
 
 ## Recording Architecture
