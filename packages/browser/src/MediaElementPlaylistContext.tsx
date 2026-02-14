@@ -306,7 +306,6 @@ export const MediaElementPlaylistProvider: React.FC<
     const updateTime = () => {
       const time = playoutRef.current?.getCurrentTime() ?? 0;
       currentTimeRef.current = time;
-      setCurrentTime(time);
 
 
       // Handle annotation playback

@@ -42,7 +42,7 @@ export interface TrackState {
 }
 
 // Split contexts for performance optimization
-// High-frequency updates (currentTime) are isolated from low-frequency state changes
+// Animation context contains playback state and timing refs — no per-frame state updates
 
 export interface PlaybackAnimationContextValue {
   isPlaying: boolean;
@@ -618,9 +618,6 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       const time = audioStartPositionRef.current + elapsed;
       currentTimeRef.current = time;
 
-      // Update state on every frame - context splitting isolates this from other components
-      setCurrentTime(time);
-
       // Handle annotation playback based on continuous play mode
       const currentAnnotations = annotationsRef.current;
       if (currentAnnotations.length > 0) {
@@ -979,7 +976,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const minimumPlaylistHeight = (tracks.length * waveHeight) + timeScaleHeight;
 
   // Split context values for performance optimization
-  // High-frequency updates (currentTime) isolated from other state
+  // Animation context only re-renders consumers on discrete events
+  // (play/pause/stop/seek), never during the animation loop itself
 
   const animationValue: PlaybackAnimationContextValue = useMemo(() => ({
     isPlaying,
