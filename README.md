@@ -4,18 +4,6 @@
 
 A multi-track audio editor and player built with React, Tone.js, and the Web Audio API. Features canvas-based waveform visualization, drag-and-drop clip editing, and professional audio effects.
 
-## Sponsors
-
-<p align="center">
-  <a href="https://moises.ai/" target="_blank">
-    <img width="222px" src="https://raw.githubusercontent.com/naomiaro/waveform-playlist/main/website/static/img/logos/moises-ai.svg" alt="Moises.ai">
-  </a>
-</p>
-
-<p align="center">
-  <a href="https://github.com/sponsors/naomiaro">Become a sponsor</a>
-</p>
-
 <p align="center">
   <img src="https://raw.githubusercontent.com/naomiaro/waveform-playlist/main/website/static/img/waveform-playlist.png" alt="Waveform Playlist Screenshot" width="800">
 </p>
@@ -174,3 +162,15 @@ Originally created for the [Airtime](https://www.sourcefabric.org/software/airti
 ## License
 
 [MIT License](http://doge.mit-license.org)
+
+## Sponsors
+
+<p align="center">
+  <a href="https://moises.ai/" target="_blank">
+    <img width="222px" src="https://raw.githubusercontent.com/naomiaro/waveform-playlist/main/website/static/img/logos/moises-ai.svg" alt="Moises.ai">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/sponsors/naomiaro">Become a sponsor</a>
+</p>
