@@ -94,6 +94,7 @@ pnpm publish --filter @waveform-playlist/NEW-PACKAGE --no-git-checks --access pu
 - MediaElement context types: `packages/browser/src/MediaElementPlaylistContext.tsx`
 - AudioTrackConfig interface: `packages/browser/src/hooks/useAudioTracks.ts`
 - Effects hooks return types: `packages/browser/src/hooks/useDynamicEffects.ts`, `useTrackDynamicEffects.ts`
+- Peak types (`Peaks`, `Bits`, `PeakData`): `packages/core/src/types/index.ts` (re-exported by `webaudio-peaks` for backwards compat)
 
 **Common Doc Drift:** Non-existent hooks (e.g., `useWaveformPlaylist` was removed), wrong property names (e.g., `gain` vs `volume`, `seek` vs `seekTo`), properties attributed to wrong context hooks. Always cross-check docs against source interfaces.
 
@@ -163,6 +164,8 @@ pnpm publish --filter @waveform-playlist/NEW-PACKAGE --no-git-checks --access pu
 - **Hard refresh**: Always use Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows/Linux) after builds
 
 **pnpm Build Ordering:** `pnpm recursive run` determines build order from `dependencies` and `devDependencies` only — **not** `peerDependencies`. If package A needs package B's types at build time (e.g., for DTS generation), B must be in A's `devDependencies` even if it's already a `peerDependency`. Without this, CI builds fail because packages build in parallel/alphabetical order.
+
+**Type Migration Gotcha:** When moving types between packages, `pnpm typecheck` resolves workspace packages via `dist/` (not source). Build the source package first: `pnpm --filter @waveform-playlist/PACKAGE build` before `pnpm typecheck`. Also grep the entire repo for old import paths — easy to miss straggling imports.
 
 ### E2E Testing with Playwright
 
@@ -464,6 +467,19 @@ const LazyExample = createLazyExample(
 - All use absolute positioning (`left: chunkIndex * 1000px`) instead of `float: left`
 
 **Backwards compatibility:** `useScrollViewport()` returns `null` without provider. All components default to rendering everything when viewport is `null`.
+
+### Web Worker Peak Generation (2026-02-13)
+
+**Decision:** Generate `WaveformData` in a web worker at load time, then use `resample()` for near-instant zoom changes.
+
+**Key files:**
+- `packages/browser/src/workers/peaksWorker.ts` — Inline Blob worker (portable across bundlers)
+- `packages/browser/src/hooks/useWaveformDataCache.ts` — Cache hook, watches tracks for clips with `audioBuffer` but no `waveformData`
+- `packages/browser/src/waveformDataLoader.ts` — `extractPeaksFromWaveformDataFull()` for resample + channel extraction
+
+**Peak resolution order in WaveformPlaylistContext:** (1) `clip.waveformData` (external pre-computed), (2) worker cache hit, (3) empty peaks while worker runs.
+
+**Automatic:** Any clip with `audioBuffer` (loaded or recorded) gets worker treatment — no opt-in needed.
 
 ---
 
