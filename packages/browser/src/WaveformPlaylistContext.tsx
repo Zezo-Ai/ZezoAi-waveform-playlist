@@ -4,13 +4,11 @@ import { TonePlayout, type EffectsFunction, type TrackEffectsFunction } from '@w
 import { type Track, type ClipTrack, type Fade, type AnnotationAction } from '@waveform-playlist/core';
 import { type TimeFormat, type WaveformPlaylistTheme, defaultTheme } from '@waveform-playlist/ui-components';
 import { getContext } from 'tone';
-import { generatePeaks } from './peaksUtil';
-
-import { extractPeaksFromWaveformData } from './waveformDataLoader';
+import { extractPeaksFromWaveformDataFull } from './waveformDataLoader';
 import type WaveformData from 'waveform-data';
 import type { PeakData } from '@waveform-playlist/webaudio-peaks';
 import type { AnnotationData } from '@waveform-playlist/core';
-import { useTimeFormat, useZoomControls, useMasterVolume, useAnimationFrameLoop } from './hooks';
+import { useTimeFormat, useZoomControls, useMasterVolume, useAnimationFrameLoop, useWaveformDataCache } from './hooks';
 
 // Types
 export interface ClipPeaks {
@@ -276,6 +274,13 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const { masterVolume, setMasterVolume } = useMasterVolume({ playoutRef, initialVolume: 1.0 });
   const { animationFrameRef, startAnimationFrameLoop, stopAnimationFrameLoop } = useAnimationFrameLoop();
 
+  // Worker-based WaveformData cache for fast zoom resampling
+  const baseScale = useMemo(
+    () => Math.min(...(zoomLevels ?? [256, 512, 1024, 2048, 4096, 8192])),
+    [zoomLevels],
+  );
+  const { cache: waveformDataCache } = useWaveformDataCache(tracks, baseScale);
+
   // Custom setter for continuousPlay that updates BOTH state and ref synchronously
   // This ensures the ref is updated immediately, before the animation loop can read it
   const setContinuousPlay = useCallback((value: boolean) => {
@@ -528,69 +533,51 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     };
   }, [tracks, onReady, isPlaying, effects, stopAnimationFrameLoop]);
 
-  // Regenerate peaks when zoom or mono changes (without reloading audio)
+  // Regenerate peaks when zoom, mono, or waveformDataCache changes (without reloading audio)
+  // Peak sources in priority order:
+  //   A) clip.waveformData — external pre-computed peaks (e.g. from BBC audiowaveform)
+  //   B) waveformDataCache — worker-generated WaveformData (fast resample on zoom)
+  //   C) empty peaks — clip is still loading or has no audio data
   useEffect(() => {
     if (tracks.length === 0) return;
 
-    const bits = 16;
+    const bits: 8 | 16 = 16;
 
-    // Generate peaks for each clip in each track
     const allTrackPeaks: TrackClipPeaks[] = tracks.map((track) => {
       const clipPeaks: ClipPeaks[] = track.clips.map((clip) => {
-        // Check if clip has pre-computed waveform data
+        let peaks: PeakData | undefined;
+
+        // Path A: External pre-computed waveform data (e.g. from audiowaveform .dat file)
         if (clip.waveformData) {
-          // Use waveform-data.js to resample and slice as needed
-          // Pass sample values directly for accuracy
-          const extractedPeaks = extractPeaksFromWaveformData(
+          peaks = extractPeaksFromWaveformDataFull(
             clip.waveformData as WaveformData,
             samplesPerPixel,
-            0, // channel index
+            mono,
+            bits,
             clip.offsetSamples,
-            clip.durationSamples
+            clip.durationSamples,
           );
-
-          return {
-            clipId: clip.id,
-            trackName: track.name,
-            peaks: {
-              length: extractedPeaks.length,
-              data: [extractedPeaks.data], // Wrap in array for channel compatibility
-              bits: extractedPeaks.bits,
-            },
-            startSample: clip.startSample,
-            durationSamples: clip.durationSamples,
-            fadeIn: clip.fadeIn,
-            fadeOut: clip.fadeOut,
-          };
         }
 
-        // Fall back to generating peaks from audioBuffer
-        // If no audioBuffer either, return empty peaks (clip has no visual data)
-        if (!clip.audioBuffer) {
-          console.warn(`Clip "${clip.name || clip.id}" has neither waveformData nor audioBuffer - rendering empty`);
-          return {
-            clipId: clip.id,
-            trackName: track.name,
-            peaks: {
-              length: 0,
-              data: [],
-              bits: bits,
-            },
-            startSample: clip.startSample,
-            durationSamples: clip.durationSamples,
-            fadeIn: clip.fadeIn,
-            fadeOut: clip.fadeOut,
-          };
+        // Path B: Worker-generated WaveformData cache (fast resample on zoom)
+        if (!peaks) {
+          const cached = waveformDataCache.get(clip.id);
+          if (cached) {
+            peaks = extractPeaksFromWaveformDataFull(
+              cached,
+              samplesPerPixel,
+              mono,
+              bits,
+              clip.offsetSamples,
+              clip.durationSamples,
+            );
+          }
         }
 
-        const peaks = generatePeaks(
-          clip.audioBuffer,
-          samplesPerPixel,
-          mono,
-          bits,
-          clip.offsetSamples,
-          clip.durationSamples
-        );
+        // Path C: No peaks data available yet — render empty while worker processes
+        if (!peaks) {
+          peaks = { length: 0, data: [], bits };
+        }
 
         return {
           clipId: clip.id,
@@ -607,7 +594,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     });
 
     setPeaksDataArray(allTrackPeaks);
-  }, [tracks, samplesPerPixel, mono]);
+  }, [tracks, samplesPerPixel, mono, waveformDataCache]);
 
 
   // Animation loop
