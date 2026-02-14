@@ -230,6 +230,7 @@ export const Channel: FunctionComponent<ChannelProps> = (props) => {
     barWidth,
     barGap,
     drawMode,
+    viewport,
   ]);
 
   const totalChunks = Math.ceil(length / MAX_CANVAS_WIDTH);

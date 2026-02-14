@@ -215,7 +215,7 @@ export const TimeScale: FunctionComponent<TimeScalePropsWithTheme> = (props) => 
         ctx.fillRect(localX, scaleY, 1, scaleHeight);
       }
     }
-  }, [duration, devicePixelRatio, timeColor, timeScaleHeight, canvasInfo]);
+  }, [duration, devicePixelRatio, timeColor, timeScaleHeight, canvasInfo, viewport]);
 
   return (
     <PlaylistTimeScaleScroll

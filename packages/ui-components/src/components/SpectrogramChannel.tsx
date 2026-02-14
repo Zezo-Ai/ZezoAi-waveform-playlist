@@ -298,7 +298,7 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
 
     }
 
-  }, [isWorkerMode, data, length, waveHeight, devicePixelRatio, samplesPerPixel, lut, minFrequency, maxF, scaleFn, hasCustomFrequencyScale]);
+  }, [isWorkerMode, data, length, waveHeight, devicePixelRatio, samplesPerPixel, lut, minFrequency, maxF, scaleFn, hasCustomFrequencyScale, viewport]);
 
   // Build canvas chunks — only mount canvases within the visible viewport
   const totalChunks = Math.ceil(length / MAX_CANVAS_WIDTH);
