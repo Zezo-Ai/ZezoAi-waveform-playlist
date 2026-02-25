@@ -5,6 +5,4 @@
 // export * from './viewportOperations';
 
 // Timeline operations
-// export * from './timelineOperations';
-
-export {};
+export * from './timelineOperations';
