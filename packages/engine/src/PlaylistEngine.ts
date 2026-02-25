@@ -41,6 +41,7 @@ export class PlaylistEngine {
   private _adapter: PlayoutAdapter | null;
   private _animFrameId: number | null = null;
   private _disposed = false;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
   private _listeners: Map<string, Set<Function>> = new Map();
 
   constructor(options: PlaylistEngineOptions = {}) {
@@ -363,7 +364,7 @@ export class PlaylistEngine {
     const listeners = this._listeners.get(event);
     if (listeners) {
       for (const listener of listeners) {
-        (listener as (...a: unknown[]) => void)(...args);
+        listener(...args);
       }
     }
   }
