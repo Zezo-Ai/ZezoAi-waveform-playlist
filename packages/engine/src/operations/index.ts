@@ -2,7 +2,7 @@
 export * from './clipOperations';
 
 // Viewport operations
-// export * from './viewportOperations';
+export * from './viewportOperations';
 
 // Timeline operations
 export * from './timelineOperations';
