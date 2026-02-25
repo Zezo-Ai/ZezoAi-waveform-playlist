@@ -202,6 +202,12 @@ pnpm publish --filter @waveform-playlist/NEW-PACKAGE --no-git-checks --access pu
 
 **Design doc:** `docs/plans/2026-02-24-engine-extraction-design.md`
 
+**Patterns:**
+- All mutating methods (moveClip, trimClip, removeTrack, setZoomLevel) guard against no-op statechange emissions — bail early when constrained delta is 0, track not found, or zoom unchanged
+- `setTracks()` copies input array; `getState()` copies output tracks — defensive at both boundaries
+- `PlayoutAdapter.isPlaying()` is defined but not called by engine (engine tracks own `_isPlaying`). Known design gap.
+- Engine uses `seek()` while browser package uses `seekTo()` — naming divergence, noted in "Common Doc Drift"
+
 ---
 
 ## Architectural Decisions
@@ -661,6 +667,7 @@ const analyser = context.createAnalyser();
 21. **Canvas Cleanup on Chunk Changes** - `useChunkedCanvasRefs` runs cleanup on every render (no dependency array) because the virtualizer can unmount canvases between any render. SpectrogramChannel's worker registration effect uses `visibleChunkIndices` as a dependency so it re-runs when chunks mount/unmount, cleaning stale registrations and transferring new canvases in a single pass.
 22. **Virtual Scrolling Chunk Offsets** - Canvas registries may contain non-consecutive chunks (e.g., chunks 50-55). Use `extractChunkNumber(canvasId)` to get the real chunk index — never compute offsets by summing widths from array index 0.
 23. **Multi-Channel Rendering Fairness** - Render visible chunks for ALL channels before background batches. Sequential per-channel rendering causes channel starvation when generation aborts interrupt background work.
+24. **Guard Against No-Op State Emissions** - In stateful classes with event emitters, check if an operation would actually change state before emitting. Zero-delta moves/trims, removing non-existent items, and setting zoom to the same level should bail early to avoid wasted listener calls and UI re-renders.
 
 ### Playlist Loading Detection
 
