@@ -10,10 +10,12 @@ import { sortClipsByTime } from '@waveform-playlist/core';
 import {
   constrainClipDrag,
   constrainBoundaryTrim,
+  canSplitAt,
   splitClip as splitClipOp,
 } from './operations/clipOperations';
 import {
   calculateDuration,
+  clampSeekPosition,
   findClosestZoomIndex,
 } from './operations/timelineOperations';
 import type {
@@ -60,7 +62,7 @@ export class PlaylistEngine {
   getState(): EngineState {
     return {
       tracks: this._tracks,
-      duration: calculateDuration(this._tracks, this._sampleRate),
+      duration: calculateDuration(this._tracks),
       currentTime: this._currentTime,
       isPlaying: this._isPlaying,
       samplesPerPixel: this._zoomLevels[this._zoomIndex],
@@ -111,28 +113,30 @@ export class PlaylistEngine {
     clipId: string,
     deltaSamples: number,
   ): void {
-    this._tracks = this._tracks.map((track) => {
-      if (track.id !== trackId) return track;
+    const track = this._tracks.find((t) => t.id === trackId);
+    if (!track) return;
 
-      const clipIndex = track.clips.findIndex(
-        (c: AudioClip) => c.id === clipId,
-      );
-      if (clipIndex === -1) return track;
+    const clipIndex = track.clips.findIndex(
+      (c: AudioClip) => c.id === clipId,
+    );
+    if (clipIndex === -1) return;
 
-      const clip = track.clips[clipIndex];
-      const sortedClips = sortClipsByTime(track.clips);
-      const sortedIndex = sortedClips.findIndex(
-        (c: AudioClip) => c.id === clipId,
-      );
+    const clip = track.clips[clipIndex];
+    const sortedClips = sortClipsByTime(track.clips);
+    const sortedIndex = sortedClips.findIndex(
+      (c: AudioClip) => c.id === clipId,
+    );
 
-      const constrainedDelta = constrainClipDrag(
-        clip,
-        deltaSamples,
-        sortedClips,
-        sortedIndex,
-      );
+    const constrainedDelta = constrainClipDrag(
+      clip,
+      deltaSamples,
+      sortedClips,
+      sortedIndex,
+    );
 
-      const newClips = track.clips.map((c: AudioClip, i: number) =>
+    this._tracks = this._tracks.map((t) => {
+      if (t.id !== trackId) return t;
+      const newClips = t.clips.map((c: AudioClip, i: number) =>
         i === clipIndex
           ? {
               ...c,
@@ -140,8 +144,7 @@ export class PlaylistEngine {
             }
           : c,
       );
-
-      return { ...track, clips: newClips };
+      return { ...t, clips: newClips };
     });
 
     this._emitStateChange();
@@ -152,34 +155,28 @@ export class PlaylistEngine {
     clipId: string,
     atSample: number,
   ): void {
-    this._tracks = this._tracks.map((track) => {
-      if (track.id !== trackId) return track;
+    const track = this._tracks.find((t) => t.id === trackId);
+    if (!track) return;
 
-      const clipIndex = track.clips.findIndex(
-        (c: AudioClip) => c.id === clipId,
-      );
-      if (clipIndex === -1) return track;
+    const clipIndex = track.clips.findIndex(
+      (c: AudioClip) => c.id === clipId,
+    );
+    if (clipIndex === -1) return;
 
-      const clip = track.clips[clipIndex];
-      const minDuration = Math.floor(
-        DEFAULT_MIN_DURATION_SECONDS * this._sampleRate,
-      );
-      const clipEnd = clip.startSample + clip.durationSamples;
+    const clip = track.clips[clipIndex];
+    const minDuration = Math.floor(
+      DEFAULT_MIN_DURATION_SECONDS * this._sampleRate,
+    );
 
-      // Must be strictly within clip bounds
-      if (atSample <= clip.startSample || atSample >= clipEnd) return track;
+    if (!canSplitAt(clip, atSample, minDuration)) return;
 
-      // Both halves must meet minimum duration
-      const leftDuration = atSample - clip.startSample;
-      const rightDuration = clipEnd - atSample;
-      if (leftDuration < minDuration || rightDuration < minDuration)
-        return track;
+    const { left, right } = splitClipOp(clip, atSample);
 
-      const { left, right } = splitClipOp(clip, atSample);
-      const newClips = [...track.clips];
+    this._tracks = this._tracks.map((t) => {
+      if (t.id !== trackId) return t;
+      const newClips = [...t.clips];
       newClips.splice(clipIndex, 1, left, right);
-
-      return { ...track, clips: newClips };
+      return { ...t, clips: newClips };
     });
 
     this._emitStateChange();
@@ -191,33 +188,35 @@ export class PlaylistEngine {
     boundary: 'left' | 'right',
     deltaSamples: number,
   ): void {
-    this._tracks = this._tracks.map((track) => {
-      if (track.id !== trackId) return track;
+    const track = this._tracks.find((t) => t.id === trackId);
+    if (!track) return;
 
-      const clipIndex = track.clips.findIndex(
-        (c: AudioClip) => c.id === clipId,
-      );
-      if (clipIndex === -1) return track;
+    const clipIndex = track.clips.findIndex(
+      (c: AudioClip) => c.id === clipId,
+    );
+    if (clipIndex === -1) return;
 
-      const clip = track.clips[clipIndex];
-      const sortedClips = sortClipsByTime(track.clips);
-      const sortedIndex = sortedClips.findIndex(
-        (c: AudioClip) => c.id === clipId,
-      );
-      const minDuration = Math.floor(
-        DEFAULT_MIN_DURATION_SECONDS * this._sampleRate,
-      );
+    const clip = track.clips[clipIndex];
+    const sortedClips = sortClipsByTime(track.clips);
+    const sortedIndex = sortedClips.findIndex(
+      (c: AudioClip) => c.id === clipId,
+    );
+    const minDuration = Math.floor(
+      DEFAULT_MIN_DURATION_SECONDS * this._sampleRate,
+    );
 
-      const constrained = constrainBoundaryTrim(
-        clip,
-        deltaSamples,
-        boundary,
-        sortedClips,
-        sortedIndex,
-        minDuration,
-      );
+    const constrained = constrainBoundaryTrim(
+      clip,
+      deltaSamples,
+      boundary,
+      sortedClips,
+      sortedIndex,
+      minDuration,
+    );
 
-      const newClips = track.clips.map((c: AudioClip, i: number) => {
+    this._tracks = this._tracks.map((t) => {
+      if (t.id !== trackId) return t;
+      const newClips = t.clips.map((c: AudioClip, i: number) => {
         if (i !== clipIndex) return c;
         if (boundary === 'left') {
           return {
@@ -230,8 +229,7 @@ export class PlaylistEngine {
           return { ...c, durationSamples: c.durationSamples + constrained };
         }
       });
-
-      return { ...track, clips: newClips };
+      return { ...t, clips: newClips };
     });
 
     this._emitStateChange();
@@ -277,8 +275,8 @@ export class PlaylistEngine {
   }
 
   seek(time: number): void {
-    const duration = calculateDuration(this._tracks, this._sampleRate);
-    this._currentTime = Math.max(0, Math.min(time, duration));
+    const duration = calculateDuration(this._tracks);
+    this._currentTime = clampSeekPosition(time, duration);
     this._adapter?.seek(this._currentTime);
     this._emitStateChange();
   }

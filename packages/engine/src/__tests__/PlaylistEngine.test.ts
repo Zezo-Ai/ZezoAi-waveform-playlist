@@ -58,8 +58,8 @@ describe('PlaylistEngine', () => {
       expect(state.tracks).toEqual([]);
       expect(state.sampleRate).toBe(44100);
       // Default samplesPerPixel (1000) is not in default zoom levels [256..8192],
-      // so findClosestZoomIndex falls back to the middle index (2048)
-      expect(state.samplesPerPixel).toBe(2048);
+      // so findClosestZoomIndex picks the closest value (1024)
+      expect(state.samplesPerPixel).toBe(1024);
       expect(state.isPlaying).toBe(false);
       expect(state.currentTime).toBe(0);
       expect(state.selectedTrackId).toBeNull();
@@ -180,17 +180,27 @@ describe('PlaylistEngine', () => {
       engine.dispose();
     });
 
-    it('ignores operations on non-existent track', () => {
-      const before = engine.getState().tracks;
+    it('ignores operations on non-existent track without emitting', () => {
+      const listener = vi.fn();
+      engine.on('statechange', listener);
+      listener.mockClear(); // clear from setTracks in beforeEach
+
       engine.moveClip('nonexistent', 'c1', 1000);
-      expect(engine.getState().tracks).toEqual(before);
+      engine.splitClip('nonexistent', 'c1', 22050);
+      engine.trimClip('nonexistent', 'c1', 'left', 1000);
+      expect(listener).not.toHaveBeenCalled();
       engine.dispose();
     });
 
-    it('ignores operations on non-existent clip', () => {
-      const before = engine.getState().tracks;
+    it('ignores operations on non-existent clip without emitting', () => {
+      const listener = vi.fn();
+      engine.on('statechange', listener);
+      listener.mockClear();
+
       engine.moveClip('t1', 'nonexistent', 1000);
-      expect(engine.getState().tracks).toEqual(before);
+      engine.splitClip('t1', 'nonexistent', 22050);
+      engine.trimClip('t1', 'nonexistent', 'left', 1000);
+      expect(listener).not.toHaveBeenCalled();
       engine.dispose();
     });
   });

@@ -6,10 +6,9 @@ import type { ClipTrack } from '@waveform-playlist/core';
  * converts to seconds using each clip's sampleRate.
  *
  * @param tracks - Array of clip tracks
- * @param _sampleRate - Timeline sample rate (for API consistency; each clip uses its own sampleRate)
  * @returns Duration in seconds
  */
-export function calculateDuration(tracks: ClipTrack[], _sampleRate: number): number {
+export function calculateDuration(tracks: ClipTrack[]): number {
   let maxDuration = 0;
   for (const track of tracks) {
     for (const clip of track.clips) {
@@ -22,8 +21,9 @@ export function calculateDuration(tracks: ClipTrack[], _sampleRate: number): num
 }
 
 /**
- * Find zoom level index matching a given samplesPerPixel.
- * Returns exact match index, or middle of array if no match.
+ * Find the zoom level index closest to a given samplesPerPixel.
+ * Returns exact match if found, otherwise the index whose value is
+ * nearest to the target (by absolute difference).
  *
  * @param targetSamplesPerPixel - The samplesPerPixel value to find
  * @param zoomLevels - Array of available zoom levels (samplesPerPixel values)
@@ -33,8 +33,20 @@ export function findClosestZoomIndex(
   targetSamplesPerPixel: number,
   zoomLevels: number[],
 ): number {
-  const index = zoomLevels.indexOf(targetSamplesPerPixel);
-  return index !== -1 ? index : Math.floor(zoomLevels.length / 2);
+  if (zoomLevels.length === 0) return 0;
+
+  let bestIndex = 0;
+  let bestDiff = Math.abs(zoomLevels[0] - targetSamplesPerPixel);
+
+  for (let i = 1; i < zoomLevels.length; i++) {
+    const diff = Math.abs(zoomLevels[i] - targetSamplesPerPixel);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestIndex = i;
+    }
+  }
+
+  return bestIndex;
 }
 
 /**

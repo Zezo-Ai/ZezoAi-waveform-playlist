@@ -8,12 +8,12 @@ import {
 
 describe('calculateDuration', () => {
   it('returns 0 for empty tracks', () => {
-    expect(calculateDuration([], 44100)).toBe(0);
+    expect(calculateDuration([])).toBe(0);
   });
 
   it('returns 0 for tracks with no clips', () => {
     const tracks = [{ id: '1', name: 'Track 1', clips: [], muted: false, soloed: false, volume: 1, pan: 0 }];
-    expect(calculateDuration(tracks, 44100)).toBe(0);
+    expect(calculateDuration(tracks)).toBe(0);
   });
 
   it('calculates duration from the furthest clip end', () => {
@@ -24,7 +24,7 @@ describe('calculateDuration', () => {
         { id: 'c2', startSample: 44100, durationSamples: 22050, offsetSamples: 0, sampleRate: 44100, sourceDurationSamples: 22050, gain: 1 },
       ],
     }];
-    expect(calculateDuration(tracks, 44100)).toBe(1.5);
+    expect(calculateDuration(tracks)).toBe(1.5);
   });
 
   it('considers clips across multiple tracks', () => {
@@ -38,7 +38,7 @@ describe('calculateDuration', () => {
         clips: [{ id: 'c2', startSample: 88200, durationSamples: 44100, offsetSamples: 0, sampleRate: 44100, sourceDurationSamples: 44100, gain: 1 }],
       },
     ];
-    expect(calculateDuration(tracks, 44100)).toBe(3);
+    expect(calculateDuration(tracks)).toBe(3);
   });
 });
 
@@ -49,8 +49,14 @@ describe('findClosestZoomIndex', () => {
     expect(findClosestZoomIndex(1024, levels)).toBe(2);
   });
 
-  it('returns middle index when no match found', () => {
-    expect(findClosestZoomIndex(999, levels)).toBe(3);
+  it('returns closest index when no exact match found', () => {
+    // 999 is closest to 1024 (index 2), not middle of array
+    expect(findClosestZoomIndex(999, levels)).toBe(2);
+  });
+
+  it('returns closest for value between two levels', () => {
+    // 700 is closer to 512 (diff=188) than 1024 (diff=324)
+    expect(findClosestZoomIndex(700, levels)).toBe(1);
   });
 
   it('returns 0 for first level match', () => {
