@@ -48,8 +48,12 @@ export class PlaylistEngine {
 
   constructor(options: PlaylistEngineOptions = {}) {
     this._sampleRate = options.sampleRate ?? DEFAULT_SAMPLE_RATE;
-    this._zoomLevels = options.zoomLevels ?? DEFAULT_ZOOM_LEVELS;
+    this._zoomLevels = [...(options.zoomLevels ?? DEFAULT_ZOOM_LEVELS)];
     this._adapter = options.adapter ?? null;
+
+    if (this._zoomLevels.length === 0) {
+      throw new Error('PlaylistEngine: zoomLevels must not be empty');
+    }
 
     const initialSpp = options.samplesPerPixel ?? DEFAULT_SAMPLES_PER_PIXEL;
     this._zoomIndex = findClosestZoomIndex(initialSpp, this._zoomLevels);
@@ -61,7 +65,7 @@ export class PlaylistEngine {
 
   getState(): EngineState {
     return {
-      tracks: this._tracks,
+      tracks: this._tracks.map((t) => ({ ...t, clips: [...t.clips] })),
       duration: calculateDuration(this._tracks),
       currentTime: this._currentTime,
       isPlaying: this._isPlaying,
@@ -241,15 +245,16 @@ export class PlaylistEngine {
 
   async play(startTime?: number, endTime?: number): Promise<void> {
     if (startTime !== undefined) {
-      this._currentTime = startTime;
+      const duration = calculateDuration(this._tracks);
+      this._currentTime = clampSeekPosition(startTime, duration);
     }
-    this._isPlaying = true;
 
     if (this._adapter) {
       await this._adapter.play(this._currentTime, endTime);
       this._startTimeUpdateLoop();
     }
 
+    this._isPlaying = true;
     this._emit('play');
     this._emitStateChange();
   }
@@ -348,6 +353,7 @@ export class PlaylistEngine {
   // ---------------------------------------------------------------------------
 
   dispose(): void {
+    if (this._disposed) return;
     this._disposed = true;
     this._stopTimeUpdateLoop();
     this._adapter?.dispose();
@@ -362,7 +368,11 @@ export class PlaylistEngine {
     const listeners = this._listeners.get(event);
     if (listeners) {
       for (const listener of listeners) {
-        listener(...args);
+        try {
+          listener(...args);
+        } catch (error) {
+          console.warn('[waveform-playlist/engine] Error in event listener:', error);
+        }
       }
     }
   }

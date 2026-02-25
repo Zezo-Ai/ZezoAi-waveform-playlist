@@ -77,6 +77,26 @@ describe('PlaylistEngine', () => {
       expect(state.samplesPerPixel).toBe(512);
       engine.dispose();
     });
+
+    it('throws on empty zoomLevels', () => {
+      expect(() => new PlaylistEngine({ zoomLevels: [] })).toThrow(
+        'zoomLevels must not be empty',
+      );
+    });
+
+    it('returns a defensive copy of tracks from getState', () => {
+      const engine = new PlaylistEngine();
+      const clip = makeClip({ id: 'c1', startSample: 0, durationSamples: 44100 });
+      engine.setTracks([makeTrack('t1', [clip])]);
+
+      const state1 = engine.getState();
+      const state2 = engine.getState();
+      // Same content but different references
+      expect(state1.tracks).toEqual(state2.tracks);
+      expect(state1.tracks).not.toBe(state2.tracks);
+      expect(state1.tracks[0]).not.toBe(state2.tracks[0]);
+      engine.dispose();
+    });
   });
 
   describe('track management', () => {
@@ -240,6 +260,11 @@ describe('PlaylistEngine', () => {
     it('delegates play/pause/stop to adapter', async () => {
       const adapter = createMockAdapter();
       const engine = new PlaylistEngine({ adapter });
+      engine.setTracks([
+        makeTrack('t1', [
+          makeClip({ id: 'c1', startSample: 0, durationSamples: 441000 }),
+        ]),
+      ]);
       await engine.play(1.5);
       expect(adapter.play).toHaveBeenCalledWith(1.5, undefined);
       engine.pause();
@@ -294,6 +319,29 @@ describe('PlaylistEngine', () => {
       expect(engine.getState().currentTime).toBe(1); // 44100 samples = 1 second
       engine.dispose();
     });
+
+    it('clamps startTime in play()', async () => {
+      const engine = new PlaylistEngine();
+      engine.setTracks([
+        makeTrack('t1', [
+          makeClip({ id: 'c1', startSample: 0, durationSamples: 44100 }),
+        ]),
+      ]);
+      await engine.play(100); // Beyond duration of 1 second
+      expect(engine.getState().currentTime).toBe(1);
+      engine.dispose();
+    });
+
+    it('does not set isPlaying when adapter.play rejects', async () => {
+      const adapter = createMockAdapter();
+      (adapter.play as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('AudioContext not resumed'),
+      );
+      const engine = new PlaylistEngine({ adapter });
+      await expect(engine.play()).rejects.toThrow('AudioContext not resumed');
+      expect(engine.getState().isPlaying).toBe(false);
+      engine.dispose();
+    });
   });
 
   describe('events', () => {
@@ -326,6 +374,25 @@ describe('PlaylistEngine', () => {
       expect(stopListener).toHaveBeenCalled();
       engine.dispose();
     });
+
+    it('isolates listener errors from other listeners', () => {
+      const engine = new PlaylistEngine();
+      const errorListener = vi.fn(() => {
+        throw new Error('listener bug');
+      });
+      const goodListener = vi.fn();
+      engine.on('statechange', errorListener);
+      engine.on('statechange', goodListener);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      engine.setTracks([]); // triggers statechange
+      warnSpy.mockRestore();
+
+      // Both listeners were called; the error didn't block the second
+      expect(errorListener).toHaveBeenCalledTimes(1);
+      expect(goodListener).toHaveBeenCalledTimes(1);
+      engine.dispose();
+    });
   });
 
   describe('dispose', () => {
@@ -336,6 +403,14 @@ describe('PlaylistEngine', () => {
       engine.on('statechange', listener);
       engine.dispose();
       expect(adapter.dispose).toHaveBeenCalled();
+    });
+
+    it('is idempotent — double dispose does not call adapter.dispose twice', () => {
+      const adapter = createMockAdapter();
+      const engine = new PlaylistEngine({ adapter });
+      engine.dispose();
+      engine.dispose();
+      expect(adapter.dispose).toHaveBeenCalledTimes(1);
     });
   });
 });
