@@ -162,6 +162,8 @@ pnpm publish --filter @waveform-playlist/NEW-PACKAGE --no-git-checks --access pu
 - **Lint**: `pnpm lint` - ESLint across all packages. **Always run before committing.** This is a root-only script; run from repo root or use `pnpm -w lint`.
 - **Dev server**: `pnpm --filter website start` - Docusaurus dev server
 - **Engine unit tests**: `cd packages/engine && npx vitest run` — vitest (not Playwright)
+- **Core unit tests**: `cd packages/core && npx vitest run`
+- **Playout unit tests**: `cd packages/playout && npx vitest run`
 - **Hard refresh**: Always use Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows/Linux) after builds
 
 **pnpm Build Ordering:** `pnpm recursive run` determines build order from `dependencies` and `devDependencies` only — **not** `peerDependencies`. If package A needs package B's types at build time (e.g., for DTS generation), B must be in A's `devDependencies` even if it's already a `peerDependency`. Without this, CI builds fail because packages build in parallel/alphabetical order.
@@ -201,6 +203,22 @@ pnpm publish --filter @waveform-playlist/NEW-PACKAGE --no-git-checks --access pu
 **No React, no Tone.js** — zero framework dependencies. Only peer dependency is `@waveform-playlist/core`.
 
 **Design doc:** `docs/plans/2026-02-24-engine-extraction-design.md`
+
+### Tone.js Adapter (`createToneAdapter`)
+
+**Purpose:** Bridges `PlayoutAdapter` interface to existing `TonePlayout`/`ToneTrack` classes.
+
+**Location:** `packages/playout/src/TonePlayoutAdapter.ts`
+
+**Pattern:** Factory/closure (not class). Rebuild-on-`setTracks()` — disposes old `TonePlayout`, creates fresh one.
+
+**Key mappings:** `ClipTrack.volume` → `Track.gain`, `ClipTrack.pan` → `Track.stereoPan`, sample-based clips → seconds via core helpers.
+
+**Clip time helpers:** `clipStartTime`, `clipEndTime`, `clipOffsetTime`, `clipDurationTime` in `packages/core/src/clipTimeHelpers.ts`. Pure functions: `samples / sampleRate`.
+
+**Testing:** `packages/playout/src/__tests__/TonePlayoutAdapter.test.ts` — mocks `TonePlayout` to avoid AudioContext. `packages/core/src/__tests__/clipTimeHelpers.test.ts`.
+
+**Not yet wired:** Browser package still uses `TonePlayout` directly. Engine integration is a separate PR.
 
 **Patterns:**
 - All mutating methods (moveClip, trimClip, removeTrack, setZoomLevel) guard against no-op statechange emissions — bail early when constrained delta is 0, track not found, or zoom unchanged
@@ -668,6 +686,7 @@ const analyser = context.createAnalyser();
 22. **Virtual Scrolling Chunk Offsets** - Canvas registries may contain non-consecutive chunks (e.g., chunks 50-55). Use `extractChunkNumber(canvasId)` to get the real chunk index — never compute offsets by summing widths from array index 0.
 23. **Multi-Channel Rendering Fairness** - Render visible chunks for ALL channels before background batches. Sequential per-channel rendering causes channel starvation when generation aborts interrupt background work.
 24. **Guard Against No-Op State Emissions** - In stateful classes with event emitters, check if an operation would actually change state before emitting. Zero-delta moves/trims, removing non-existent items, and setting zoom to the same level should bail early to avoid wasted listener calls and UI re-renders.
+25. **Guard Before State Update in Callbacks** - In callbacks that update both React state and audio engine, validate inputs (e.g., trackId lookup) BEFORE calling `setState`. If the guard is after `setState`, invalid inputs cause UI/audio desync (UI updates but audio doesn't).
 
 ### Playlist Loading Detection
 
@@ -716,7 +735,7 @@ const rebuildChain = useCallback(() => {
 }, []); // Stable function - no dependencies
 ```
 
-**Applied in:** `useDynamicEffects`, `useTrackDynamicEffects`
+**Applied in:** `useDynamicEffects`, `useTrackDynamicEffects`, `WaveformPlaylistContext` track controls (`tracksRef`)
 
 ### Smooth Playback Animation Pattern
 
