@@ -55,7 +55,7 @@ pnpm publish --filter './packages/*' --no-git-checks
 npm install @waveform-playlist/browser
 ```
 
-**Version Bumping:** All 11 `package.json` files (root + 10 packages) must be bumped in sync:
+**Version Bumping:** All 12 `package.json` files (root + 11 packages) must be bumped in sync:
 ```bash
 sed -i '' 's/"version": "OLD"/"version": "NEW"/g' package.json packages/*/package.json
 ```
@@ -159,8 +159,9 @@ pnpm publish --filter @waveform-playlist/NEW-PACKAGE --no-git-checks --access pu
 
 - **Build packages**: `pnpm build` - Build all packages
 - **TypeScript check**: `pnpm typecheck` (enforced in build scripts)
-- **Lint**: `pnpm lint` - ESLint across all packages. **Always run before committing.**
+- **Lint**: `pnpm lint` - ESLint across all packages. **Always run before committing.** This is a root-only script; run from repo root or use `pnpm -w lint`.
 - **Dev server**: `pnpm --filter website start` - Docusaurus dev server
+- **Engine unit tests**: `cd packages/engine && npx vitest run` — vitest (not Playwright)
 - **Hard refresh**: Always use Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows/Linux) after builds
 
 **pnpm Build Ordering:** `pnpm recursive run` determines build order from `dependencies` and `devDependencies` only — **not** `peerDependencies`. If package A needs package B's types at build time (e.g., for DTS generation), B must be in A's `devDependencies` even if it's already a `peerDependency`. Without this, CI builds fail because packages build in parallel/alphabetical order.
@@ -182,6 +183,24 @@ pnpm publish --filter @waveform-playlist/NEW-PACKAGE --no-git-checks --access pu
 - Always rebuild (`pnpm build`) after switching branches before running tests — stale artifacts cause false failures
 
 **Git Safety:** Always make intermediate commits before running `git stash` or switching branches. A failed `git stash pop` + `git checkout -- .` can destroy all uncommitted work permanently.
+
+### Engine Package (`@waveform-playlist/engine`)
+
+**Purpose:** Framework-agnostic timeline engine extracted from React hooks. Enables Svelte/Vue/vanilla bindings.
+
+**Architecture:** Two layers — pure operations functions + stateful `PlaylistEngine` class with event emitter.
+
+**Build:** Uses tsup (not vite) — `pnpm typecheck && tsup`. Outputs ESM + CJS + DTS.
+
+**Testing:** vitest unit tests in `src/__tests__/`. Run with `npx vitest run` from `packages/engine/`.
+
+**Key types:** `PlayoutAdapter` (pluggable audio backend interface), `EngineState` (state snapshot), `EngineEvents` (statechange, timeupdate, play/pause/stop).
+
+**Operations:** `clipOperations.ts` (drag constraints, trim, split), `viewportOperations.ts` (bounds, chunks, scroll threshold), `timelineOperations.ts` (duration, zoom, seek).
+
+**No React, no Tone.js** — zero framework dependencies. Only peer dependency is `@waveform-playlist/core`.
+
+**Design doc:** `docs/plans/2026-02-24-engine-extraction-design.md`
 
 ---
 
