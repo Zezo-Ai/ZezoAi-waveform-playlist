@@ -1,5 +1,5 @@
 // Clip editing operations
-// export * from './clipOperations';
+export * from './clipOperations';
 
 // Viewport operations
 // export * from './viewportOperations';
