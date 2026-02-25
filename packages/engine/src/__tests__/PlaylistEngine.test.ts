@@ -148,6 +148,25 @@ describe('PlaylistEngine', () => {
       expect(engine.getState().selectedTrackId).toBeNull();
       engine.dispose();
     });
+
+    it('copies input tracks to prevent external mutation', () => {
+      const tracks = [makeTrack('t1', [])];
+      engine.setTracks(tracks);
+      // Mutate the original array after setTracks
+      tracks.push(makeTrack('t2', []));
+      expect(engine.getState().tracks).toHaveLength(1);
+      engine.dispose();
+    });
+
+    it('removeTrack with non-existent ID does not emit', () => {
+      engine.setTracks([makeTrack('t1', [])]);
+      const listener = vi.fn();
+      engine.on('statechange', listener);
+      listener.mockClear();
+      engine.removeTrack('nonexistent');
+      expect(listener).not.toHaveBeenCalled();
+      engine.dispose();
+    });
   });
 
   describe('clip editing', () => {
@@ -193,10 +212,39 @@ describe('PlaylistEngine', () => {
       engine.dispose();
     });
 
-    it('trims a clip boundary', () => {
+    it('trims right boundary', () => {
       engine.trimClip('t1', 'c1', 'right', -22050);
       const clip = engine.getState().tracks[0].clips[0];
       expect(clip.durationSamples).toBe(22050);
+      engine.dispose();
+    });
+
+    it('trims left boundary', () => {
+      engine.trimClip('t1', 'c1', 'left', 11025);
+      const clip = engine.getState().tracks[0].clips[0];
+      expect(clip.startSample).toBe(11025);
+      expect(clip.offsetSamples).toBe(11025);
+      expect(clip.durationSamples).toBe(44100 - 11025);
+      engine.dispose();
+    });
+
+    it('does not emit when move constrained to zero delta', () => {
+      // c1 starts at 0, moving left by -1000 gets clamped to 0
+      const listener = vi.fn();
+      engine.on('statechange', listener);
+      listener.mockClear();
+      engine.moveClip('t1', 'c1', -1000);
+      expect(listener).not.toHaveBeenCalled();
+      engine.dispose();
+    });
+
+    it('does not emit when trim constrained to zero delta', () => {
+      // c1 starts at 0 with offsetSamples 0, trimming left further left is clamped to 0
+      const listener = vi.fn();
+      engine.on('statechange', listener);
+      listener.mockClear();
+      engine.trimClip('t1', 'c1', 'left', -1000);
+      expect(listener).not.toHaveBeenCalled();
       engine.dispose();
     });
 
@@ -254,6 +302,28 @@ describe('PlaylistEngine', () => {
       expect(listener).not.toHaveBeenCalled();
       engine.dispose();
     });
+
+    it('setZoomLevel changes to closest level', () => {
+      const engine = new PlaylistEngine({
+        samplesPerPixel: 256,
+        zoomLevels: [256, 512, 1024, 2048],
+      });
+      engine.setZoomLevel(900); // Closest to 1024
+      expect(engine.getState().samplesPerPixel).toBe(1024);
+      engine.dispose();
+    });
+
+    it('setZoomLevel does not emit when level unchanged', () => {
+      const engine = new PlaylistEngine({
+        samplesPerPixel: 1024,
+        zoomLevels: [256, 512, 1024, 2048],
+      });
+      const listener = vi.fn();
+      engine.on('statechange', listener);
+      engine.setZoomLevel(1024); // Same level
+      expect(listener).not.toHaveBeenCalled();
+      engine.dispose();
+    });
   });
 
   describe('playback delegation', () => {
@@ -288,11 +358,34 @@ describe('PlaylistEngine', () => {
       engine.dispose();
     });
 
+    it('delegates setMasterVolume to adapter', () => {
+      const adapter = createMockAdapter();
+      const engine = new PlaylistEngine({ adapter });
+      engine.setMasterVolume(0.75);
+      expect(adapter.setMasterVolume).toHaveBeenCalledWith(0.75);
+      engine.dispose();
+    });
+
     it('works without adapter (state-only mode)', async () => {
       const engine = new PlaylistEngine();
       await engine.play();
       engine.pause();
       engine.stop();
+      engine.dispose();
+    });
+
+    it('pause captures currentTime from adapter', async () => {
+      const adapter = createMockAdapter();
+      (adapter.getCurrentTime as ReturnType<typeof vi.fn>).mockReturnValue(3.5);
+      const engine = new PlaylistEngine({ adapter });
+      engine.setTracks([
+        makeTrack('t1', [
+          makeClip({ id: 'c1', startSample: 0, durationSamples: 441000 }),
+        ]),
+      ]);
+      await engine.play();
+      engine.pause();
+      expect(engine.getState().currentTime).toBe(3.5);
       engine.dispose();
     });
 

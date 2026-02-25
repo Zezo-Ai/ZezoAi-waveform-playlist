@@ -83,8 +83,8 @@ export class PlaylistEngine {
   // ---------------------------------------------------------------------------
 
   setTracks(tracks: ClipTrack[]): void {
-    this._tracks = tracks;
-    this._adapter?.setTracks(tracks);
+    this._tracks = [...tracks];
+    this._adapter?.setTracks(this._tracks);
     this._emitStateChange();
   }
 
@@ -95,6 +95,7 @@ export class PlaylistEngine {
   }
 
   removeTrack(trackId: string): void {
+    if (!this._tracks.some((t) => t.id === trackId)) return;
     this._tracks = this._tracks.filter((t) => t.id !== trackId);
     if (this._selectedTrackId === trackId) {
       this._selectedTrackId = null;
@@ -137,6 +138,8 @@ export class PlaylistEngine {
       sortedClips,
       sortedIndex,
     );
+
+    if (constrainedDelta === 0) return;
 
     this._tracks = this._tracks.map((t) => {
       if (t.id !== trackId) return t;
@@ -217,6 +220,8 @@ export class PlaylistEngine {
       sortedIndex,
       minDuration,
     );
+
+    if (constrained === 0) return;
 
     this._tracks = this._tracks.map((t) => {
       if (t.id !== trackId) return t;
@@ -329,7 +334,9 @@ export class PlaylistEngine {
   }
 
   setZoomLevel(samplesPerPixel: number): void {
-    this._zoomIndex = findClosestZoomIndex(samplesPerPixel, this._zoomLevels);
+    const newIndex = findClosestZoomIndex(samplesPerPixel, this._zoomLevels);
+    if (newIndex === this._zoomIndex) return;
+    this._zoomIndex = newIndex;
     this._emitStateChange();
   }
 
