@@ -164,7 +164,10 @@ pnpm publish --filter @waveform-playlist/NEW-PACKAGE --no-git-checks --access pu
 - **Engine unit tests**: `cd packages/engine && npx vitest run` — vitest (not Playwright)
 - **Core unit tests**: `cd packages/core && npx vitest run`
 - **Playout unit tests**: `cd packages/playout && npx vitest run`
+- **UI components unit tests**: `cd packages/ui-components && npx vitest run`
 - **Hard refresh**: Always use Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows/Linux) after builds
+
+**CI Validation:** `.github/workflows/ci.yml` runs on PRs to `main`: build, lint, and `prettier --check`. Format code with `pnpm format` before pushing.
 
 **pnpm Build Ordering:** `pnpm recursive run` determines build order from `dependencies` and `devDependencies` only — **not** `peerDependencies`. If package A needs package B's types at build time (e.g., for DTS generation), B must be in A's `devDependencies` even if it's already a `peerDependency`. Without this, CI builds fail because packages build in parallel/alphabetical order.
 
@@ -511,8 +514,10 @@ const LazyExample = createLazyExample(
 - All use absolute positioning (`left: chunkIndex * 1000px`) instead of `float: left`
 
 **Shared hooks:**
-- `useVisibleChunkIndices(totalWidth, chunkWidth)` — returns memoized array of visible chunk indices. Uses string-key comparison internally for re-render gating. Exported from `ui-components`.
+- `useVisibleChunkIndices(totalWidth, chunkWidth, originX?)` — returns memoized array of visible chunk indices. `originX` converts local chunk coords to global viewport space (required for clips not at position 0). Uses string-key comparison internally for re-render gating. Exported from `ui-components`.
 - `useChunkedCanvasRefs()` — callback ref + Map storage + stale cleanup for chunked canvases. Internal only (not exported from package public API). Uses `Map<number, HTMLCanvasElement>` instead of sparse arrays.
+
+**Clip coordinate space:** `ClipViewportOriginProvider` in `packages/ui-components/src/contexts/ClipViewportOrigin.tsx` supplies the clip's pixel `left` offset to descendant `Channel`/`SpectrogramChannel` components. Wrapped around `ChannelsWrapper` in `Clip.tsx`. Defaults to `0` for non-clip consumers (e.g., `TimeScale`).
 
 **Backwards compatibility:** `useScrollViewport()` returns `null` without provider. All components default to rendering everything when viewport is `null`.
 
