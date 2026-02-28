@@ -8,7 +8,7 @@ function makeClip(
     id: string;
     startSample: number;
     durationSamples: number;
-  },
+  }
 ): AudioClip {
   return {
     offsetSamples: 0,
@@ -79,9 +79,7 @@ describe('PlaylistEngine', () => {
     });
 
     it('throws on empty zoomLevels', () => {
-      expect(() => new PlaylistEngine({ zoomLevels: [] })).toThrow(
-        'zoomLevels must not be empty',
-      );
+      expect(() => new PlaylistEngine({ zoomLevels: [] })).toThrow('zoomLevels must not be empty');
     });
 
     it('returns a defensive copy of tracks from getState', () => {
@@ -109,9 +107,7 @@ describe('PlaylistEngine', () => {
       const listener = vi.fn();
       engine.on('statechange', listener);
       const tracks = [
-        makeTrack('t1', [
-          makeClip({ id: 'c1', startSample: 0, durationSamples: 44100 }),
-        ]),
+        makeTrack('t1', [makeClip({ id: 'c1', startSample: 0, durationSamples: 44100 })]),
       ];
       engine.setTracks(tracks);
       expect(engine.getState().tracks).toEqual(tracks);
@@ -331,9 +327,7 @@ describe('PlaylistEngine', () => {
       const adapter = createMockAdapter();
       const engine = new PlaylistEngine({ adapter });
       engine.setTracks([
-        makeTrack('t1', [
-          makeClip({ id: 'c1', startSample: 0, durationSamples: 441000 }),
-        ]),
+        makeTrack('t1', [makeClip({ id: 'c1', startSample: 0, durationSamples: 441000 })]),
       ]);
       await engine.play(1.5);
       expect(adapter.play).toHaveBeenCalledWith(1.5, undefined);
@@ -379,9 +373,7 @@ describe('PlaylistEngine', () => {
       (adapter.getCurrentTime as ReturnType<typeof vi.fn>).mockReturnValue(3.5);
       const engine = new PlaylistEngine({ adapter });
       engine.setTracks([
-        makeTrack('t1', [
-          makeClip({ id: 'c1', startSample: 0, durationSamples: 441000 }),
-        ]),
+        makeTrack('t1', [makeClip({ id: 'c1', startSample: 0, durationSamples: 441000 })]),
       ]);
       await engine.play();
       engine.pause();
@@ -392,9 +384,7 @@ describe('PlaylistEngine', () => {
     it('updates currentTime on seek', () => {
       const engine = new PlaylistEngine();
       engine.setTracks([
-        makeTrack('t1', [
-          makeClip({ id: 'c1', startSample: 0, durationSamples: 441000 }),
-        ]),
+        makeTrack('t1', [makeClip({ id: 'c1', startSample: 0, durationSamples: 441000 })]),
       ]);
       engine.seek(5);
       expect(engine.getState().currentTime).toBe(5);
@@ -404,9 +394,7 @@ describe('PlaylistEngine', () => {
     it('clamps seek to duration', () => {
       const engine = new PlaylistEngine();
       engine.setTracks([
-        makeTrack('t1', [
-          makeClip({ id: 'c1', startSample: 0, durationSamples: 44100 }),
-        ]),
+        makeTrack('t1', [makeClip({ id: 'c1', startSample: 0, durationSamples: 44100 })]),
       ]);
       engine.seek(100);
       expect(engine.getState().currentTime).toBe(1); // 44100 samples = 1 second
@@ -416,9 +404,7 @@ describe('PlaylistEngine', () => {
     it('clamps startTime in play()', async () => {
       const engine = new PlaylistEngine();
       engine.setTracks([
-        makeTrack('t1', [
-          makeClip({ id: 'c1', startSample: 0, durationSamples: 44100 }),
-        ]),
+        makeTrack('t1', [makeClip({ id: 'c1', startSample: 0, durationSamples: 44100 })]),
       ]);
       await engine.play(100); // Beyond duration of 1 second
       expect(engine.getState().currentTime).toBe(1);
@@ -428,7 +414,7 @@ describe('PlaylistEngine', () => {
     it('does not set isPlaying when adapter.play rejects', async () => {
       const adapter = createMockAdapter();
       (adapter.play as ReturnType<typeof vi.fn>).mockRejectedValue(
-        new Error('AudioContext not resumed'),
+        new Error('AudioContext not resumed')
       );
       const engine = new PlaylistEngine({ adapter });
       await expect(engine.play()).rejects.toThrow('AudioContext not resumed');

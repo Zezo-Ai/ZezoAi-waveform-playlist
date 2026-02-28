@@ -29,7 +29,7 @@ const PlaylistTimeScaleScroll = styled.div.attrs<PlaylistTimeScaleScrollProps>((
 }))<PlaylistTimeScaleScrollProps>`
   position: relative;
   overflow: visible; /* Allow time labels to render above the container */
-  border-bottom: 1px solid ${props => props.theme.timeColor};
+  border-bottom: 1px solid ${(props) => props.theme.timeColor};
   box-sizing: border-box;
 `;
 
@@ -62,7 +62,7 @@ const TimeStamp = styled.div.attrs<TimeStampProps>((props) => ({
   position: absolute;
   font-size: 0.75rem; /* Smaller font to prevent overflow */
   white-space: nowrap; /* Prevent text wrapping */
-  color: ${props => props.theme.timeColor}; /* Use theme color instead of inheriting */
+  color: ${(props) => props.theme.timeColor}; /* Use theme color instead of inheriting */
 `;
 
 export interface TimeScaleProps {
@@ -136,7 +136,16 @@ export const TimeScale: FunctionComponent<TimeScalePropsWithTheme> = (props) => 
       canvasInfo: nextCanvasInfo,
       timeMarkersWithPositions: nextMarkers,
     };
-  }, [duration, samplesPerPixel, sampleRate, marker, bigStep, secondStep, renderTimestamp, timeScaleHeight]);
+  }, [
+    duration,
+    samplesPerPixel,
+    sampleRate,
+    marker,
+    bigStep,
+    secondStep,
+    renderTimestamp,
+    timeScaleHeight,
+  ]);
 
   const visibleChunkIndices = useVisibleChunkIndices(widthX, MAX_CANVAS_WIDTH);
 
@@ -161,18 +170,19 @@ export const TimeScale: FunctionComponent<TimeScalePropsWithTheme> = (props) => 
 
   // Filter time markers to visible chunk range. Uses chunk boundaries
   // rather than exact viewport pixels — sufficient given the 1.5× overscan buffer.
-  const firstChunkLeft = visibleChunkIndices.length > 0
-    ? visibleChunkIndices[0] * MAX_CANVAS_WIDTH
-    : 0;
-  const lastChunkRight = visibleChunkIndices.length > 0
-    ? (visibleChunkIndices[visibleChunkIndices.length - 1] + 1) * MAX_CANVAS_WIDTH
-    : Infinity;
+  const firstChunkLeft =
+    visibleChunkIndices.length > 0 ? visibleChunkIndices[0] * MAX_CANVAS_WIDTH : 0;
+  const lastChunkRight =
+    visibleChunkIndices.length > 0
+      ? (visibleChunkIndices[visibleChunkIndices.length - 1] + 1) * MAX_CANVAS_WIDTH
+      : Infinity;
 
-  const visibleMarkers = visibleChunkIndices.length > 0
-    ? timeMarkersWithPositions
-        .filter(({ pix }) => pix >= firstChunkLeft && pix < lastChunkRight)
-        .map(({ element }) => element)
-    : timeMarkersWithPositions.map(({ element }) => element);
+  const visibleMarkers =
+    visibleChunkIndices.length > 0
+      ? timeMarkersWithPositions
+          .filter(({ pix }) => pix >= firstChunkLeft && pix < lastChunkRight)
+          .map(({ element }) => element)
+      : timeMarkersWithPositions.map(({ element }) => element);
 
   // Draw tick marks on visible canvas chunks.
   // visibleChunkIndices changes only when chunks mount/unmount, not on every scroll pixel.
@@ -199,7 +209,15 @@ export const TimeScale: FunctionComponent<TimeScalePropsWithTheme> = (props) => 
         ctx.fillRect(localX, scaleY, 1, scaleHeight);
       }
     }
-  }, [canvasMapRef, duration, devicePixelRatio, timeColor, timeScaleHeight, canvasInfo, visibleChunkIndices]);
+  }, [
+    canvasMapRef,
+    duration,
+    devicePixelRatio,
+    timeColor,
+    timeScaleHeight,
+    canvasInfo,
+    visibleChunkIndices,
+  ]);
 
   return (
     <PlaylistTimeScaleScroll

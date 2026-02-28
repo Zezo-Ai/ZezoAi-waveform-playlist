@@ -12,7 +12,11 @@ import {
 import { ToneTrack, ToneTrackOptions } from './ToneTrack';
 
 // Effects function no longer receives ToneLib - effects should import Tone themselves
-export type EffectsFunction = (masterGainNode: Volume, destination: ToneAudioNode, isOffline: boolean) => void | (() => void);
+export type EffectsFunction = (
+  masterGainNode: Volume,
+  destination: ToneAudioNode,
+  isOffline: boolean
+) => void | (() => void);
 
 export interface TonePlayoutOptions {
   tracks?: ToneTrack[];
@@ -45,7 +49,7 @@ export class TonePlayout {
     }
 
     if (options.tracks) {
-      options.tracks.forEach(track => {
+      options.tracks.forEach((track) => {
         this.tracks.set(track.id, track);
         // Initialize manual mute state for constructor-provided tracks
         this.manualMuteState.set(track.id, track.muted);
@@ -175,14 +179,14 @@ export class TonePlayout {
 
   pause(): void {
     getTransport().pause();
-    this.tracks.forEach(track => {
+    this.tracks.forEach((track) => {
       track.pause();
     });
   }
 
   stop(): void {
     getTransport().stop();
-    this.tracks.forEach(track => {
+    this.tracks.forEach((track) => {
       track.stop();
     });
   }
@@ -245,7 +249,7 @@ export class TonePlayout {
   }
 
   dispose(): void {
-    this.tracks.forEach(track => {
+    this.tracks.forEach((track) => {
       track.dispose();
     });
     this.tracks.clear();

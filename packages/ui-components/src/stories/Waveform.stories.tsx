@@ -73,10 +73,7 @@ const createEmptyTracks = (count: number): ClipTrack[] => {
 
 export const EmptyPlaylist: Story = {
   render: () => (
-    <WaveformPlaylistProvider
-      tracks={createEmptyTracks(1)}
-      samplesPerPixel={1024}
-    >
+    <WaveformPlaylistProvider tracks={createEmptyTracks(1)} samplesPerPixel={1024}>
       <div style={{ padding: '1rem' }}>
         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
           <PlayButton />
@@ -99,10 +96,7 @@ export const EmptyPlaylist: Story = {
 
 export const MultipleEmptyTracks: Story = {
   render: () => (
-    <WaveformPlaylistProvider
-      tracks={createEmptyTracks(3)}
-      samplesPerPixel={1024}
-    >
+    <WaveformPlaylistProvider tracks={createEmptyTracks(3)} samplesPerPixel={1024}>
       <div style={{ padding: '1rem' }}>
         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
           <PlayButton />
@@ -143,7 +137,8 @@ export const WithoutTimescale: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Waveform without the timescale ruler - controlled via the `timescale` prop on WaveformPlaylistProvider. Useful for compact layouts.',
+        story:
+          'Waveform without the timescale ruler - controlled via the `timescale` prop on WaveformPlaylistProvider. Useful for compact layouts.',
       },
     },
   },
@@ -152,8 +147,24 @@ export const WithoutTimescale: Story = {
 export const CustomTrackNames: Story = {
   render: () => {
     const tracks: ClipTrack[] = [
-      { id: 'vocals', name: 'Lead Vocals', clips: [], muted: false, soloed: false, volume: 1, pan: 0 },
-      { id: 'guitar', name: 'Electric Guitar', clips: [], muted: false, soloed: false, volume: 1, pan: 0 },
+      {
+        id: 'vocals',
+        name: 'Lead Vocals',
+        clips: [],
+        muted: false,
+        soloed: false,
+        volume: 1,
+        pan: 0,
+      },
+      {
+        id: 'guitar',
+        name: 'Electric Guitar',
+        clips: [],
+        muted: false,
+        soloed: false,
+        volume: 1,
+        pan: 0,
+      },
       { id: 'bass', name: 'Bass', clips: [], muted: false, soloed: false, volume: 1, pan: 0 },
       { id: 'drums', name: 'Drums', clips: [], muted: false, soloed: false, volume: 1, pan: 0 },
     ];

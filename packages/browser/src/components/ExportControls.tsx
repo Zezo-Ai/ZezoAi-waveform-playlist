@@ -69,9 +69,7 @@ export const ExportWavButton: React.FC<ExportWavButtonProps> = ({
     }
   };
 
-  const buttonLabel = isExporting
-    ? `Exporting ${Math.round(progress * 100)}%`
-    : label;
+  const buttonLabel = isExporting ? `Exporting ${Math.round(progress * 100)}%` : label;
 
   return (
     <BaseControlButton

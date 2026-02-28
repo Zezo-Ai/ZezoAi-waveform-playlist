@@ -71,10 +71,7 @@ type ScrollViewportProviderProps = {
   children: ReactNode;
 };
 
-export const ScrollViewportProvider = ({
-  containerRef,
-  children,
-}: ScrollViewportProviderProps) => {
+export const ScrollViewportProvider = ({ containerRef, children }: ScrollViewportProviderProps) => {
   const storeRef = useRef<ViewportStore | null>(null);
   if (storeRef.current === null) {
     storeRef.current = new ViewportStore();
@@ -122,11 +119,7 @@ export const ScrollViewportProvider = ({
     };
   }, [containerRef, measure, scheduleUpdate]);
 
-  return (
-    <ViewportStoreContext.Provider value={store}>
-      {children}
-    </ViewportStoreContext.Provider>
-  );
+  return <ViewportStoreContext.Provider value={store}>{children}</ViewportStoreContext.Provider>;
 };
 
 /**
@@ -138,7 +131,7 @@ export const useScrollViewport = (): ScrollViewport | null => {
   return useSyncExternalStore(
     store ? store.subscribe : EMPTY_SUBSCRIBE,
     store ? store.getSnapshot : NULL_SNAPSHOT,
-    NULL_SNAPSHOT,
+    NULL_SNAPSHOT
   );
 };
 
@@ -150,14 +143,12 @@ export const useScrollViewport = (): ScrollViewport | null => {
  * Example: compute visible chunk key so the component only re-renders when
  * the set of visible chunks actually changes, not on every scroll update.
  */
-export function useScrollViewportSelector<T>(
-  selector: (viewport: ScrollViewport | null) => T,
-): T {
+export function useScrollViewportSelector<T>(selector: (viewport: ScrollViewport | null) => T): T {
   const store = useContext(ViewportStoreContext);
   return useSyncExternalStore(
     store ? store.subscribe : EMPTY_SUBSCRIBE,
     () => selector(store ? store.getSnapshot() : null),
-    () => selector(null),
+    () => selector(null)
   );
 }
 
@@ -193,7 +184,7 @@ export function useVisibleChunkIndices(totalWidth: number, chunkWidth: number): 
   // Memoize on the key string so the returned array is referentially stable
   // between renders — safe to use directly in useLayoutEffect dependency arrays.
   return useMemo(
-    () => visibleChunkKey ? visibleChunkKey.split(',').map(Number) : [],
-    [visibleChunkKey],
+    () => (visibleChunkKey ? visibleChunkKey.split(',').map(Number) : []),
+    [visibleChunkKey]
   );
 }

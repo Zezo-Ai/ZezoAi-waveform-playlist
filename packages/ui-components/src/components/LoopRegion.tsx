@@ -46,20 +46,20 @@ const LoopMarker = styled.div.attrs<LoopMarkerProps>((props) => ({
     content: '';
     position: absolute;
     top: 0;
-    ${(props) => props.$isStart ? 'left: 0' : 'right: 0'};
+    ${(props) => (props.$isStart ? 'left: 0' : 'right: 0')};
     width: 0;
     height: 0;
     border-top: 8px solid ${(props) => props.$color};
-    ${(props) => props.$isStart
-      ? 'border-right: 8px solid transparent;'
-      : 'border-left: 8px solid transparent;'
-    }
+    ${(props) =>
+      props.$isStart
+        ? 'border-right: 8px solid transparent;'
+        : 'border-left: 8px solid transparent;'}
   }
 `;
 
 export interface LoopRegionProps {
   startPosition: number; // Start position in pixels
-  endPosition: number;   // End position in pixels
+  endPosition: number; // End position in pixels
   regionColor?: string;
   markerColor?: string;
 }
@@ -72,7 +72,7 @@ export const LoopRegion: React.FC<LoopRegionProps> = ({
   startPosition,
   endPosition,
   regionColor = 'rgba(59, 130, 246, 0.3)',
-  markerColor = '#3b82f6'
+  markerColor = '#3b82f6',
 }) => {
   const width = Math.max(0, endPosition - startPosition);
 
@@ -135,7 +135,7 @@ const DraggableMarkerHandle = styled.div.attrs<DraggableMarkerHandleProps>((prop
     width: 2px;
     height: 100%;
     background: ${(props) => props.$color};
-    opacity: ${(props) => props.$isDragging ? 1 : 0.8};
+    opacity: ${(props) => (props.$isDragging ? 1 : 0.8)};
   }
 
   /* Triangle marker at top */
@@ -143,14 +143,14 @@ const DraggableMarkerHandle = styled.div.attrs<DraggableMarkerHandleProps>((prop
     content: '';
     position: absolute;
     top: 0;
-    ${(props) => props.$isStart ? 'left: 5px' : 'left: -1px'};
+    ${(props) => (props.$isStart ? 'left: 5px' : 'left: -1px')};
     width: 0;
     height: 0;
     border-top: 10px solid ${(props) => props.$color};
-    ${(props) => props.$isStart
-      ? 'border-right: 10px solid transparent;'
-      : 'border-left: 10px solid transparent;'
-    }
+    ${(props) =>
+      props.$isStart
+        ? 'border-right: 10px solid transparent;'
+        : 'border-left: 10px solid transparent;'}
   }
 
   &:hover::before {
@@ -186,7 +186,7 @@ const TimescaleLoopShade = styled.div.attrs<TimescaleLoopShadeProps>((props) => 
 
 export interface LoopRegionMarkersProps {
   startPosition: number; // Start position in pixels
-  endPosition: number;   // End position in pixels
+  endPosition: number; // End position in pixels
   markerColor?: string;
   regionColor?: string;
   onLoopStartChange?: (newPositionPixels: number) => void;
@@ -223,79 +223,82 @@ export const LoopRegionMarkers: React.FC<LoopRegionMarkersProps> = ({
   const width = Math.max(0, endPosition - startPosition);
 
   // Handle dragging individual markers
-  const handleMarkerMouseDown = useCallback((
-    e: React.MouseEvent,
-    marker: 'start' | 'end'
-  ) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDraggingMarker(marker);
-    dragStartX.current = e.clientX;
-    dragStartPosition.current = marker === 'start' ? startPosition : endPosition;
+  const handleMarkerMouseDown = useCallback(
+    (e: React.MouseEvent, marker: 'start' | 'end') => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDraggingMarker(marker);
+      dragStartX.current = e.clientX;
+      dragStartPosition.current = marker === 'start' ? startPosition : endPosition;
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const delta = moveEvent.clientX - dragStartX.current;
-      const newPosition = dragStartPosition.current + delta;
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        const delta = moveEvent.clientX - dragStartX.current;
+        const newPosition = dragStartPosition.current + delta;
 
-      if (marker === 'start') {
-        // Start marker can't go past end marker or outside bounds
-        const clampedPosition = Math.max(minPosition, Math.min(endPosition - 10, newPosition));
-        onLoopStartChange?.(clampedPosition);
-      } else {
-        // End marker can't go before start marker or outside bounds
-        const clampedPosition = Math.max(startPosition + 10, Math.min(maxPosition, newPosition));
-        onLoopEndChange?.(clampedPosition);
-      }
-    };
+        if (marker === 'start') {
+          // Start marker can't go past end marker or outside bounds
+          const clampedPosition = Math.max(minPosition, Math.min(endPosition - 10, newPosition));
+          onLoopStartChange?.(clampedPosition);
+        } else {
+          // End marker can't go before start marker or outside bounds
+          const clampedPosition = Math.max(startPosition + 10, Math.min(maxPosition, newPosition));
+          onLoopEndChange?.(clampedPosition);
+        }
+      };
 
-    const handleMouseUp = () => {
-      setDraggingMarker(null);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
+      const handleMouseUp = () => {
+        setDraggingMarker(null);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, [startPosition, endPosition, minPosition, maxPosition, onLoopStartChange, onLoopEndChange]);
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    },
+    [startPosition, endPosition, minPosition, maxPosition, onLoopStartChange, onLoopEndChange]
+  );
 
   // Handle dragging the entire region
-  const handleRegionMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDraggingMarker('region');
-    dragStartX.current = e.clientX;
-    dragStartPosition.current = startPosition;
-    dragStartEnd.current = endPosition;
+  const handleRegionMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDraggingMarker('region');
+      dragStartX.current = e.clientX;
+      dragStartPosition.current = startPosition;
+      dragStartEnd.current = endPosition;
 
-    const regionWidth = endPosition - startPosition;
+      const regionWidth = endPosition - startPosition;
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const delta = moveEvent.clientX - dragStartX.current;
-      let newStart = dragStartPosition.current + delta;
-      let newEnd = dragStartEnd.current + delta;
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        const delta = moveEvent.clientX - dragStartX.current;
+        let newStart = dragStartPosition.current + delta;
+        let newEnd = dragStartEnd.current + delta;
 
-      // Clamp to bounds while maintaining region width
-      if (newStart < minPosition) {
-        newStart = minPosition;
-        newEnd = minPosition + regionWidth;
-      }
-      if (newEnd > maxPosition) {
-        newEnd = maxPosition;
-        newStart = maxPosition - regionWidth;
-      }
+        // Clamp to bounds while maintaining region width
+        if (newStart < minPosition) {
+          newStart = minPosition;
+          newEnd = minPosition + regionWidth;
+        }
+        if (newEnd > maxPosition) {
+          newEnd = maxPosition;
+          newStart = maxPosition - regionWidth;
+        }
 
-      onLoopRegionMove?.(newStart, newEnd);
-    };
+        onLoopRegionMove?.(newStart, newEnd);
+      };
 
-    const handleMouseUp = () => {
-      setDraggingMarker(null);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
+      const handleMouseUp = () => {
+        setDraggingMarker(null);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, [startPosition, endPosition, minPosition, maxPosition, onLoopRegionMove]);
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    },
+    [startPosition, endPosition, minPosition, maxPosition, onLoopRegionMove]
+  );
 
   if (width <= 0) {
     return null;
@@ -389,45 +392,51 @@ export const TimescaleLoopRegion: React.FC<TimescaleLoopRegionProps> = ({
   const hasLoopRegion = endPosition > startPosition;
 
   // Handle creating a new loop region by clicking and dragging
-  const handleBackgroundMouseDown = useCallback((e: React.MouseEvent) => {
-    // Only create new region if clicking on the background (not on markers or region)
-    const target = e.target as HTMLElement;
-    if (target.closest('[data-loop-marker-handle]') || target.closest('[data-loop-region-timescale]')) {
-      return;
-    }
+  const handleBackgroundMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      // Only create new region if clicking on the background (not on markers or region)
+      const target = e.target as HTMLElement;
+      if (
+        target.closest('[data-loop-marker-handle]') ||
+        target.closest('[data-loop-region-timescale]')
+      ) {
+        return;
+      }
 
-    e.preventDefault();
-    setIsCreating(true);
+      e.preventDefault();
+      setIsCreating(true);
 
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
 
-    const clickX = e.clientX - rect.left;
-    const clampedX = Math.max(minPosition, Math.min(maxPosition, clickX));
-    createStartX.current = clampedX;
+      const clickX = e.clientX - rect.left;
+      const clampedX = Math.max(minPosition, Math.min(maxPosition, clickX));
+      createStartX.current = clampedX;
 
-    // Set initial position (will be a point until dragged)
-    onLoopRegionChange?.(clampedX, clampedX);
+      // Set initial position (will be a point until dragged)
+      onLoopRegionChange?.(clampedX, clampedX);
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const currentX = moveEvent.clientX - rect.left;
-      const clampedCurrentX = Math.max(minPosition, Math.min(maxPosition, currentX));
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        const currentX = moveEvent.clientX - rect.left;
+        const clampedCurrentX = Math.max(minPosition, Math.min(maxPosition, currentX));
 
-      const newStart = Math.min(createStartX.current, clampedCurrentX);
-      const newEnd = Math.max(createStartX.current, clampedCurrentX);
+        const newStart = Math.min(createStartX.current, clampedCurrentX);
+        const newEnd = Math.max(createStartX.current, clampedCurrentX);
 
-      onLoopRegionChange?.(newStart, newEnd);
-    };
+        onLoopRegionChange?.(newStart, newEnd);
+      };
 
-    const handleMouseUp = () => {
-      setIsCreating(false);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
+      const handleMouseUp = () => {
+        setIsCreating(false);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, [minPosition, maxPosition, onLoopRegionChange]);
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    },
+    [minPosition, maxPosition, onLoopRegionChange]
+  );
 
   return (
     <TimescaleLoopCreator

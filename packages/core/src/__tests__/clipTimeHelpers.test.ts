@@ -2,11 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { clipStartTime, clipEndTime, clipOffsetTime, clipDurationTime } from '../clipTimeHelpers';
 import type { AudioClip } from '../types';
 
-function makeClip(overrides: Partial<AudioClip> & {
-  id: string;
-  startSample: number;
-  durationSamples: number;
-}): AudioClip {
+function makeClip(
+  overrides: Partial<AudioClip> & {
+    id: string;
+    startSample: number;
+    durationSamples: number;
+  }
+): AudioClip {
   return {
     offsetSamples: 0,
     sampleRate: 44100,
@@ -28,7 +30,12 @@ describe('clipStartTime', () => {
   });
 
   it('uses clip sampleRate', () => {
-    const clip = makeClip({ id: 'c1', startSample: 48000, durationSamples: 48000, sampleRate: 48000 });
+    const clip = makeClip({
+      id: 'c1',
+      startSample: 48000,
+      durationSamples: 48000,
+      sampleRate: 48000,
+    });
     expect(clipStartTime(clip)).toBe(1);
   });
 });
@@ -47,7 +54,12 @@ describe('clipEndTime', () => {
 
 describe('clipOffsetTime', () => {
   it('converts offsetSamples to seconds', () => {
-    const clip = makeClip({ id: 'c1', startSample: 0, durationSamples: 44100, offsetSamples: 22050 });
+    const clip = makeClip({
+      id: 'c1',
+      startSample: 0,
+      durationSamples: 44100,
+      offsetSamples: 22050,
+    });
     expect(clipOffsetTime(clip)).toBe(0.5);
   });
 

@@ -39,11 +39,6 @@ export const Disabled: Story = {
 export const Interactive: Story = {
   render: () => {
     const [checked, setChecked] = useState(true);
-    return (
-      <AutomaticScrollCheckbox
-        checked={checked}
-        onChange={setChecked}
-      />
-    );
+    return <AutomaticScrollCheckbox checked={checked} onChange={setChecked} />;
   },
 };

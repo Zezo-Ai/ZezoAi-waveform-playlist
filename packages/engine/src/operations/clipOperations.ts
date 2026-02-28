@@ -104,19 +104,13 @@ export function constrainBoundaryTrim(
 
     // Constraint 2: offsetSamples + (durationSamples + delta) <= sourceDurationSamples
     // delta <= sourceDurationSamples - offsetSamples - durationSamples
-    delta = Math.min(
-      delta,
-      clip.sourceDurationSamples - clip.offsetSamples - clip.durationSamples
-    );
+    delta = Math.min(delta, clip.sourceDurationSamples - clip.offsetSamples - clip.durationSamples);
 
     // Constraint 3: startSample + (durationSamples + delta) <= nextClip.startSample
     if (clipIndex < sortedClips.length - 1) {
       const nextClip = sortedClips[clipIndex + 1];
       // delta <= nextClip.startSample - startSample - durationSamples
-      delta = Math.min(
-        delta,
-        nextClip.startSample - clip.startSample - clip.durationSamples
-      );
+      delta = Math.min(delta, nextClip.startSample - clip.startSample - clip.durationSamples);
     }
   }
 
@@ -130,10 +124,7 @@ export function constrainBoundaryTrim(
  * @param samplesPerPixel - Current zoom level (samples per pixel)
  * @returns Snapped sample position
  */
-export function calculateSplitPoint(
-  splitSample: number,
-  samplesPerPixel: number
-): number {
+export function calculateSplitPoint(splitSample: number, samplesPerPixel: number): number {
   return Math.floor(splitSample / samplesPerPixel) * samplesPerPixel;
 }
 
@@ -200,11 +191,7 @@ export function splitClip(
  * @param minDurationSamples - Minimum allowed clip duration in samples
  * @returns true if the split is valid
  */
-export function canSplitAt(
-  clip: AudioClip,
-  sample: number,
-  minDurationSamples: number
-): boolean {
+export function canSplitAt(clip: AudioClip, sample: number, minDurationSamples: number): boolean {
   const clipEnd = clip.startSample + clip.durationSamples;
 
   // Must be strictly within clip bounds
@@ -216,7 +203,5 @@ export function canSplitAt(
   const leftDuration = sample - clip.startSample;
   const rightDuration = clipEnd - sample;
 
-  return (
-    leftDuration >= minDurationSamples && rightDuration >= minDurationSamples
-  );
+  return leftDuration >= minDurationSamples && rightDuration >= minDurationSamples;
 }

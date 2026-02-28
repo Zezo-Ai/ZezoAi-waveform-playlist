@@ -10,13 +10,15 @@ const meta: Meta<typeof ClipBoundary> = {
   tags: ['autodocs'],
   decorators: [
     (Story) => (
-      <div style={{
-        position: 'relative',
-        width: '200px',
-        height: '100px',
-        background: 'rgba(0,0,0,0.1)',
-        border: '1px solid #ccc',
-      }}>
+      <div
+        style={{
+          position: 'relative',
+          width: '200px',
+          height: '100px',
+          background: 'rgba(0,0,0,0.1)',
+          border: '1px solid #ccc',
+        }}
+      >
         <Story />
       </div>
     ),
@@ -102,13 +104,15 @@ export const InteractiveHover: Story = {
         <p style={{ marginBottom: '1rem', fontSize: '0.875rem' }}>
           Hover over the edges to see the hover effect
         </p>
-        <div style={{
-          position: 'relative',
-          width: '200px',
-          height: '100px',
-          background: 'rgba(0,0,0,0.1)',
-          border: '1px solid #ccc',
-        }}>
+        <div
+          style={{
+            position: 'relative',
+            width: '200px',
+            height: '100px',
+            background: 'rgba(0,0,0,0.1)',
+            border: '1px solid #ccc',
+          }}
+        >
           <ClipBoundary
             clipId="clip-1"
             trackIndex={0}

@@ -9,14 +9,9 @@ import React, {
   type ReactNode,
 } from 'react';
 import { ThemeProvider } from 'styled-components';
-import {
-  MediaElementPlayout,
-} from '@waveform-playlist/media-element-playout';
+import { MediaElementPlayout } from '@waveform-playlist/media-element-playout';
 import { type WaveformDataObject } from '@waveform-playlist/core';
-import {
-  type WaveformPlaylistTheme,
-  defaultTheme,
-} from '@waveform-playlist/ui-components';
+import { type WaveformPlaylistTheme, defaultTheme } from '@waveform-playlist/ui-components';
 import type { AnnotationData } from '@waveform-playlist/core';
 import { extractPeaksFromWaveformData } from './waveformDataLoader';
 import type WaveformData from 'waveform-data';
@@ -81,14 +76,10 @@ export interface MediaElementDataContextValue {
 }
 
 // Create contexts
-const MediaElementAnimationContext =
-  createContext<MediaElementAnimationContextValue | null>(null);
-const MediaElementStateContext =
-  createContext<MediaElementStateContextValue | null>(null);
-const MediaElementControlsContext =
-  createContext<MediaElementControlsContextValue | null>(null);
-const MediaElementDataContext =
-  createContext<MediaElementDataContextValue | null>(null);
+const MediaElementAnimationContext = createContext<MediaElementAnimationContextValue | null>(null);
+const MediaElementStateContext = createContext<MediaElementStateContextValue | null>(null);
+const MediaElementControlsContext = createContext<MediaElementControlsContextValue | null>(null);
+const MediaElementDataContext = createContext<MediaElementDataContextValue | null>(null);
 
 export interface MediaElementPlaylistProviderProps {
   /** Single track configuration with source URL and waveform data */
@@ -141,9 +132,7 @@ export interface MediaElementPlaylistProviderProps {
  *
  * For multi-track editing, use WaveformPlaylistProvider instead.
  */
-export const MediaElementPlaylistProvider: React.FC<
-  MediaElementPlaylistProviderProps
-> = ({
+export const MediaElementPlaylistProvider: React.FC<MediaElementPlaylistProviderProps> = ({
   track,
   samplesPerPixel: initialSamplesPerPixel = 1024,
   waveHeight = 100,
@@ -177,8 +166,9 @@ export const MediaElementPlaylistProvider: React.FC<
       if (typeof first.start !== 'number' || typeof first.end !== 'number') {
         console.error(
           '[waveform-playlist] Annotations must have numeric start/end values. ' +
-          'In v6, use parseAeneas() from @waveform-playlist/annotations before passing annotations. ' +
-          'Received start type: ' + typeof first.start
+            'In v6, use parseAeneas() from @waveform-playlist/annotations before passing annotations. ' +
+            'Received start type: ' +
+            typeof first.start
         );
         return [];
       }
@@ -190,9 +180,7 @@ export const MediaElementPlaylistProvider: React.FC<
   const annotationsRef = useRef<AnnotationData[]>(annotations);
   annotationsRef.current = annotations;
 
-  const [activeAnnotationId, setActiveAnnotationIdState] = useState<
-    string | null
-  >(null);
+  const [activeAnnotationId, setActiveAnnotationIdState] = useState<string | null>(null);
   const [continuousPlay, setContinuousPlayState] = useState(
     annotationList?.isContinuousPlay ?? false
   );
@@ -274,7 +262,15 @@ export const MediaElementPlaylistProvider: React.FC<
       stopAnimationFrameLoop();
       playout.dispose();
     };
-  }, [track.source, track.waveformData, track.name, initialPlaybackRate, onReady, stopAnimationFrameLoop, setActiveAnnotationId]);
+  }, [
+    track.source,
+    track.waveformData,
+    track.name,
+    initialPlaybackRate,
+    onReady,
+    stopAnimationFrameLoop,
+    setActiveAnnotationId,
+  ]);
 
   // Generate peaks from waveform data
   useEffect(() => {
@@ -307,7 +303,6 @@ export const MediaElementPlaylistProvider: React.FC<
       const time = playoutRef.current?.getCurrentTime() ?? 0;
       currentTimeRef.current = time;
 
-
       // Handle annotation playback
       const currentAnnotations = annotationsRef.current;
       if (currentAnnotations.length > 0) {
@@ -316,10 +311,7 @@ export const MediaElementPlaylistProvider: React.FC<
         );
 
         if (continuousPlayRef.current) {
-          if (
-            currentAnnotation &&
-            currentAnnotation.id !== activeAnnotationIdRef.current
-          ) {
+          if (currentAnnotation && currentAnnotation.id !== activeAnnotationIdRef.current) {
             setActiveAnnotationId(currentAnnotation.id);
           } else if (!currentAnnotation && activeAnnotationIdRef.current !== null) {
             // Clear the active annotation when we're past it, but don't stop playback
@@ -332,7 +324,6 @@ export const MediaElementPlaylistProvider: React.FC<
               (ann) => ann.id === activeAnnotationIdRef.current
             );
             if (activeAnnotation && time >= activeAnnotation.end) {
-
               playoutRef.current?.stop();
               setIsPlaying(false);
               return;
@@ -449,14 +440,12 @@ export const MediaElementPlaylistProvider: React.FC<
 
   const setAnnotations: React.Dispatch<React.SetStateAction<AnnotationData[]>> = useCallback(
     (action) => {
-      const updated = typeof action === 'function'
-        ? action(annotationsRef.current)
-        : action;
+      const updated = typeof action === 'function' ? action(annotationsRef.current) : action;
       if (!onAnnotationsChangeRef.current) {
         if (process.env.NODE_ENV !== 'production') {
           console.warn(
             'waveform-playlist: setAnnotations was called but no onAnnotationsChange callback is provided. ' +
-            'Annotation edits will not persist. Pass onAnnotationsChange to MediaElementPlaylistProvider to handle annotation updates.'
+              'Annotation edits will not persist. Pass onAnnotationsChange to MediaElementPlaylistProvider to handle annotation updates.'
           );
         }
         return;
@@ -482,7 +471,17 @@ export const MediaElementPlaylistProvider: React.FC<
       setScrollContainer,
       scrollContainerRef,
     }),
-    [play, pause, stop, seekTo, setPlaybackRate, setContinuousPlay, setAnnotations, setActiveAnnotationId, setScrollContainer]
+    [
+      play,
+      pause,
+      stop,
+      seekTo,
+      setPlaybackRate,
+      setContinuousPlay,
+      setAnnotations,
+      setActiveAnnotationId,
+      setScrollContainer,
+    ]
   );
 
   const dataValue: MediaElementDataContextValue = useMemo(
@@ -534,9 +533,7 @@ export const MediaElementPlaylistProvider: React.FC<
 export const useMediaElementAnimation = () => {
   const context = useContext(MediaElementAnimationContext);
   if (!context) {
-    throw new Error(
-      'useMediaElementAnimation must be used within MediaElementPlaylistProvider'
-    );
+    throw new Error('useMediaElementAnimation must be used within MediaElementPlaylistProvider');
   }
   return context;
 };
@@ -544,9 +541,7 @@ export const useMediaElementAnimation = () => {
 export const useMediaElementState = () => {
   const context = useContext(MediaElementStateContext);
   if (!context) {
-    throw new Error(
-      'useMediaElementState must be used within MediaElementPlaylistProvider'
-    );
+    throw new Error('useMediaElementState must be used within MediaElementPlaylistProvider');
   }
   return context;
 };
@@ -554,9 +549,7 @@ export const useMediaElementState = () => {
 export const useMediaElementControls = () => {
   const context = useContext(MediaElementControlsContext);
   if (!context) {
-    throw new Error(
-      'useMediaElementControls must be used within MediaElementPlaylistProvider'
-    );
+    throw new Error('useMediaElementControls must be used within MediaElementPlaylistProvider');
   }
   return context;
 };
@@ -564,9 +557,7 @@ export const useMediaElementControls = () => {
 export const useMediaElementData = () => {
   const context = useContext(MediaElementDataContext);
   if (!context) {
-    throw new Error(
-      'useMediaElementData must be used within MediaElementPlaylistProvider'
-    );
+    throw new Error('useMediaElementData must be used within MediaElementPlaylistProvider');
   }
   return context;
 };

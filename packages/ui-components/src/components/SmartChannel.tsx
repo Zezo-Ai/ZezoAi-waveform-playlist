@@ -56,13 +56,10 @@ export const SmartChannel: FunctionComponent<SmartChannelProps> = ({
   const samplesPerPixel = sppProp ?? contextSpp;
 
   // Use selected colors if track is selected
-  const waveOutlineColor = isSelected && theme
-    ? theme.selectedWaveOutlineColor
-    : theme?.waveOutlineColor;
+  const waveOutlineColor =
+    isSelected && theme ? theme.selectedWaveOutlineColor : theme?.waveOutlineColor;
 
-  const waveFillColor = isSelected && theme
-    ? theme.selectedWaveFillColor
-    : theme?.waveFillColor;
+  const waveFillColor = isSelected && theme ? theme.selectedWaveFillColor : theme?.waveFillColor;
 
   // Get draw mode from theme (defaults to 'inverted' for backwards compatibility)
   const drawMode = theme?.waveformDrawMode || 'inverted';
@@ -112,7 +109,14 @@ export const SmartChannel: FunctionComponent<SmartChannelProps> = ({
           clipId={spectrogramClipId}
           onCanvasesReady={spectrogramOnCanvasesReady}
         />
-        <div style={{ position: 'absolute', top: (props.index * 2 + 1) * halfHeight, width: props.length, height: halfHeight }}>
+        <div
+          style={{
+            position: 'absolute',
+            top: (props.index * 2 + 1) * halfHeight,
+            width: props.length,
+            height: halfHeight,
+          }}
+        >
           <Channel
             {...props}
             index={0}

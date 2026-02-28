@@ -110,7 +110,8 @@ export const VUMeterDefault: StoryObj = {
   parameters: {
     docs: {
       description: {
-        story: 'VU Meter displaying different audio levels with color-coded zones (green, yellow, red).',
+        story:
+          'VU Meter displaying different audio levels with color-coded zones (green, yellow, red).',
       },
     },
   },
@@ -178,7 +179,7 @@ const AnimatedVUMeterDemo: React.FC = () => {
       // Simulate varying audio levels
       const newLevel = 0.2 + Math.random() * 0.6;
       setLevel(newLevel);
-      setPeakLevel(current => Math.max(newLevel, current * 0.98));
+      setPeakLevel((current) => Math.max(newLevel, current * 0.98));
     }, 50);
 
     return () => clearInterval(interval);
@@ -216,10 +217,7 @@ export const RecordButtonDefault: StoryObj = {
       <DemoContainer>
         <h3 style={{ margin: '0 0 1rem 0' }}>Record Button</h3>
         <DemoRow>
-          <RecordButton
-            isRecording={isRecording}
-            onClick={() => setIsRecording(!isRecording)}
-          />
+          <RecordButton isRecording={isRecording} onClick={() => setIsRecording(!isRecording)} />
           <span style={{ fontSize: '0.875rem', color: '#666' }}>
             {isRecording ? 'Click to stop' : 'Click to start'}
           </span>
@@ -302,7 +300,7 @@ const AnimatedRecordingIndicatorDemo: React.FC = () => {
     if (!isRecording) return;
 
     const interval = setInterval(() => {
-      setDuration(d => d + 1);
+      setDuration((d) => d + 1);
     }, 1000);
 
     return () => clearInterval(interval);
@@ -312,10 +310,7 @@ const AnimatedRecordingIndicatorDemo: React.FC = () => {
     <DemoContainer>
       <h3 style={{ margin: '0 0 1rem 0' }}>Live Recording Indicator</h3>
       <DemoRow>
-        <RecordButton
-          isRecording={isRecording}
-          onClick={() => setIsRecording(!isRecording)}
-        />
+        <RecordButton isRecording={isRecording} onClick={() => setIsRecording(!isRecording)} />
         <RecordingIndicator isRecording={isRecording} duration={duration} />
       </DemoRow>
     </DemoContainer>
@@ -387,10 +382,7 @@ export const MicrophoneSelectorStates: StoryObj = {
         </div>
         <div>
           <Label>No devices:</Label>
-          <MicrophoneSelector
-            devices={[]}
-            onDeviceChange={() => {}}
-          />
+          <MicrophoneSelector devices={[]} onDeviceChange={() => {}} />
         </div>
       </DemoRow>
     </DemoContainer>
@@ -416,7 +408,7 @@ const CompleteRecordingDemo: React.FC = () => {
     if (!isRecording) return;
 
     const durationInterval = setInterval(() => {
-      setDuration(d => d + 1);
+      setDuration((d) => d + 1);
     }, 1000);
 
     return () => clearInterval(durationInterval);
@@ -432,7 +424,7 @@ const CompleteRecordingDemo: React.FC = () => {
     const levelInterval = setInterval(() => {
       const newLevel = 0.2 + Math.random() * 0.6;
       setLevel(newLevel);
-      setPeakLevel(current => Math.max(newLevel, current * 0.98));
+      setPeakLevel((current) => Math.max(newLevel, current * 0.98));
     }, 50);
 
     return () => clearInterval(levelInterval);
@@ -461,14 +453,8 @@ const CompleteRecordingDemo: React.FC = () => {
       </DemoRow>
 
       <DemoRow>
-        <RecordButton
-          isRecording={isRecording}
-          onClick={handleRecordClick}
-        />
-        <RecordingIndicator
-          isRecording={isRecording}
-          duration={duration}
-        />
+        <RecordButton isRecording={isRecording} onClick={handleRecordClick} />
+        <RecordingIndicator isRecording={isRecording} duration={duration} />
       </DemoRow>
 
       <DemoRow>

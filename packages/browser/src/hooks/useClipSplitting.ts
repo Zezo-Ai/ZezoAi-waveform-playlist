@@ -157,7 +157,7 @@ export const useClipSplitting = (options: UseClipSplittingOptions): UseClipSplit
     }
 
     // Find the selected track
-    const trackIndex = tracks.findIndex(track => track.id === selectedTrackId);
+    const trackIndex = tracks.findIndex((track) => track.id === selectedTrackId);
     if (trackIndex === -1) {
       console.warn('Selected track not found');
       return false;

@@ -65,10 +65,7 @@ export function useMicrophoneLevel(
   stream: MediaStream | null,
   options: UseMicrophoneLevelOptions = {}
 ): UseMicrophoneLevelReturn {
-  const {
-    updateRate = 60,
-    smoothingTimeConstant = 0.8,
-  } = options;
+  const { updateRate = 60, smoothingTimeConstant = 0.8 } = options;
 
   const [level, setLevel] = useState(0);
   const [peakLevel, setPeakLevel] = useState(0);
@@ -132,7 +129,7 @@ export function useMicrophoneLevel(
           const normalized = Math.max(0, Math.min(1, (dbValue + 100) / 100));
 
           setLevel(normalized);
-          setPeakLevel(prev => Math.max(prev, normalized));
+          setPeakLevel((prev) => Math.max(prev, normalized));
         }
 
         animationFrameRef.current = requestAnimationFrame(updateLevel);

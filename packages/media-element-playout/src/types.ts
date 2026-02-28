@@ -44,5 +44,8 @@ export interface PlaybackRateEngine extends PlayoutEngine {
  * Type guard to check if an engine supports playback rate.
  */
 export function supportsPlaybackRate(engine: PlayoutEngine): engine is PlaybackRateEngine {
-  return 'setPlaybackRate' in engine && typeof (engine as Record<string, unknown>).setPlaybackRate === 'function';
+  return (
+    'setPlaybackRate' in engine &&
+    typeof (engine as Record<string, unknown>).setPlaybackRate === 'function'
+  );
 }

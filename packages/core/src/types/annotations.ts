@@ -61,7 +61,12 @@ export interface AnnotationAction {
   class?: string;
   text?: string;
   title: string;
-  action: (annotation: AnnotationData, index: number, annotations: AnnotationData[], opts: AnnotationActionOptions) => void;
+  action: (
+    annotation: AnnotationData,
+    index: number,
+    annotations: AnnotationData[],
+    opts: AnnotationActionOptions
+  ) => void;
 }
 
 /**

@@ -67,10 +67,26 @@ export interface AnnotationIntegration {
   AnnotationBoxesWrapper: React.ComponentType<AnnotationBoxesWrapperIntegrationProps>;
 
   // Control components
-  ContinuousPlayCheckbox: React.ComponentType<{ checked: boolean; onChange: (checked: boolean) => void; className?: string }>;
-  LinkEndpointsCheckbox: React.ComponentType<{ checked: boolean; onChange: (checked: boolean) => void; className?: string }>;
-  EditableCheckbox: React.ComponentType<{ checked: boolean; onChange: (checked: boolean) => void; className?: string }>;
-  DownloadAnnotationsButton: React.ComponentType<{ annotations: AnnotationData[]; filename?: string; className?: string }>;
+  ContinuousPlayCheckbox: React.ComponentType<{
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+    className?: string;
+  }>;
+  LinkEndpointsCheckbox: React.ComponentType<{
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+    className?: string;
+  }>;
+  EditableCheckbox: React.ComponentType<{
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+    className?: string;
+  }>;
+  DownloadAnnotationsButton: React.ComponentType<{
+    annotations: AnnotationData[];
+    filename?: string;
+    className?: string;
+  }>;
 }
 
 export const AnnotationIntegrationContext = createContext<AnnotationIntegration | null>(null);
@@ -89,8 +105,8 @@ export function useAnnotationIntegration(): AnnotationIntegration {
   if (!context) {
     throw new Error(
       'useAnnotationIntegration must be used within <AnnotationProvider>. ' +
-      'Install @waveform-playlist/annotations and wrap your app with <AnnotationProvider>. ' +
-      'See: https://waveform-playlist.naomiaro.com/docs/guides/annotations'
+        'Install @waveform-playlist/annotations and wrap your app with <AnnotationProvider>. ' +
+        'See: https://waveform-playlist.naomiaro.com/docs/guides/annotations'
     );
   }
   return context;

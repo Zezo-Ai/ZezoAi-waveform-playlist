@@ -36,8 +36,12 @@ const ZoomControlsDemo: React.FC = () => {
         <strong>Current:</strong> {samplesPerPixel} samples/pixel
       </div>
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-        <BaseButton onClick={zoomIn} disabled={!canZoomIn}>Zoom In</BaseButton>
-        <BaseButton onClick={zoomOut} disabled={!canZoomOut}>Zoom Out</BaseButton>
+        <BaseButton onClick={zoomIn} disabled={!canZoomIn}>
+          Zoom In
+        </BaseButton>
+        <BaseButton onClick={zoomOut} disabled={!canZoomOut}>
+          Zoom Out
+        </BaseButton>
       </div>
       <div style={{ fontSize: '0.875rem', color: '#666' }}>
         <div>Can zoom in: {canZoomIn ? 'Yes' : 'No'}</div>
@@ -112,7 +116,9 @@ const MasterVolumeDemo: React.FC = () => {
 
   return (
     <div style={{ padding: '1rem', border: '1px solid #ddd', borderRadius: '8px' }}>
-      <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem' }}>usePlaylistData + usePlaylistControls (masterVolume)</h3>
+      <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem' }}>
+        usePlaylistData + usePlaylistControls (masterVolume)
+      </h3>
       <div style={{ marginBottom: '1rem' }}>
         <label style={{ display: 'block', marginBottom: '0.5rem' }}>
           Volume: {Math.round(masterVolume * 100)}%
@@ -128,9 +134,7 @@ const MasterVolumeDemo: React.FC = () => {
       </div>
       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
         <BaseButton onClick={toggleMute}>{muted ? 'Unmute' : 'Mute'}</BaseButton>
-        <span style={{ color: muted ? 'red' : 'green' }}>
-          {muted ? '🔇 Muted' : '🔊 Active'}
-        </span>
+        <span style={{ color: muted ? 'red' : 'green' }}>{muted ? '🔇 Muted' : '🔊 Active'}</span>
       </div>
     </div>
   );
@@ -146,7 +150,7 @@ const KeyboardShortcutsDemo: React.FC = () => {
       key: ' ',
       action: () => {
         setLastAction('Play/Pause (Space)');
-        setActionCount(c => c + 1);
+        setActionCount((c) => c + 1);
       },
       description: 'Play/Pause',
       preventDefault: true,
@@ -155,7 +159,7 @@ const KeyboardShortcutsDemo: React.FC = () => {
       key: 's',
       action: () => {
         setLastAction('Split (S)');
-        setActionCount(c => c + 1);
+        setActionCount((c) => c + 1);
       },
       description: 'Split clip at cursor',
       preventDefault: true,
@@ -164,7 +168,7 @@ const KeyboardShortcutsDemo: React.FC = () => {
       key: 'Delete',
       action: () => {
         setLastAction('Delete (Delete)');
-        setActionCount(c => c + 1);
+        setActionCount((c) => c + 1);
       },
       description: 'Delete selected',
       preventDefault: true,
@@ -174,7 +178,7 @@ const KeyboardShortcutsDemo: React.FC = () => {
       metaKey: true,
       action: () => {
         setLastAction('Undo (Cmd+Z)');
-        setActionCount(c => c + 1);
+        setActionCount((c) => c + 1);
       },
       description: 'Undo',
       preventDefault: true,
@@ -185,7 +189,7 @@ const KeyboardShortcutsDemo: React.FC = () => {
       shiftKey: true,
       action: () => {
         setLastAction('Redo (Cmd+Shift+Z)');
-        setActionCount(c => c + 1);
+        setActionCount((c) => c + 1);
       },
       description: 'Redo',
       preventDefault: true,
@@ -322,7 +326,8 @@ export const KeyboardShortcuts: StoryObj = {
   parameters: {
     docs: {
       description: {
-        story: 'The `useKeyboardShortcuts` hook provides a flexible system for handling keyboard shortcuts with modifier key support.',
+        story:
+          'The `useKeyboardShortcuts` hook provides a flexible system for handling keyboard shortcuts with modifier key support.',
       },
     },
   },

@@ -12,30 +12,85 @@ describe('calculateDuration', () => {
   });
 
   it('returns 0 for tracks with no clips', () => {
-    const tracks = [{ id: '1', name: 'Track 1', clips: [], muted: false, soloed: false, volume: 1, pan: 0 }];
+    const tracks = [
+      { id: '1', name: 'Track 1', clips: [], muted: false, soloed: false, volume: 1, pan: 0 },
+    ];
     expect(calculateDuration(tracks)).toBe(0);
   });
 
   it('calculates duration from the furthest clip end', () => {
-    const tracks = [{
-      id: '1', name: 'Track 1', muted: false, soloed: false, volume: 1, pan: 0,
-      clips: [
-        { id: 'c1', startSample: 0, durationSamples: 44100, offsetSamples: 0, sampleRate: 44100, sourceDurationSamples: 44100, gain: 1 },
-        { id: 'c2', startSample: 44100, durationSamples: 22050, offsetSamples: 0, sampleRate: 44100, sourceDurationSamples: 22050, gain: 1 },
-      ],
-    }];
+    const tracks = [
+      {
+        id: '1',
+        name: 'Track 1',
+        muted: false,
+        soloed: false,
+        volume: 1,
+        pan: 0,
+        clips: [
+          {
+            id: 'c1',
+            startSample: 0,
+            durationSamples: 44100,
+            offsetSamples: 0,
+            sampleRate: 44100,
+            sourceDurationSamples: 44100,
+            gain: 1,
+          },
+          {
+            id: 'c2',
+            startSample: 44100,
+            durationSamples: 22050,
+            offsetSamples: 0,
+            sampleRate: 44100,
+            sourceDurationSamples: 22050,
+            gain: 1,
+          },
+        ],
+      },
+    ];
     expect(calculateDuration(tracks)).toBe(1.5);
   });
 
   it('considers clips across multiple tracks', () => {
     const tracks = [
       {
-        id: '1', name: 'Track 1', muted: false, soloed: false, volume: 1, pan: 0,
-        clips: [{ id: 'c1', startSample: 0, durationSamples: 44100, offsetSamples: 0, sampleRate: 44100, sourceDurationSamples: 44100, gain: 1 }],
+        id: '1',
+        name: 'Track 1',
+        muted: false,
+        soloed: false,
+        volume: 1,
+        pan: 0,
+        clips: [
+          {
+            id: 'c1',
+            startSample: 0,
+            durationSamples: 44100,
+            offsetSamples: 0,
+            sampleRate: 44100,
+            sourceDurationSamples: 44100,
+            gain: 1,
+          },
+        ],
       },
       {
-        id: '2', name: 'Track 2', muted: false, soloed: false, volume: 1, pan: 0,
-        clips: [{ id: 'c2', startSample: 88200, durationSamples: 44100, offsetSamples: 0, sampleRate: 44100, sourceDurationSamples: 44100, gain: 1 }],
+        id: '2',
+        name: 'Track 2',
+        muted: false,
+        soloed: false,
+        volume: 1,
+        pan: 0,
+        clips: [
+          {
+            id: 'c2',
+            startSample: 88200,
+            durationSamples: 44100,
+            offsetSamples: 0,
+            sampleRate: 44100,
+            sourceDurationSamples: 44100,
+            gain: 1,
+          },
+        ],
       },
     ];
     expect(calculateDuration(tracks)).toBe(3);

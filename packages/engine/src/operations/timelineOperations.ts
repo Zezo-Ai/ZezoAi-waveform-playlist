@@ -29,10 +29,7 @@ export function calculateDuration(tracks: ClipTrack[]): number {
  * @param zoomLevels - Array of available zoom levels (samplesPerPixel values)
  * @returns Index into the zoomLevels array
  */
-export function findClosestZoomIndex(
-  targetSamplesPerPixel: number,
-  zoomLevels: number[],
-): number {
+export function findClosestZoomIndex(targetSamplesPerPixel: number, zoomLevels: number[]): number {
   if (zoomLevels.length === 0) return 0;
 
   let bestIndex = 0;
@@ -68,7 +65,7 @@ export function calculateZoomScrollPosition(
   scrollLeft: number,
   containerWidth: number,
   sampleRate: number,
-  controlWidth: number = 0,
+  controlWidth: number = 0
 ): number {
   const centerPixel = scrollLeft + containerWidth / 2 - controlWidth;
   const centerTime = (centerPixel * oldSamplesPerPixel) / sampleRate;

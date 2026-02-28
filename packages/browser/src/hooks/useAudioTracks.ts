@@ -1,5 +1,15 @@
 import { useState, useEffect } from 'react';
-import { ClipTrack, createTrack, createClipFromSeconds, type Fade, type TrackEffectsFunction, type WaveformDataObject, type RenderMode, type SpectrogramConfig, type ColorMapValue } from '@waveform-playlist/core';
+import {
+  ClipTrack,
+  createTrack,
+  createClipFromSeconds,
+  type Fade,
+  type TrackEffectsFunction,
+  type WaveformDataObject,
+  type RenderMode,
+  type SpectrogramConfig,
+  type ColorMapValue,
+} from '@waveform-playlist/core';
 import * as Tone from 'tone';
 
 /**
@@ -26,12 +36,12 @@ export interface AudioTrackConfig {
   color?: string;
   effects?: TrackEffectsFunction;
   // Multi-clip support
-  startTime?: number;  // When the clip starts on the timeline (default: 0)
-  duration?: number;   // Duration of the clip (default: full audio duration)
-  offset?: number;     // Offset into the source audio file (default: 0)
+  startTime?: number; // When the clip starts on the timeline (default: 0)
+  duration?: number; // Duration of the clip (default: full audio duration)
+  offset?: number; // Offset into the source audio file (default: 0)
   // Fade support
-  fadeIn?: Fade;       // Fade in configuration
-  fadeOut?: Fade;      // Fade out configuration
+  fadeIn?: Fade; // Fade in configuration
+  fadeOut?: Fade; // Fade out configuration
   // Pre-computed waveform data (BBC audiowaveform format)
   // For peaks-first rendering, provide this without audioBuffer/src
   // Sample rate and duration are derived from waveformData.sample_rate and waveformData.duration
@@ -96,10 +106,7 @@ export interface UseAudioTracksOptions {
  * return <WaveformPlaylistProvider tracks={tracks}>...</WaveformPlaylistProvider>;
  * ```
  */
-export function useAudioTracks(
-  configs: AudioTrackConfig[],
-  options: UseAudioTracksOptions = {}
-) {
+export function useAudioTracks(configs: AudioTrackConfig[], options: UseAudioTracksOptions = {}) {
   const { progressive = false } = options;
   const [tracks, setTracks] = useState<ClipTrack[]>([]);
   const [loading, setLoading] = useState(true);
@@ -132,9 +139,7 @@ export function useAudioTracks(
 
       // For peaks-first rendering, we need waveformData if no buffer
       if (!buffer && !config.waveformData) {
-        throw new Error(
-          `Track ${index + 1}: Must provide src, audioBuffer, or waveformData`
-        );
+        throw new Error(`Track ${index + 1}: Must provide src, audioBuffer, or waveformData`);
       }
 
       // Determine source duration for clip creation
@@ -194,11 +199,12 @@ export function useAudioTracks(
 
             if (progressive && !cancelled) {
               loadedTracksMap.set(index, track);
-              setLoadedCount(prev => prev + 1);
+              setLoadedCount((prev) => prev + 1);
               // Update tracks maintaining order
               setTracks(
-                Array.from({ length: configs.length }, (_, i) => loadedTracksMap.get(i))
-                  .filter((t): t is ClipTrack => t !== undefined)
+                Array.from({ length: configs.length }, (_, i) => loadedTracksMap.get(i)).filter(
+                  (t): t is ClipTrack => t !== undefined
+                )
               );
             }
 
@@ -211,10 +217,11 @@ export function useAudioTracks(
 
             if (progressive && !cancelled) {
               loadedTracksMap.set(index, track);
-              setLoadedCount(prev => prev + 1);
+              setLoadedCount((prev) => prev + 1);
               setTracks(
-                Array.from({ length: configs.length }, (_, i) => loadedTracksMap.get(i))
-                  .filter((t): t is ClipTrack => t !== undefined)
+                Array.from({ length: configs.length }, (_, i) => loadedTracksMap.get(i)).filter(
+                  (t): t is ClipTrack => t !== undefined
+                )
               );
             }
 
@@ -243,11 +250,12 @@ export function useAudioTracks(
 
           if (progressive && !cancelled) {
             loadedTracksMap.set(index, track);
-            setLoadedCount(prev => prev + 1);
+            setLoadedCount((prev) => prev + 1);
             // Update tracks maintaining original config order
             setTracks(
-              Array.from({ length: configs.length }, (_, i) => loadedTracksMap.get(i))
-                .filter((t): t is ClipTrack => t !== undefined)
+              Array.from({ length: configs.length }, (_, i) => loadedTracksMap.get(i)).filter(
+                (t): t is ClipTrack => t !== undefined
+              )
             );
           }
 

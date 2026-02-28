@@ -40,8 +40,8 @@ export interface VUMeterProps {
 
 const MeterContainer = styled.div<{ $width: number; $height: number }>`
   position: relative;
-  width: ${props => props.$width}px;
-  height: ${props => props.$height}px;
+  width: ${(props) => props.$width}px;
+  height: ${(props) => props.$height}px;
   background: #2c3e50;
   border-radius: 4px;
   overflow: hidden;
@@ -56,7 +56,7 @@ const getLevelGradient = (level: number): string => {
 };
 
 // Use .attrs() for frequently changing styles to avoid generating new CSS classes
-const MeterFill = styled.div.attrs<{ $level: number; $height: number }>(props => ({
+const MeterFill = styled.div.attrs<{ $level: number; $height: number }>((props) => ({
   style: {
     width: `${props.$level * 100}%`,
     height: `${props.$height}px`,
@@ -67,11 +67,13 @@ const MeterFill = styled.div.attrs<{ $level: number; $height: number }>(props =>
   position: absolute;
   left: 0;
   top: 0;
-  transition: width 0.05s ease-out, background 0.1s ease-out;
+  transition:
+    width 0.05s ease-out,
+    background 0.1s ease-out;
 `;
 
 // Use .attrs() for frequently changing left position
-const PeakIndicator = styled.div.attrs<{ $peakLevel: number; $height: number }>(props => ({
+const PeakIndicator = styled.div.attrs<{ $peakLevel: number; $height: number }>((props) => ({
   style: {
     left: `${props.$peakLevel * 100}%`,
     height: `${props.$height}px`,
@@ -90,16 +92,16 @@ const ScaleMarkers = styled.div<{ $height: number }>`
   top: 0;
   left: 0;
   width: 100%;
-  height: ${props => props.$height}px;
+  height: ${(props) => props.$height}px;
   pointer-events: none;
 `;
 
 const ScaleMark = styled.div<{ $position: number; $height: number }>`
   position: absolute;
-  left: ${props => props.$position}%;
+  left: ${(props) => props.$position}%;
   top: 0;
   width: 1px;
-  height: ${props => props.$height}px;
+  height: ${(props) => props.$height}px;
   background: rgba(255, 255, 255, 0.2);
 `;
 
@@ -124,9 +126,7 @@ const VUMeterComponent: React.FC<VUMeterProps> = ({
 }) => {
   // Clamp values to 0-1 range
   const clampedLevel = Math.max(0, Math.min(1, level));
-  const clampedPeak = peakLevel !== undefined
-    ? Math.max(0, Math.min(1, peakLevel))
-    : 0;
+  const clampedPeak = peakLevel !== undefined ? Math.max(0, Math.min(1, peakLevel)) : 0;
 
   return (
     <MeterContainer $width={width} $height={height} className={className}>

@@ -19,7 +19,7 @@
 export function calculateViewportBounds(
   scrollLeft: number,
   containerWidth: number,
-  bufferRatio: number = 1.5,
+  bufferRatio: number = 1.5
 ): { visibleStart: number; visibleEnd: number } {
   const buffer = containerWidth * bufferRatio;
   return {
@@ -45,7 +45,7 @@ export function getVisibleChunkIndices(
   totalWidth: number,
   chunkWidth: number,
   visibleStart: number,
-  visibleEnd: number,
+  visibleEnd: number
 ): number[] {
   const totalChunks = Math.ceil(totalWidth / chunkWidth);
   const indices: number[] = [];
@@ -80,7 +80,7 @@ export function getVisibleChunkIndices(
 export function shouldUpdateViewport(
   oldScrollLeft: number,
   newScrollLeft: number,
-  threshold: number = 100,
+  threshold: number = 100
 ): boolean {
   return Math.abs(oldScrollLeft - newScrollLeft) >= threshold;
 }

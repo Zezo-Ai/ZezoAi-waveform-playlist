@@ -85,7 +85,7 @@ export function useClipDragHandlers({
       let newStartTime = clipStartTime + timeDelta;
 
       // Get sorted clips for collision detection
-      const sortedClips = [...track.clips].sort((a, b) => (a.startSample - b.startSample));
+      const sortedClips = [...track.clips].sort((a, b) => a.startSample - b.startSample);
       const sortedIndex = sortedClips.findIndex((c) => c === clip);
 
       // Constraint 1: Cannot go before time 0
@@ -94,7 +94,8 @@ export function useClipDragHandlers({
       // Constraint 2: Cannot overlap with previous clip
       const previousClip = sortedIndex > 0 ? sortedClips[sortedIndex - 1] : null;
       if (previousClip) {
-        const previousEndTime = (previousClip.startSample + previousClip.durationSamples) / sampleRate;
+        const previousEndTime =
+          (previousClip.startSample + previousClip.durationSamples) / sampleRate;
         newStartTime = Math.max(newStartTime, previousEndTime);
       }
 
@@ -262,7 +263,7 @@ export function useClipDragHandlers({
               ...clip,
               offsetSamples: newOffsetSamples,
               durationSamples: newDurationSamples,
-              startSample: newStartSample
+              startSample: newStartSample,
             };
           } else {
             // Right boundary - only update duration
@@ -274,7 +275,8 @@ export function useClipDragHandlers({
               newDurationSamples = audioBufferDurationSamples - originalClip.offsetSamples;
             }
 
-            const nextClip = sortedIndex < sortedClips.length - 1 ? sortedClips[sortedIndex + 1] : null;
+            const nextClip =
+              sortedIndex < sortedClips.length - 1 ? sortedClips[sortedIndex + 1] : null;
             if (nextClip) {
               const newEndSample = originalClip.startSample + newDurationSamples;
               if (newEndSample > nextClip.startSample) {
@@ -346,7 +348,8 @@ export function useClipDragHandlers({
           }
 
           // 3. Cannot overlap with next clip
-          const nextClip = sortedIndex < sortedClips.length - 1 ? sortedClips[sortedIndex + 1] : null;
+          const nextClip =
+            sortedIndex < sortedClips.length - 1 ? sortedClips[sortedIndex + 1] : null;
           if (nextClip) {
             const newEndSample = newStartSample + clip.durationSamples;
             if (newEndSample > nextClip.startSample) {

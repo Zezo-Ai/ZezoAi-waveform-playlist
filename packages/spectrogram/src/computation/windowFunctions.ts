@@ -2,11 +2,7 @@
  * Window functions for spectral analysis.
  */
 
-export function getWindowFunction(
-  name: string,
-  size: number,
-  alpha?: number
-): Float32Array {
+export function getWindowFunction(name: string, size: number, alpha?: number): Float32Array {
   const window = new Float32Array(size);
   const N = size;
 
@@ -40,9 +36,7 @@ export function getWindowFunction(
       const a2 = 0.08;
       for (let i = 0; i < size; i++) {
         window[i] =
-          a0 -
-          a1 * Math.cos((2 * Math.PI * i) / N) +
-          a2 * Math.cos((4 * Math.PI * i) / N);
+          a0 - a1 * Math.cos((2 * Math.PI * i) / N) + a2 * Math.cos((4 * Math.PI * i) / N);
       }
       break;
     }

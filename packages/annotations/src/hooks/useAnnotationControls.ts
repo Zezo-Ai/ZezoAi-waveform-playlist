@@ -32,10 +32,7 @@ export interface UseAnnotationControlsReturn {
 export const useAnnotationControls = (
   options: UseAnnotationControlsOptions = {}
 ): UseAnnotationControlsReturn => {
-  const {
-    initialContinuousPlay = false,
-    initialLinkEndpoints = true,
-  } = options;
+  const { initialContinuousPlay = false, initialLinkEndpoints = true } = options;
 
   const [continuousPlay, setContinuousPlay] = useState(initialContinuousPlay);
   const [linkEndpoints, setLinkEndpoints] = useState(initialLinkEndpoints);
@@ -84,7 +81,11 @@ export const useAnnotationControls = (
               start: prevAnnotation.end,
             };
           }
-        } else if (!shouldLinkEndpoints && annotationIndex > 0 && constrainedStart < updatedAnnotations[annotationIndex - 1].end) {
+        } else if (
+          !shouldLinkEndpoints &&
+          annotationIndex > 0 &&
+          constrainedStart < updatedAnnotations[annotationIndex - 1].end
+        ) {
           // Collision detection: push previous annotation's end back
           updatedAnnotations[annotationIndex - 1] = {
             ...updatedAnnotations[annotationIndex - 1],
@@ -137,7 +138,11 @@ export const useAnnotationControls = (
               end: nextAnnotation.start,
             };
           }
-        } else if (!shouldLinkEndpoints && annotationIndex < updatedAnnotations.length - 1 && constrainedEnd > updatedAnnotations[annotationIndex + 1].start) {
+        } else if (
+          !shouldLinkEndpoints &&
+          annotationIndex < updatedAnnotations.length - 1 &&
+          constrainedEnd > updatedAnnotations[annotationIndex + 1].start
+        ) {
           // Collision detection: push next annotation's start forward
           const nextAnnotation = updatedAnnotations[annotationIndex + 1];
 

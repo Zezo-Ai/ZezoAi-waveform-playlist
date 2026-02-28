@@ -6,9 +6,9 @@ import { FadeOverlay } from '../components/FadeOverlay';
 // Container to show the fade overlay in context (simulating a clip)
 const ClipContainer = styled.div<{ $width: number }>`
   position: relative;
-  width: ${props => props.$width}px;
+  width: ${(props) => props.$width}px;
   height: 100px;
-  background: linear-gradient(90deg, #005BBB 0%, #FFD500 100%);
+  background: linear-gradient(90deg, #005bbb 0%, #ffd500 100%);
   border-radius: 4px;
   overflow: hidden;
 `;
@@ -28,7 +28,7 @@ const LabeledExample = styled.div`
 
 const Label = styled.span`
   font-size: 12px;
-  color: ${props => props.theme.textColor || '#666'};
+  color: ${(props) => props.theme.textColor || '#666'};
 `;
 
 const meta: Meta<typeof FadeOverlay> = {

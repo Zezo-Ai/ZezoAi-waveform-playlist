@@ -42,10 +42,9 @@ export interface SpectrogramLabelsProps {
 /** Generate nice frequency labels for the axis, limited by available height */
 function getFrequencyLabels(minF: number, maxF: number, height: number): number[] {
   const allCandidates = [
-    20, 50, 100, 200, 500, 1000, 2000, 3000, 4000, 5000,
-    8000, 10000, 12000, 16000, 20000,
+    20, 50, 100, 200, 500, 1000, 2000, 3000, 4000, 5000, 8000, 10000, 12000, 16000, 20000,
   ];
-  const inRange = allCandidates.filter(f => f >= minF && f <= maxF);
+  const inRange = allCandidates.filter((f) => f >= minF && f <= maxF);
 
   // Each label needs ~20px of vertical space to avoid overlap
   const maxLabels = Math.max(2, Math.floor(height / 20));
@@ -74,9 +73,7 @@ export const SpectrogramLabels: React.FC<SpectrogramLabelsProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const devicePixelRatio = useDevicePixelRatio();
 
-  const spectrogramHeight = renderMode === 'both'
-    ? Math.floor(waveHeight / 2)
-    : waveHeight;
+  const spectrogramHeight = renderMode === 'both' ? Math.floor(waveHeight / 2) : waveHeight;
 
   const totalHeight = numChannels * waveHeight;
   const clipHeaderOffset = hasClipHeaders ? 22 : 0;
@@ -115,7 +112,18 @@ export const SpectrogramLabels: React.FC<SpectrogramLabelsProps> = ({
         ctx.fillText(text, padding, y);
       }
     }
-  }, [waveHeight, numChannels, frequencyScaleFn, minFrequency, maxFrequency, labelsColor, labelsBackground, devicePixelRatio, spectrogramHeight, clipHeaderOffset]);
+  }, [
+    waveHeight,
+    numChannels,
+    frequencyScaleFn,
+    minFrequency,
+    maxFrequency,
+    labelsColor,
+    labelsBackground,
+    devicePixelRatio,
+    spectrogramHeight,
+    clipHeaderOffset,
+  ]);
 
   return (
     <LabelsStickyWrapper $height={totalHeight + clipHeaderOffset}>

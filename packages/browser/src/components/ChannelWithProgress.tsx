@@ -1,7 +1,14 @@
 import React, { useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { getContext } from 'tone';
-import { SmartChannel, type SmartChannelProps, useTheme, usePlaylistInfo, type WaveformPlaylistTheme, waveformColorToCss } from '@waveform-playlist/ui-components';
+import {
+  SmartChannel,
+  type SmartChannelProps,
+  useTheme,
+  usePlaylistInfo,
+  type WaveformPlaylistTheme,
+  waveformColorToCss,
+} from '@waveform-playlist/ui-components';
 import { usePlaybackAnimation, usePlaylistData } from '../WaveformPlaylistContext';
 
 const ChannelWrapper = styled.div`
@@ -84,7 +91,8 @@ export const ChannelWithProgress: React.FC<ChannelWithProgressProps> = ({
   const theme = useTheme() as WaveformPlaylistTheme;
   const { waveHeight } = usePlaylistInfo();
 
-  const { isPlaying, currentTimeRef, playbackStartTimeRef, audioStartPositionRef } = usePlaybackAnimation();
+  const { isPlaying, currentTimeRef, playbackStartTimeRef, audioStartPositionRef } =
+    usePlaybackAnimation();
   const { samplesPerPixel, sampleRate } = usePlaylistData();
 
   const progressColor = theme?.waveProgressColor || 'rgba(0, 0, 0, 0.1)';
@@ -141,7 +149,17 @@ export const ChannelWithProgress: React.FC<ChannelWithProgressProps> = ({
         animationFrameRef.current = null;
       }
     };
-  }, [isPlaying, sampleRate, samplesPerPixel, clipStartSample, clipDurationSamples, smartChannelProps.length, currentTimeRef, playbackStartTimeRef, audioStartPositionRef]);
+  }, [
+    isPlaying,
+    sampleRate,
+    samplesPerPixel,
+    clipStartSample,
+    clipDurationSamples,
+    smartChannelProps.length,
+    currentTimeRef,
+    playbackStartTimeRef,
+    audioStartPositionRef,
+  ]);
 
   // Also update when not playing (for seeks, stops, etc.)
   useEffect(() => {
@@ -169,19 +187,20 @@ export const ChannelWithProgress: React.FC<ChannelWithProgressProps> = ({
 
   let backgroundColor;
   if (drawMode === 'inverted') {
-
-    backgroundColor = smartChannelProps.isSelected && theme
-      ? theme.selectedWaveFillColor
-      : theme?.waveFillColor || 'white';
-
+    backgroundColor =
+      smartChannelProps.isSelected && theme
+        ? theme.selectedWaveFillColor
+        : theme?.waveFillColor || 'white';
   } else {
-    backgroundColor = smartChannelProps.isSelected && theme
-      ? theme.selectedWaveOutlineColor
-      : theme?.waveOutlineColor || 'grey';
+    backgroundColor =
+      smartChannelProps.isSelected && theme
+        ? theme.selectedWaveOutlineColor
+        : theme?.waveOutlineColor || 'grey';
   }
 
   // Use black background for spectrogram mode
-  const isSpectrogramMode = smartChannelProps.renderMode === 'spectrogram' || smartChannelProps.renderMode === 'both';
+  const isSpectrogramMode =
+    smartChannelProps.renderMode === 'spectrogram' || smartChannelProps.renderMode === 'both';
   const isBothMode = smartChannelProps.renderMode === 'both';
   const backgroundCss = isSpectrogramMode ? '#000' : waveformColorToCss(backgroundColor);
 

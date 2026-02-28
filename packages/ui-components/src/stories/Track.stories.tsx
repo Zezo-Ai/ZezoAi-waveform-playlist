@@ -5,7 +5,16 @@ import { Channel } from '../components/Channel';
 import { PlaylistInfoContext } from '../contexts/PlaylistInfo';
 import { TrackControlsContext } from '../contexts/TrackControls';
 import type { WaveformPlaylistTheme } from '../wfpl-theme';
-import { Controls, Header, ButtonGroup, Button, SliderWrapper, Slider, VolumeDownIcon, VolumeUpIcon } from '../components/TrackControls/index';
+import {
+  Controls,
+  Header,
+  ButtonGroup,
+  Button,
+  SliderWrapper,
+  Slider,
+  VolumeDownIcon,
+  VolumeUpIcon,
+} from '../components/TrackControls/index';
 
 // Generate sample waveform data for stories
 function generateSamplePeaks(length: number, bits: 8 | 16 = 8): Int8Array | Int16Array {
@@ -65,7 +74,11 @@ const SampleTrackControls = () => (
 );
 
 // Wrapper component that uses theme from context for Channel colors
-const ThemedChannel = ({ outlineColor, fillColor, ...props }: {
+const ThemedChannel = ({
+  outlineColor,
+  fillColor,
+  ...props
+}: {
   index: number;
   data: Int8Array | Int16Array;
   bits: 8 | 16;
@@ -111,13 +124,7 @@ export const Default: Story = {
   },
   render: (args) => (
     <Track {...args}>
-      <ThemedChannel
-        index={0}
-        data={sampleData}
-        bits={8}
-        length={500}
-        waveHeight={80}
-      />
+      <ThemedChannel index={0} data={sampleData} bits={8} length={500} waveHeight={80} />
     </Track>
   ),
 };
@@ -129,13 +136,7 @@ export const WithBackground: Story = {
   },
   render: (args) => (
     <Track {...args}>
-      <ThemedChannel
-        index={0}
-        data={sampleData}
-        bits={8}
-        length={500}
-        waveHeight={80}
-      />
+      <ThemedChannel index={0} data={sampleData} bits={8} length={500} waveHeight={80} />
     </Track>
   ),
 };
@@ -147,13 +148,7 @@ export const Selected: Story = {
   },
   render: (args) => (
     <Track {...args}>
-      <ThemedChannel
-        index={0}
-        data={sampleData}
-        bits={8}
-        length={500}
-        waveHeight={80}
-      />
+      <ThemedChannel index={0} data={sampleData} bits={8} length={500} waveHeight={80} />
     </Track>
   ),
 };
@@ -165,13 +160,7 @@ export const WithOffset: Story = {
   },
   render: (args) => (
     <Track {...args}>
-      <ThemedChannel
-        index={0}
-        data={sampleData}
-        bits={8}
-        length={500}
-        waveHeight={80}
-      />
+      <ThemedChannel index={0} data={sampleData} bits={8} length={500} waveHeight={80} />
     </Track>
   ),
 };
@@ -183,13 +172,7 @@ export const WithClipHeaders: Story = {
   },
   render: (args) => (
     <Track {...args}>
-      <ThemedChannel
-        index={0}
-        data={sampleData}
-        bits={8}
-        length={500}
-        waveHeight={80}
-      />
+      <ThemedChannel index={0} data={sampleData} bits={8} length={500} waveHeight={80} />
     </Track>
   ),
 };
@@ -201,21 +184,9 @@ export const StereoTrack: Story = {
   render: (args) => (
     <Track {...args}>
       <div style={{ position: 'relative', height: '160px' }}>
-        <ThemedChannel
-          index={0}
-          data={sampleData}
-          bits={8}
-          length={500}
-          waveHeight={80}
-        />
+        <ThemedChannel index={0} data={sampleData} bits={8} length={500} waveHeight={80} />
         <div style={{ position: 'absolute', top: '80px', width: '100%' }}>
-          <ThemedChannel
-            index={1}
-            data={sampleData}
-            bits={8}
-            length={500}
-            waveHeight={80}
-          />
+          <ThemedChannel index={1} data={sampleData} bits={8} length={500} waveHeight={80} />
         </div>
       </div>
     </Track>
@@ -237,13 +208,7 @@ export const NoControls: Story = {
   ],
   render: (args) => (
     <Track {...args}>
-      <ThemedChannel
-        index={0}
-        data={sampleData}
-        bits={8}
-        length={500}
-        waveHeight={80}
-      />
+      <ThemedChannel index={0} data={sampleData} bits={8} length={500} waveHeight={80} />
     </Track>
   ),
 };

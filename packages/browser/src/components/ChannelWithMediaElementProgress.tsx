@@ -1,6 +1,13 @@
 import React, { useRef, useEffect } from 'react';
 import styled from 'styled-components';
-import { SmartChannel, type SmartChannelProps, useTheme, usePlaylistInfo, type WaveformPlaylistTheme, waveformColorToCss } from '@waveform-playlist/ui-components';
+import {
+  SmartChannel,
+  type SmartChannelProps,
+  useTheme,
+  usePlaylistInfo,
+  type WaveformPlaylistTheme,
+  waveformColorToCss,
+} from '@waveform-playlist/ui-components';
 import { useMediaElementAnimation, useMediaElementData } from '../MediaElementPlaylistContext';
 
 const ChannelWrapper = styled.div`
@@ -49,7 +56,8 @@ const ChannelContainer = styled.div`
   z-index: 2;
 `;
 
-export interface ChannelWithMediaElementProgressProps extends Omit<SmartChannelProps, 'isSelected'> {
+export interface ChannelWithMediaElementProgressProps
+  extends Omit<SmartChannelProps, 'isSelected'> {
   /** Start sample of the clip containing this channel (for progress calculation) */
   clipStartSample: number;
   /** Duration in samples of the clip */
@@ -123,7 +131,15 @@ export const ChannelWithMediaElementProgress: React.FC<ChannelWithMediaElementPr
         animationFrameRef.current = null;
       }
     };
-  }, [isPlaying, sampleRate, samplesPerPixel, clipStartSample, clipDurationSamples, smartChannelProps.length, currentTimeRef]);
+  }, [
+    isPlaying,
+    sampleRate,
+    samplesPerPixel,
+    clipStartSample,
+    clipDurationSamples,
+    smartChannelProps.length,
+    currentTimeRef,
+  ]);
 
   // Also update when not playing (for seeks, stops, etc.)
   useEffect(() => {

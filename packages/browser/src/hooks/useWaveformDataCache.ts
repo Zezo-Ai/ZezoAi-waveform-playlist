@@ -24,7 +24,7 @@ export interface UseWaveformDataCacheReturn {
 
 export function useWaveformDataCache(
   tracks: ClipTrack[],
-  baseScale: number,
+  baseScale: number
 ): UseWaveformDataCacheReturn {
   const [cache, setCache] = useState<Map<string, WaveformData>>(() => new Map());
   const [isGenerating, setIsGenerating] = useState(false);
@@ -50,11 +50,7 @@ export function useWaveformDataCache(
 
     for (const track of tracks) {
       for (const clip of track.clips) {
-        if (
-          clip.audioBuffer &&
-          !clip.waveformData &&
-          !submitted.has(clip.id)
-        ) {
+        if (clip.audioBuffer && !clip.waveformData && !submitted.has(clip.id)) {
           clipsToProcess.push({
             clipId: clip.id,
             audioBuffer: clip.audioBuffer,

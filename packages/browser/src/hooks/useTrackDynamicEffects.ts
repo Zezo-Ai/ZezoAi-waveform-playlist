@@ -5,10 +5,7 @@ import {
   getEffectDefinition,
   type EffectDefinition,
 } from '../effects/effectDefinitions';
-import {
-  createEffectInstance,
-  type EffectInstance,
-} from '../effects/effectFactory';
+import { createEffectInstance, type EffectInstance } from '../effects/effectFactory';
 import { Gain, ToneAudioNode } from 'tone';
 
 export interface TrackActiveEffect {
@@ -106,7 +103,10 @@ export function useTrackDynamicEffects(): UseTrackDynamicEffectsReturn {
         try {
           inst.disconnect();
         } catch (e) {
-          console.warn(`[waveform-playlist] Error disconnecting effect "${inst.id}" on track "${trackId}":`, e);
+          console.warn(
+            `[waveform-playlist] Error disconnecting effect "${inst.id}" on track "${trackId}":`,
+            e
+          );
         }
         currentNode.connect(inst.effect);
         currentNode = inst.effect;
@@ -169,7 +169,10 @@ export function useTrackDynamicEffects(): UseTrackDynamicEffectsReturn {
     setTrackEffectsState((prev) => {
       const newState = new Map(prev);
       const existing = newState.get(trackId) || [];
-      newState.set(trackId, existing.filter((e) => e.instanceId !== instanceId));
+      newState.set(
+        trackId,
+        existing.filter((e) => e.instanceId !== instanceId)
+      );
       return newState;
     });
   }, []);
@@ -191,9 +194,7 @@ export function useTrackDynamicEffects(): UseTrackDynamicEffectsReturn {
         newState.set(
           trackId,
           existing.map((e) =>
-            e.instanceId === instanceId
-              ? { ...e, params: { ...e.params, [paramName]: value } }
-              : e
+            e.instanceId === instanceId ? { ...e, params: { ...e.params, [paramName]: value } } : e
           )
         );
         return newState;
@@ -203,40 +204,35 @@ export function useTrackDynamicEffects(): UseTrackDynamicEffectsReturn {
   );
 
   // Toggle bypass for an effect (uses wet parameter - 0 = bypass, restore original for active)
-  const toggleBypass = useCallback(
-    (trackId: string, instanceId: string) => {
-      // Get current state from ref to determine new bypassed value (avoids stale closure)
-      const trackEffects = trackEffectsStateRef.current.get(trackId) || [];
-      const effect = trackEffects.find((e) => e.instanceId === instanceId);
-      if (!effect) return;
+  const toggleBypass = useCallback((trackId: string, instanceId: string) => {
+    // Get current state from ref to determine new bypassed value (avoids stale closure)
+    const trackEffects = trackEffectsStateRef.current.get(trackId) || [];
+    const effect = trackEffects.find((e) => e.instanceId === instanceId);
+    if (!effect) return;
 
-      const newBypassed = !effect.bypassed;
+    const newBypassed = !effect.bypassed;
 
-      // Update the actual effect instance
-      // When bypassing: set wet to 0
-      // When un-bypassing: restore the original wet value from params
-      const instancesMap = trackEffectInstancesRef.current.get(trackId);
-      const instance = instancesMap?.get(instanceId);
-      if (instance) {
-        const originalWet = effect.params.wet as number ?? 1;
-        instance.setParameter('wet', newBypassed ? 0 : originalWet);
-      }
+    // Update the actual effect instance
+    // When bypassing: set wet to 0
+    // When un-bypassing: restore the original wet value from params
+    const instancesMap = trackEffectInstancesRef.current.get(trackId);
+    const instance = instancesMap?.get(instanceId);
+    if (instance) {
+      const originalWet = (effect.params.wet as number) ?? 1;
+      instance.setParameter('wet', newBypassed ? 0 : originalWet);
+    }
 
-      // Update state for UI
-      setTrackEffectsState((prev) => {
-        const newState = new Map(prev);
-        const existing = newState.get(trackId) || [];
-        newState.set(
-          trackId,
-          existing.map((e) =>
-            e.instanceId === instanceId ? { ...e, bypassed: newBypassed } : e
-          )
-        );
-        return newState;
-      });
-    },
-    []
-  );
+    // Update state for UI
+    setTrackEffectsState((prev) => {
+      const newState = new Map(prev);
+      const existing = newState.get(trackId) || [];
+      newState.set(
+        trackId,
+        existing.map((e) => (e.instanceId === instanceId ? { ...e, bypassed: newBypassed } : e))
+      );
+      return newState;
+    });
+  }, []);
 
   // Clear all effects from a track
   const clearTrackEffects = useCallback((trackId: string) => {

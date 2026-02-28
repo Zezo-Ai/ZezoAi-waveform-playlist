@@ -2,7 +2,13 @@
  * Time format utilities for displaying and parsing audio timestamps
  */
 
-export type TimeFormat = 'seconds' | 'thousandths' | 'hh:mm:ss' | 'hh:mm:ss.u' | 'hh:mm:ss.uu' | 'hh:mm:ss.uuu';
+export type TimeFormat =
+  | 'seconds'
+  | 'thousandths'
+  | 'hh:mm:ss'
+  | 'hh:mm:ss.u'
+  | 'hh:mm:ss.uu'
+  | 'hh:mm:ss.uuu';
 
 /**
  * Format time in clock format (hh:mm:ss with optional decimals)

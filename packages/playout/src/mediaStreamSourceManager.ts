@@ -38,9 +38,7 @@ const streamCleanupHandlers = new Map<MediaStream, () => void>();
  * source.connect(workletNode);   // For recording
  * ```
  */
-export function getMediaStreamSource(
-  stream: MediaStream
-): MediaStreamAudioSourceNode {
+export function getMediaStreamSource(stream: MediaStream): MediaStreamAudioSourceNode {
   // Return existing source if we have one for this stream
   if (streamSources.has(stream)) {
     return streamSources.get(stream)!;

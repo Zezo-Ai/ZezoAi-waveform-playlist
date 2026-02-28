@@ -211,12 +211,19 @@ export function getColorMap(value: ColorMapValue): ColorLUT {
   }
 
   switch (value) {
-    case 'viridis': return VIRIDIS_LUT;
-    case 'magma': return MAGMA_LUT;
-    case 'inferno': return INFERNO_LUT;
-    case 'roseus': return ROSEUS_LUT;
-    case 'grayscale': return grayscaleLUT();
-    case 'igray': return igrayLUT();
-    default: return VIRIDIS_LUT;
+    case 'viridis':
+      return VIRIDIS_LUT;
+    case 'magma':
+      return MAGMA_LUT;
+    case 'inferno':
+      return INFERNO_LUT;
+    case 'roseus':
+      return ROSEUS_LUT;
+    case 'grayscale':
+      return grayscaleLUT();
+    case 'igray':
+      return igrayLUT();
+    default:
+      return VIRIDIS_LUT;
   }
 }

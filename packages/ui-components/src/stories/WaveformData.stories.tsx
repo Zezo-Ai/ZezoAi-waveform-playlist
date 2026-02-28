@@ -66,19 +66,11 @@ const WaveformDataDemo: React.FC<{ src: string; title: string }> = ({ src, title
   }, [src]);
 
   if (loading) {
-    return (
-      <div style={{ padding: '1rem', textAlign: 'center' }}>
-        Loading waveform data...
-      </div>
-    );
+    return <div style={{ padding: '1rem', textAlign: 'center' }}>Loading waveform data...</div>;
   }
 
   if (error) {
-    return (
-      <div style={{ padding: '1rem', color: 'red' }}>
-        Error: {error}
-      </div>
-    );
+    return <div style={{ padding: '1rem', color: 'red' }}>Error: {error}</div>;
   }
 
   return (
@@ -87,12 +79,24 @@ const WaveformDataDemo: React.FC<{ src: string; title: string }> = ({ src, title
 
       {metadata && (
         <div style={{ marginBottom: '1rem', fontSize: '0.875rem', color: '#666' }}>
-          <div><strong>Sample Rate:</strong> {metadata.sampleRate} Hz</div>
-          <div><strong>Channels:</strong> {metadata.channels}</div>
-          <div><strong>Duration:</strong> {metadata.duration.toFixed(2)}s</div>
-          <div><strong>Samples/Pixel:</strong> {metadata.samplesPerPixel}</div>
-          <div><strong>Peak Length:</strong> {metadata.length} points</div>
-          <div><strong>Bit Depth:</strong> {metadata.bits}-bit</div>
+          <div>
+            <strong>Sample Rate:</strong> {metadata.sampleRate} Hz
+          </div>
+          <div>
+            <strong>Channels:</strong> {metadata.channels}
+          </div>
+          <div>
+            <strong>Duration:</strong> {metadata.duration.toFixed(2)}s
+          </div>
+          <div>
+            <strong>Samples/Pixel:</strong> {metadata.samplesPerPixel}
+          </div>
+          <div>
+            <strong>Peak Length:</strong> {metadata.length} points
+          </div>
+          <div>
+            <strong>Bit Depth:</strong> {metadata.bits}-bit
+          </div>
         </div>
       )}
 
@@ -162,7 +166,8 @@ const BitDepthComparisonDemo: React.FC = () => {
     <div>
       <h2 style={{ margin: '0 0 1rem 0' }}>Bit Depth Comparison (Version 1 - Mono)</h2>
       <p style={{ marginBottom: '1rem', color: '#666' }}>
-        Compare 8-bit vs 16-bit waveform data. 8-bit files are half the size but have less precision.
+        Compare 8-bit vs 16-bit waveform data. 8-bit files are half the size but have less
+        precision.
       </p>
       {tracks.map((track) => (
         <WaveformDataDemo key={track.src} src={track.src} title={track.name} />
@@ -222,19 +227,11 @@ const StereoWaveformDemo: React.FC<{ src: string; title: string }> = ({ src, tit
   }, [src]);
 
   if (loading) {
-    return (
-      <div style={{ padding: '1rem', textAlign: 'center' }}>
-        Loading waveform data...
-      </div>
-    );
+    return <div style={{ padding: '1rem', textAlign: 'center' }}>Loading waveform data...</div>;
   }
 
   if (error) {
-    return (
-      <div style={{ padding: '1rem', color: 'red' }}>
-        Error: {error}
-      </div>
-    );
+    return <div style={{ padding: '1rem', color: 'red' }}>Error: {error}</div>;
   }
 
   return (
@@ -243,12 +240,24 @@ const StereoWaveformDemo: React.FC<{ src: string; title: string }> = ({ src, tit
 
       {metadata && (
         <div style={{ marginBottom: '1rem', fontSize: '0.875rem', color: '#666' }}>
-          <div><strong>Sample Rate:</strong> {metadata.sampleRate} Hz</div>
-          <div><strong>Channels:</strong> {metadata.channels}</div>
-          <div><strong>Duration:</strong> {metadata.duration.toFixed(2)}s</div>
-          <div><strong>Samples/Pixel:</strong> {metadata.samplesPerPixel}</div>
-          <div><strong>Peak Length:</strong> {metadata.length} points</div>
-          <div><strong>Bit Depth:</strong> {metadata.bits}-bit</div>
+          <div>
+            <strong>Sample Rate:</strong> {metadata.sampleRate} Hz
+          </div>
+          <div>
+            <strong>Channels:</strong> {metadata.channels}
+          </div>
+          <div>
+            <strong>Duration:</strong> {metadata.duration.toFixed(2)}s
+          </div>
+          <div>
+            <strong>Samples/Pixel:</strong> {metadata.samplesPerPixel}
+          </div>
+          <div>
+            <strong>Peak Length:</strong> {metadata.length} points
+          </div>
+          <div>
+            <strong>Bit Depth:</strong> {metadata.bits}-bit
+          </div>
         </div>
       )}
 
@@ -264,17 +273,25 @@ const StereoWaveformDemo: React.FC<{ src: string; title: string }> = ({ src, tit
             overflowY: 'hidden',
           }}
         >
-          <div style={{ width: metadata.length, height: channelHeight * (rightPeaks ? 2 : 1), position: 'relative' }}>
+          <div
+            style={{
+              width: metadata.length,
+              height: channelHeight * (rightPeaks ? 2 : 1),
+              position: 'relative',
+            }}
+          >
             {/* Left channel */}
             <div style={{ position: 'absolute', top: 0, left: 0, width: '100%' }}>
-              <div style={{
-                fontSize: '10px',
-                color: '#888',
-                position: 'absolute',
-                top: 2,
-                left: 4,
-                zIndex: 1
-              }}>
+              <div
+                style={{
+                  fontSize: '10px',
+                  color: '#888',
+                  position: 'absolute',
+                  top: 2,
+                  left: 4,
+                  zIndex: 1,
+                }}
+              >
                 L
               </div>
               <Channel
@@ -293,14 +310,16 @@ const StereoWaveformDemo: React.FC<{ src: string; title: string }> = ({ src, tit
             {/* Right channel */}
             {rightPeaks && (
               <div style={{ position: 'absolute', top: channelHeight, left: 0, width: '100%' }}>
-                <div style={{
-                  fontSize: '10px',
-                  color: '#888',
-                  position: 'absolute',
-                  top: 2,
-                  left: 4,
-                  zIndex: 1
-                }}>
+                <div
+                  style={{
+                    fontSize: '10px',
+                    color: '#888',
+                    position: 'absolute',
+                    top: 2,
+                    left: 4,
+                    zIndex: 1,
+                  }}
+                >
                   R
                 </div>
                 <Channel
@@ -326,7 +345,10 @@ const StereoWaveformDemo: React.FC<{ src: string; title: string }> = ({ src, tit
 // Stereo/Version 2 comparison demo - using stereo tracks from Ubiquitous
 const StereoComparisonDemo: React.FC = () => {
   const tracks = [
-    { src: 'media/audio/AlbertKader_Ubiquitous/09_Synth1_Unmodulated.dat', name: 'Synth 1 (stereo)' },
+    {
+      src: 'media/audio/AlbertKader_Ubiquitous/09_Synth1_Unmodulated.dat',
+      name: 'Synth 1 (stereo)',
+    },
     { src: 'media/audio/AlbertKader_Ubiquitous/11_Synth2.dat', name: 'Synth 2 (stereo)' },
   ];
 
@@ -334,8 +356,8 @@ const StereoComparisonDemo: React.FC = () => {
     <div>
       <h2 style={{ margin: '0 0 1rem 0' }}>Stereo / Version 2 Files</h2>
       <p style={{ marginBottom: '1rem', color: '#666' }}>
-        Version 2 files support multiple channels. These are stereo files generated with --split-channels.
-        Left (L) and Right (R) channels are displayed separately.
+        Version 2 files support multiple channels. These are stereo files generated with
+        --split-channels. Left (L) and Right (R) channels are displayed separately.
       </p>
       {tracks.map((track) => (
         <StereoWaveformDemo key={track.src} src={track.src} title={track.name} />
@@ -400,7 +422,9 @@ const peaks = await loadPeaksFromWaveformData('/path/to/peaks.dat');
 export default meta;
 
 export const SingleTrack: StoryObj = {
-  render: () => <WaveformDataDemo src="media/audio/AlbertKader_Ubiquitous/08_Bass.dat" title="Bass Track" />,
+  render: () => (
+    <WaveformDataDemo src="media/audio/AlbertKader_Ubiquitous/08_Bass.dat" title="Bass Track" />
+  ),
   parameters: {
     docs: {
       description: {
@@ -426,7 +450,8 @@ export const BitDepthComparison: StoryObj = {
   parameters: {
     docs: {
       description: {
-        story: 'Compare 8-bit and 16-bit waveform data files (Version 1 - mono). 8-bit files are half the size.',
+        story:
+          'Compare 8-bit and 16-bit waveform data files (Version 1 - mono). 8-bit files are half the size.',
       },
     },
   },
@@ -437,7 +462,8 @@ export const StereoVersion2: StoryObj = {
   parameters: {
     docs: {
       description: {
-        story: 'Stereo waveform data files using Version 2 format. Generated with --split-channels flag.',
+        story:
+          'Stereo waveform data files using Version 2 format. Generated with --split-channels flag.',
       },
     },
   },

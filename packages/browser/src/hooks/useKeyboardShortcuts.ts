@@ -53,11 +53,7 @@ export const useKeyboardShortcuts = (options: UseKeyboardShortcutsOptions): void
 
       // Check if we're in an input/textarea element
       const target = event.target as HTMLElement;
-      if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable
-      ) {
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
         // Don't trigger shortcuts when typing in input fields
         return;
       }
@@ -65,12 +61,10 @@ export const useKeyboardShortcuts = (options: UseKeyboardShortcutsOptions): void
       // Find matching shortcut
       const matchingShortcut = shortcuts.find((shortcut) => {
         const keyMatch =
-          event.key.toLowerCase() === shortcut.key.toLowerCase() ||
-          event.key === shortcut.key;
+          event.key.toLowerCase() === shortcut.key.toLowerCase() || event.key === shortcut.key;
 
         const ctrlMatch = shortcut.ctrlKey === undefined || event.ctrlKey === shortcut.ctrlKey;
-        const shiftMatch =
-          shortcut.shiftKey === undefined || event.shiftKey === shortcut.shiftKey;
+        const shiftMatch = shortcut.shiftKey === undefined || event.shiftKey === shortcut.shiftKey;
         const metaMatch = shortcut.metaKey === undefined || event.metaKey === shortcut.metaKey;
         const altMatch = shortcut.altKey === undefined || event.altKey === shortcut.altKey;
 

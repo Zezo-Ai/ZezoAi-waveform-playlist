@@ -12,7 +12,9 @@ import { DownloadAnnotationsButton } from './components/DownloadAnnotationsButto
 
 const annotationIntegration: AnnotationIntegration = {
   parseAeneas: parseAeneas as (data: unknown) => import('@waveform-playlist/core').AnnotationData,
-  serializeAeneas: serializeAeneas as (annotation: import('@waveform-playlist/core').AnnotationData) => unknown,
+  serializeAeneas: serializeAeneas as (
+    annotation: import('@waveform-playlist/core').AnnotationData
+  ) => unknown,
   AnnotationText,
   AnnotationBox,
   AnnotationBoxesWrapper,

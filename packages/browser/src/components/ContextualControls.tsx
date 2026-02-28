@@ -8,7 +8,12 @@ import {
   formatTime,
 } from '@waveform-playlist/ui-components';
 import styled from 'styled-components';
-import { usePlaybackAnimation, usePlaylistState, usePlaylistControls, usePlaylistData } from '../WaveformPlaylistContext';
+import {
+  usePlaybackAnimation,
+  usePlaylistState,
+  usePlaylistControls,
+  usePlaylistData,
+} from '../WaveformPlaylistContext';
 
 /**
  * Master volume control that uses the playlist context
@@ -33,20 +38,14 @@ export const TimeFormatSelect: React.FC<{ className?: string }> = ({ className }
   const { timeFormat } = usePlaylistData();
   const { setTimeFormat } = usePlaylistControls();
 
-  return (
-    <BaseTimeFormatSelect
-      value={timeFormat}
-      onChange={setTimeFormat}
-      className={className}
-    />
-  );
+  return <BaseTimeFormatSelect value={timeFormat} onChange={setTimeFormat} className={className} />;
 };
 
 const PositionDisplay = styled.span`
   font-family: 'Courier New', Monaco, monospace;
   font-size: 1rem;
   font-weight: 600;
-  color: ${props => props.theme?.textColor || '#333'};
+  color: ${(props) => props.theme?.textColor || '#333'};
   user-select: none;
 `;
 
@@ -58,7 +57,8 @@ const PositionDisplay = styled.span`
 export const AudioPosition: React.FC<{ className?: string }> = ({ className }) => {
   const timeRef = useRef<HTMLSpanElement>(null);
   const animationFrameRef = useRef<number | null>(null);
-  const { isPlaying, currentTimeRef, playbackStartTimeRef, audioStartPositionRef } = usePlaybackAnimation();
+  const { isPlaying, currentTimeRef, playbackStartTimeRef, audioStartPositionRef } =
+    usePlaybackAnimation();
   const { timeFormat: format } = usePlaylistData();
 
   useEffect(() => {

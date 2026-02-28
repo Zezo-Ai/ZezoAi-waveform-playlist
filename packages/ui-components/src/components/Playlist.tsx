@@ -63,7 +63,7 @@ const ClickOverlay = styled.div<ClickOverlayProps>`
   bottom: 0;
   cursor: crosshair;
   /* When selecting, raise z-index above clip boundaries (z-index: 105) to prevent interference */
-  z-index: ${props => props.$isSelecting ? 110 : 1};
+  z-index: ${(props) => (props.$isSelecting ? 110 : 1)};
 `;
 
 export interface PlaylistProps {
@@ -105,19 +105,23 @@ export const Playlist: FunctionComponent<PlaylistProps> = ({
 }) => {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
-  const handleRef = useCallback((el: HTMLDivElement | null) => {
-    wrapperRef.current = el;
-    scrollContainerRef?.(el);
-  }, [scrollContainerRef]);
+  const handleRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      wrapperRef.current = el;
+      scrollContainerRef?.(el);
+    },
+    [scrollContainerRef]
+  );
 
   return (
     <Wrapper data-scroll-container="true" data-playlist-state={playlistState} ref={handleRef}>
       <ScrollViewportProvider containerRef={wrapperRef}>
-        <ScrollContainer
-          $backgroundColor={backgroundColor}
-          $width={scrollContainerWidth}
-        >
-          {timescale && <TimescaleWrapper $width={timescaleWidth} $backgroundColor={timescaleBackgroundColor}>{timescale}</TimescaleWrapper>}
+        <ScrollContainer $backgroundColor={backgroundColor} $width={scrollContainerWidth}>
+          {timescale && (
+            <TimescaleWrapper $width={timescaleWidth} $backgroundColor={timescaleBackgroundColor}>
+              {timescale}
+            </TimescaleWrapper>
+          )}
           <TracksContainer $width={tracksWidth} $backgroundColor={backgroundColor}>
             {children}
             {(onTracksClick || onTracksMouseDown) && (

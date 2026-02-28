@@ -55,22 +55,20 @@ export const PlaylistAnnotationList: React.FC<PlaylistAnnotationListProps> = ({
   scrollActivePosition = 'center',
   scrollActiveContainer = 'nearest',
 }) => {
-  const {
-    annotations,
-    activeAnnotationId,
-    annotationsEditable,
-    linkEndpoints,
-    continuousPlay,
-  } = usePlaylistState();
+  const { annotations, activeAnnotationId, annotationsEditable, linkEndpoints, continuousPlay } =
+    usePlaylistState();
   const integration = useAnnotationIntegration();
   const { setAnnotations } = usePlaylistControls();
 
   const resolvedConfig = annotationListConfig ?? { linkEndpoints, continuousPlay };
 
-  const handleAnnotationUpdate = useCallback((updatedAnnotations: AnnotationData[]) => {
-    setAnnotations(updatedAnnotations);
-    onAnnotationUpdate?.(updatedAnnotations);
-  }, [setAnnotations, onAnnotationUpdate]);
+  const handleAnnotationUpdate = useCallback(
+    (updatedAnnotations: AnnotationData[]) => {
+      setAnnotations(updatedAnnotations);
+      onAnnotationUpdate?.(updatedAnnotations);
+    },
+    [setAnnotations, onAnnotationUpdate]
+  );
 
   const { AnnotationText } = integration;
 

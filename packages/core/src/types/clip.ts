@@ -38,7 +38,9 @@ export interface WaveformDataObject {
   /** Resample to different scale */
   resample: (options: { scale: number } | { width: number }) => WaveformDataObject;
   /** Slice a portion of the waveform */
-  slice: (options: { startTime: number; endTime: number } | { startIndex: number; endIndex: number }) => WaveformDataObject;
+  slice: (
+    options: { startTime: number; endTime: number } | { startIndex: number; endIndex: number }
+  ) => WaveformDataObject;
 }
 
 /**
@@ -218,10 +220,10 @@ export interface Timeline {
 export interface CreateClipOptions {
   /** Audio buffer - optional for peaks-first rendering */
   audioBuffer?: AudioBuffer;
-  startSample: number;           // Position on timeline (in samples)
-  durationSamples?: number;      // Defaults to full buffer/source duration (in samples)
-  offsetSamples?: number;        // Defaults to 0
-  gain?: number;                 // Defaults to 1.0
+  startSample: number; // Position on timeline (in samples)
+  durationSamples?: number; // Defaults to full buffer/source duration (in samples)
+  offsetSamples?: number; // Defaults to 0
+  gain?: number; // Defaults to 1.0
   name?: string;
   color?: string;
   fadeIn?: Fade;
@@ -243,10 +245,10 @@ export interface CreateClipOptions {
 export interface CreateClipOptionsSeconds {
   /** Audio buffer - optional for peaks-first rendering */
   audioBuffer?: AudioBuffer;
-  startTime: number;        // Position on timeline (in seconds)
-  duration?: number;        // Defaults to full buffer/source duration (in seconds)
-  offset?: number;          // Defaults to 0 (in seconds)
-  gain?: number;            // Defaults to 1.0
+  startTime: number; // Position on timeline (in seconds)
+  duration?: number; // Defaults to full buffer/source duration (in seconds)
+  offset?: number; // Defaults to 0 (in seconds)
+  gain?: number; // Defaults to 1.0
   name?: string;
   color?: string;
   fadeIn?: Fade;
@@ -299,22 +301,27 @@ export function createClip(options: CreateClipOptions): AudioClip {
   const sampleRate = audioBuffer?.sampleRate ?? options.sampleRate ?? waveformData?.sample_rate;
 
   // Determine source duration: audioBuffer > explicit option > waveformData (converted to samples)
-  const sourceDurationSamples = audioBuffer?.length
-    ?? options.sourceDurationSamples
-    ?? (waveformData && sampleRate ? Math.ceil(waveformData.duration * sampleRate) : undefined);
+  const sourceDurationSamples =
+    audioBuffer?.length ??
+    options.sourceDurationSamples ??
+    (waveformData && sampleRate ? Math.ceil(waveformData.duration * sampleRate) : undefined);
 
   if (sampleRate === undefined) {
-    throw new Error('createClip: sampleRate is required when audioBuffer is not provided (can use waveformData.sample_rate)');
+    throw new Error(
+      'createClip: sampleRate is required when audioBuffer is not provided (can use waveformData.sample_rate)'
+    );
   }
   if (sourceDurationSamples === undefined) {
-    throw new Error('createClip: sourceDurationSamples is required when audioBuffer is not provided (can use waveformData.duration)');
+    throw new Error(
+      'createClip: sourceDurationSamples is required when audioBuffer is not provided (can use waveformData.duration)'
+    );
   }
 
   // Warn if sample rates don't match
   if (audioBuffer && waveformData && audioBuffer.sampleRate !== waveformData.sample_rate) {
     console.warn(
       `Sample rate mismatch: audioBuffer (${audioBuffer.sampleRate}) vs waveformData (${waveformData.sample_rate}). ` +
-      `Using audioBuffer sample rate. Waveform visualization may be slightly off.`
+        `Using audioBuffer sample rate. Waveform visualization may be slightly off.`
     );
   }
 
@@ -362,20 +369,24 @@ export function createClipFromSeconds(options: CreateClipOptionsSeconds): AudioC
   // Determine sample rate: audioBuffer > explicit option > waveformData
   const sampleRate = audioBuffer?.sampleRate ?? options.sampleRate ?? waveformData?.sample_rate;
   if (sampleRate === undefined) {
-    throw new Error('createClipFromSeconds: sampleRate is required when audioBuffer is not provided (can use waveformData.sample_rate)');
+    throw new Error(
+      'createClipFromSeconds: sampleRate is required when audioBuffer is not provided (can use waveformData.sample_rate)'
+    );
   }
 
   // Determine source duration: audioBuffer > explicit option > waveformData
   const sourceDuration = audioBuffer?.duration ?? options.sourceDuration ?? waveformData?.duration;
   if (sourceDuration === undefined) {
-    throw new Error('createClipFromSeconds: sourceDuration is required when audioBuffer is not provided (can use waveformData.duration)');
+    throw new Error(
+      'createClipFromSeconds: sourceDuration is required when audioBuffer is not provided (can use waveformData.duration)'
+    );
   }
 
   // Warn if sample rates don't match (could cause visual/audio sync issues)
   if (audioBuffer && waveformData && audioBuffer.sampleRate !== waveformData.sample_rate) {
     console.warn(
       `Sample rate mismatch: audioBuffer (${audioBuffer.sampleRate}) vs waveformData (${waveformData.sample_rate}). ` +
-      `Using audioBuffer sample rate. Waveform visualization may be slightly off.`
+        `Using audioBuffer sample rate. Waveform visualization may be slightly off.`
     );
   }
 

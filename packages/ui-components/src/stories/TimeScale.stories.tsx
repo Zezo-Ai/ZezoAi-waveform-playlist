@@ -42,9 +42,10 @@ const meta: Meta<typeof TimeScaleWithTheme> = {
   tags: ['autodocs'],
   decorators: [
     (Story, context) => {
-      const theme = context.globals.theme === 'dark'
-        ? { backgroundColor: '#1e1e1e' }
-        : { backgroundColor: '#f5f5f5' };
+      const theme =
+        context.globals.theme === 'dark'
+          ? { backgroundColor: '#1e1e1e' }
+          : { backgroundColor: '#f5f5f5' };
       return (
         <DevicePixelRatioProvider>
           <PlaylistInfoContext.Provider value={playlistInfo}>
@@ -106,9 +107,10 @@ export const WithControlsOffset: Story = {
   },
   decorators: [
     (Story, context) => {
-      const theme = context.globals.theme === 'dark'
-        ? { backgroundColor: '#1e1e1e' }
-        : { backgroundColor: '#f5f5f5' };
+      const theme =
+        context.globals.theme === 'dark'
+          ? { backgroundColor: '#1e1e1e' }
+          : { backgroundColor: '#f5f5f5' };
       return (
         <DevicePixelRatioProvider>
           <PlaylistInfoContext.Provider value={playlistInfoWithControls}>

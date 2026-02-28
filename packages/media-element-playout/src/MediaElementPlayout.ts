@@ -54,7 +54,7 @@ export class MediaElementPlayout {
     if (this.track) {
       console.warn(
         'MediaElementPlayout: Only one track is supported. ' +
-        'Disposing previous track. For multi-track, use TonePlayout.'
+          'Disposing previous track. For multi-track, use TonePlayout.'
       );
       this.track.dispose();
     }

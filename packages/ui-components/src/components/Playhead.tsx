@@ -145,7 +145,16 @@ export const PlayheadWithMarker: React.FC<PlayheadProps> = ({
         animationFrameRef.current = null;
       }
     };
-  }, [isPlaying, sampleRate, samplesPerPixel, controlsOffset, currentTimeRef, playbackStartTimeRef, audioStartPositionRef, getAudioContextTime]);
+  }, [
+    isPlaying,
+    sampleRate,
+    samplesPerPixel,
+    controlsOffset,
+    currentTimeRef,
+    playbackStartTimeRef,
+    audioStartPositionRef,
+    getAudioContextTime,
+  ]);
 
   // Update position when stopped (for seeks)
   useEffect(() => {

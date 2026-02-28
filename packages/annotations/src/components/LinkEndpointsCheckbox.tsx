@@ -1,5 +1,9 @@
 import React from 'react';
-import { BaseCheckboxWrapper, BaseCheckbox, BaseCheckboxLabel } from '@waveform-playlist/ui-components';
+import {
+  BaseCheckboxWrapper,
+  BaseCheckbox,
+  BaseCheckboxLabel,
+} from '@waveform-playlist/ui-components';
 
 export interface LinkEndpointsCheckboxProps {
   checked: boolean;

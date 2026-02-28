@@ -20,10 +20,13 @@ export const useAnimationFrameLoop = (): AnimationFrameLoopControls => {
     }
   }, []);
 
-  const startAnimationFrameLoop = useCallback((callback: () => void) => {
-    stopAnimationFrameLoop();
-    animationFrameRef.current = requestAnimationFrame(callback);
-  }, [stopAnimationFrameLoop]);
+  const startAnimationFrameLoop = useCallback(
+    (callback: () => void) => {
+      stopAnimationFrameLoop();
+      animationFrameRef.current = requestAnimationFrame(callback);
+    },
+    [stopAnimationFrameLoop]
+  );
 
   useEffect(() => {
     return () => {

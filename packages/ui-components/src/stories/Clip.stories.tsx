@@ -24,7 +24,11 @@ function generateSamplePeaks(length: number, bits: 8 | 16 = 8): Int8Array | Int1
 const sampleData = generateSamplePeaks(200, 8);
 
 // Wrapper component that uses theme from context for Channel colors
-const ThemedChannel = ({ outlineColor, fillColor, ...props }: {
+const ThemedChannel = ({
+  outlineColor,
+  fillColor,
+  ...props
+}: {
   index: number;
   data: Int8Array | Int16Array;
   bits: 8 | 16;
@@ -77,13 +81,7 @@ export const Default: Story = {
   },
   render: (args) => (
     <Clip {...args}>
-      <ThemedChannel
-        index={0}
-        data={sampleData}
-        bits={8}
-        length={200}
-        waveHeight={80}
-      />
+      <ThemedChannel index={0} data={sampleData} bits={8} length={200} waveHeight={80} />
     </Clip>
   ),
 };
@@ -102,13 +100,7 @@ export const WithHeader: Story = {
   },
   render: (args) => (
     <Clip {...args}>
-      <ThemedChannel
-        index={0}
-        data={sampleData}
-        bits={8}
-        length={200}
-        waveHeight={80}
-      />
+      <ThemedChannel index={0} data={sampleData} bits={8} length={200} waveHeight={80} />
     </Clip>
   ),
 };
@@ -128,13 +120,7 @@ export const Selected: Story = {
   },
   render: (args) => (
     <Clip {...args}>
-      <ThemedChannel
-        index={0}
-        data={sampleData}
-        bits={8}
-        length={200}
-        waveHeight={80}
-      />
+      <ThemedChannel index={0} data={sampleData} bits={8} length={200} waveHeight={80} />
     </Clip>
   ),
 };
@@ -181,7 +167,14 @@ export const Overlay: Story = {
   decorators: [
     (Story) => (
       <DndContext>
-        <div style={{ position: 'relative', height: '120px', width: '300px', background: 'rgba(0,0,0,0.1)' }}>
+        <div
+          style={{
+            position: 'relative',
+            height: '120px',
+            width: '300px',
+            background: 'rgba(0,0,0,0.1)',
+          }}
+        >
           <Story />
         </div>
       </DndContext>
@@ -189,13 +182,7 @@ export const Overlay: Story = {
   ],
   render: (args) => (
     <Clip {...args}>
-      <ThemedChannel
-        index={0}
-        data={sampleData}
-        bits={8}
-        length={200}
-        waveHeight={80}
-      />
+      <ThemedChannel index={0} data={sampleData} bits={8} length={200} waveHeight={80} />
     </Clip>
   ),
 };
