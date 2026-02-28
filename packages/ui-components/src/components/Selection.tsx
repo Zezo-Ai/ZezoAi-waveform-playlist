@@ -24,14 +24,14 @@ const SelectionOverlay = styled.div.attrs<SelectionOverlayProps>((props) => ({
 
 export interface SelectionProps {
   startPosition: number; // Start position in pixels
-  endPosition: number;   // End position in pixels
+  endPosition: number; // End position in pixels
   color?: string;
 }
 
 export const Selection: React.FC<SelectionProps> = ({
   startPosition,
   endPosition,
-  color = '#00ff00'
+  color = '#00ff00',
 }) => {
   const width = Math.max(0, endPosition - startPosition);
 

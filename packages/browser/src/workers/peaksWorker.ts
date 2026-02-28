@@ -207,7 +207,9 @@ export function createPeaksWorker(): PeaksWorkerApi {
       generate() {
         return Promise.reject(new Error('Worker creation failed'));
       },
-      terminate() { /* no-op */ },
+      terminate() {
+        /* no-op */
+      },
     };
   }
 
@@ -260,7 +262,7 @@ export function createPeaksWorker(): PeaksWorkerApi {
             sample_rate: params.sampleRate,
             channels: params.channels,
           },
-          params.channels, // Transfer ownership
+          params.channels // Transfer ownership
         );
       });
     },

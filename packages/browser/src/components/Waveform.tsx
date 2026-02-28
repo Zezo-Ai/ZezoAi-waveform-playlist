@@ -1,6 +1,10 @@
 import React, { ReactNode } from 'react';
 import type { RenderPlayheadFunction } from '@waveform-playlist/ui-components';
-import type { AnnotationAction, AnnotationActionOptions, RenderAnnotationItemProps } from '@waveform-playlist/core';
+import type {
+  AnnotationAction,
+  AnnotationActionOptions,
+  RenderAnnotationItemProps,
+} from '@waveform-playlist/core';
 import { usePlaylistState } from '../WaveformPlaylistContext';
 import type { GetAnnotationBoxLabelFn } from '../types/annotations';
 import { PlaylistVisualization } from './PlaylistVisualization';

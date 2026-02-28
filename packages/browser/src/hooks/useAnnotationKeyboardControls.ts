@@ -179,7 +179,10 @@ export function useAnnotationKeyboardControls({
         const nextAnnotation = updatedAnnotations[activeIndex + 1];
         if (Math.abs(nextAnnotation.start - annotation.end) < LINK_THRESHOLD) {
           // Already linked: move next annotation's start together
-          const newNextStart = Math.min(nextAnnotation.end - 0.1, nextAnnotation.start + actualDelta);
+          const newNextStart = Math.min(
+            nextAnnotation.end - 0.1,
+            nextAnnotation.start + actualDelta
+          );
           updatedAnnotations[activeIndex + 1] = {
             ...nextAnnotation,
             start: newNextStart,

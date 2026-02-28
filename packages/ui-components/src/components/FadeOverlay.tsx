@@ -32,7 +32,7 @@ const FadeSvg = styled.svg<FadeSvgProps>`
   height: 100%;
   display: block;
   /* Flip horizontally for fadeOut - makes it mirror of fadeIn */
-  transform: ${props => props.$type === 'fadeOut' ? 'scaleX(-1)' : 'none'};
+  transform: ${(props) => (props.$type === 'fadeOut' ? 'scaleX(-1)' : 'none')};
 `;
 
 export interface FadeOverlayProps {
@@ -121,10 +121,7 @@ export const FadeOverlay: FunctionComponent<FadeOverlayProps> = ({
   return (
     <FadeContainer $left={left} $width={width} $type={type}>
       <FadeSvg $type={type} viewBox={`0 0 ${width} 100`} preserveAspectRatio="none">
-        <path
-          d={generateFadePath(width, 100, curveType)}
-          fill={fillColor}
-        />
+        <path d={generateFadePath(width, 100, curveType)} fill={fillColor} />
       </FadeSvg>
     </FadeContainer>
   );

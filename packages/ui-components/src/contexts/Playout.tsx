@@ -56,5 +56,4 @@ export const PlayoutProvider = ({ children }: Props) => {
 };
 
 export const usePlayoutStatus = () => useContext(PlayoutStatusContext);
-export const usePlayoutStatusUpdate = () =>
-  useContext(PlayoutStatusUpdateContext);
+export const usePlayoutStatusUpdate = () => useContext(PlayoutStatusUpdateContext);

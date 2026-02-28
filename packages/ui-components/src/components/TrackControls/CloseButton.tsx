@@ -16,7 +16,9 @@ const StyledCloseButton = styled.button`
   align-items: center;
   justify-content: center;
   opacity: 0.7;
-  transition: opacity 0.15s, color 0.15s;
+  transition:
+    opacity 0.15s,
+    color 0.15s;
 
   &:hover {
     opacity: 1;
@@ -29,10 +31,7 @@ export interface CloseButtonProps {
   title?: string;
 }
 
-export const CloseButton: React.FC<CloseButtonProps> = ({
-  onClick,
-  title = 'Remove track',
-}) => (
+export const CloseButton: React.FC<CloseButtonProps> = ({ onClick, title = 'Remove track' }) => (
   <StyledCloseButton onClick={onClick} title={title}>
     <XIcon size={12} weight="bold" />
   </StyledCloseButton>

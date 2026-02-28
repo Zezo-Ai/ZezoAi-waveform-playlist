@@ -35,7 +35,8 @@ export const AnimatedPlayhead: React.FC<AnimatedPlayheadProps> = ({
   const playheadRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number | null>(null);
 
-  const { isPlaying, currentTimeRef, playbackStartTimeRef, audioStartPositionRef } = usePlaybackAnimation();
+  const { isPlaying, currentTimeRef, playbackStartTimeRef, audioStartPositionRef } =
+    usePlaybackAnimation();
   const { samplesPerPixel, sampleRate, progressBarWidth } = usePlaylistData();
 
   useEffect(() => {
@@ -72,7 +73,15 @@ export const AnimatedPlayhead: React.FC<AnimatedPlayheadProps> = ({
         animationFrameRef.current = null;
       }
     };
-  }, [isPlaying, sampleRate, samplesPerPixel, controlsOffset, currentTimeRef, playbackStartTimeRef, audioStartPositionRef]);
+  }, [
+    isPlaying,
+    sampleRate,
+    samplesPerPixel,
+    controlsOffset,
+    currentTimeRef,
+    playbackStartTimeRef,
+    audioStartPositionRef,
+  ]);
 
   // Also update position when not playing (for seeks, stops, etc.)
   useEffect(() => {

@@ -1,5 +1,11 @@
 import { createContext, useContext } from 'react';
-import type { SpectrogramData, SpectrogramConfig, ColorMapValue, RenderMode, TrackSpectrogramOverrides } from '@waveform-playlist/core';
+import type {
+  SpectrogramData,
+  SpectrogramConfig,
+  ColorMapValue,
+  RenderMode,
+  TrackSpectrogramOverrides,
+} from '@waveform-playlist/core';
 import type { TrackMenuItem } from '@waveform-playlist/ui-components';
 
 export interface SpectrogramIntegration {
@@ -9,11 +15,25 @@ export interface SpectrogramIntegration {
   spectrogramConfig?: SpectrogramConfig;
   spectrogramColorMap?: ColorMapValue;
   setTrackRenderMode: (trackId: string, mode: RenderMode) => void;
-  setTrackSpectrogramConfig: (trackId: string, config: SpectrogramConfig, colorMap?: ColorMapValue) => void;
-  registerSpectrogramCanvases: (clipId: string, channelIndex: number, canvasIds: string[], canvasWidths: number[]) => void;
+  setTrackSpectrogramConfig: (
+    trackId: string,
+    config: SpectrogramConfig,
+    colorMap?: ColorMapValue
+  ) => void;
+  registerSpectrogramCanvases: (
+    clipId: string,
+    channelIndex: number,
+    canvasIds: string[],
+    canvasWidths: number[]
+  ) => void;
   unregisterSpectrogramCanvases: (clipId: string, channelIndex: number) => void;
   /** Render spectrogram menu items for a track's context menu */
-  renderMenuItems?: (props: { renderMode: string; onRenderModeChange: (mode: RenderMode) => void; onOpenSettings: () => void; onClose?: () => void }) => TrackMenuItem[];
+  renderMenuItems?: (props: {
+    renderMode: string;
+    onRenderModeChange: (mode: RenderMode) => void;
+    onOpenSettings: () => void;
+    onClose?: () => void;
+  }) => TrackMenuItem[];
   /** Settings modal component provided by the spectrogram package */
   SettingsModal?: React.ComponentType<{
     open: boolean;
@@ -50,7 +70,7 @@ export function useSpectrogramIntegration(): SpectrogramIntegration {
   if (!context) {
     throw new Error(
       'useSpectrogramIntegration must be used within <SpectrogramProvider>. ' +
-      'Install @waveform-playlist/spectrogram and wrap your app with <SpectrogramProvider>.'
+        'Install @waveform-playlist/spectrogram and wrap your app with <SpectrogramProvider>.'
     );
   }
   return context;

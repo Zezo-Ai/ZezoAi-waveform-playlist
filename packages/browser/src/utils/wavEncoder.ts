@@ -14,10 +14,7 @@ export interface WavEncoderOptions {
  * @param options - Encoding options
  * @returns WAV file as Blob
  */
-export function encodeWav(
-  audioBuffer: AudioBuffer,
-  options: WavEncoderOptions = {}
-): Blob {
+export function encodeWav(audioBuffer: AudioBuffer, options: WavEncoderOptions = {}): Blob {
   const { bitDepth = 16 } = options;
 
   const numChannels = audioBuffer.numberOfChannels;
@@ -70,9 +67,7 @@ export function encodeWav(
         const sample = channelData[ch][i];
         // Clamp to [-1, 1] and convert to 16-bit signed integer
         const clampedSample = Math.max(-1, Math.min(1, sample));
-        const intSample = clampedSample < 0
-          ? clampedSample * 0x8000
-          : clampedSample * 0x7FFF;
+        const intSample = clampedSample < 0 ? clampedSample * 0x8000 : clampedSample * 0x7fff;
         view.setInt16(offset, intSample, true);
         offset += 2;
       }

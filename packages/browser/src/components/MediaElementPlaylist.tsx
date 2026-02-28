@@ -24,7 +24,11 @@ import {
 import { useAnnotationDragHandlers } from '../hooks/useAnnotationDragHandlers';
 import { AnimatedMediaElementPlayhead } from './AnimatedMediaElementPlayhead';
 import { ChannelWithMediaElementProgress } from './ChannelWithMediaElementProgress';
-import type { AnnotationData, GetAnnotationBoxLabelFn, OnAnnotationUpdateFn } from '../types/annotations';
+import type {
+  AnnotationData,
+  GetAnnotationBoxLabelFn,
+  OnAnnotationUpdateFn,
+} from '../types/annotations';
 
 export interface MediaElementPlaylistProps {
   /** Custom function to generate the label shown on annotation boxes */
@@ -66,7 +70,8 @@ export const MediaElementPlaylist: React.FC<MediaElementPlaylistProps> = ({
   const { isPlaying } = useMediaElementAnimation();
   const { annotations, activeAnnotationId } = useMediaElementState();
   const annotationIntegration = useContext(AnnotationIntegrationContext);
-  const { play, seekTo, setActiveAnnotationId, setAnnotations, setScrollContainer } = useMediaElementControls();
+  const { play, seekTo, setActiveAnnotationId, setAnnotations, setScrollContainer } =
+    useMediaElementControls();
   const {
     duration,
     peaksDataArray,
@@ -88,29 +93,42 @@ export const MediaElementPlaylist: React.FC<MediaElementPlaylistProps> = ({
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Callback to register scroll container with context
-  const handleScrollContainerRef = useCallback((el: HTMLDivElement | null) => {
-    scrollContainerRef.current = el;
-    setScrollContainer(el);
-  }, [setScrollContainer]);
+  const handleScrollContainerRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      scrollContainerRef.current = el;
+      setScrollContainer(el);
+    },
+    [setScrollContainer]
+  );
 
   // Calculate dimensions
   const tracksFullWidth = Math.floor((duration * sampleRate) / samplesPerPixel);
 
   // Annotation click handler
-  const handleAnnotationClick = useCallback(async (annotation: AnnotationData) => {
-    setActiveAnnotationId(annotation.id);
-    try {
-      await play(annotation.start);
-    } catch (err) {
-      console.error('waveform-playlist: Failed to start playback for annotation', annotation.id, err);
-    }
-  }, [setActiveAnnotationId, play]);
+  const handleAnnotationClick = useCallback(
+    async (annotation: AnnotationData) => {
+      setActiveAnnotationId(annotation.id);
+      try {
+        await play(annotation.start);
+      } catch (err) {
+        console.error(
+          'waveform-playlist: Failed to start playback for annotation',
+          annotation.id,
+          err
+        );
+      }
+    },
+    [setActiveAnnotationId, play]
+  );
 
   // Handle annotation boundary updates
-  const handleAnnotationUpdate = useCallback((updatedAnnotations: AnnotationData[]) => {
-    setAnnotations(updatedAnnotations);
-    onAnnotationUpdate?.(updatedAnnotations);
-  }, [setAnnotations, onAnnotationUpdate]);
+  const handleAnnotationUpdate = useCallback(
+    (updatedAnnotations: AnnotationData[]) => {
+      setAnnotations(updatedAnnotations);
+      onAnnotationUpdate?.(updatedAnnotations);
+    },
+    [setAnnotations, onAnnotationUpdate]
+  );
 
   // Drag handlers for annotation boundary editing
   const { onDragStart, onDragMove, onDragEnd } = useAnnotationDragHandlers({
@@ -123,57 +141,76 @@ export const MediaElementPlaylist: React.FC<MediaElementPlaylistProps> = ({
   });
 
   // Mouse handlers for click-to-seek
-  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-    const controlWidth = controls.show ? controls.width : 0;
-    const x = e.clientX - rect.left - controlWidth;
-    const clickTime = (x * samplesPerPixel) / sampleRate;
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+      const controlWidth = controls.show ? controls.width : 0;
+      const x = e.clientX - rect.left - controlWidth;
+      const clickTime = (x * samplesPerPixel) / sampleRate;
 
-    setIsSelecting(true);
-    setSelectionStart(clickTime);
-    setSelectionEnd(clickTime);
-  }, [controls, samplesPerPixel, sampleRate]);
+      setIsSelecting(true);
+      setSelectionStart(clickTime);
+      setSelectionEnd(clickTime);
+    },
+    [controls, samplesPerPixel, sampleRate]
+  );
 
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isSelecting) return;
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!isSelecting) return;
 
-    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-    const controlWidth = controls.show ? controls.width : 0;
-    const x = e.clientX - rect.left - controlWidth;
-    const moveTime = (x * samplesPerPixel) / sampleRate;
+      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+      const controlWidth = controls.show ? controls.width : 0;
+      const x = e.clientX - rect.left - controlWidth;
+      const moveTime = (x * samplesPerPixel) / sampleRate;
 
-    setSelectionEnd(moveTime);
-  }, [isSelecting, controls, samplesPerPixel, sampleRate]);
+      setSelectionEnd(moveTime);
+    },
+    [isSelecting, controls, samplesPerPixel, sampleRate]
+  );
 
-  const handleMouseUp = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isSelecting) return;
+  const handleMouseUp = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!isSelecting) return;
 
-    setIsSelecting(false);
+      setIsSelecting(false);
 
-    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-    const controlWidth = controls.show ? controls.width : 0;
-    const x = e.clientX - rect.left - controlWidth;
-    const endTime = (x * samplesPerPixel) / sampleRate;
+      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+      const controlWidth = controls.show ? controls.width : 0;
+      const x = e.clientX - rect.left - controlWidth;
+      const endTime = (x * samplesPerPixel) / sampleRate;
 
-    const start = Math.min(selectionStart, endTime);
-    const end = Math.max(selectionStart, endTime);
+      const start = Math.min(selectionStart, endTime);
+      const end = Math.max(selectionStart, endTime);
 
-    // If it's just a click (not a drag), seek to that position
-    if (Math.abs(end - start) < 0.1) {
-      seekTo(start);
-      setSelectionStart(start);
-      setSelectionEnd(start);
+      // If it's just a click (not a drag), seek to that position
+      if (Math.abs(end - start) < 0.1) {
+        seekTo(start);
+        setSelectionStart(start);
+        setSelectionEnd(start);
 
-      if (isPlaying && playoutRef.current) {
-        playoutRef.current.stop();
-        play(start);
+        if (isPlaying && playoutRef.current) {
+          playoutRef.current.stop();
+          play(start);
+        }
+      } else {
+        // It was a drag - finalize the selection
+        setSelectionStart(start);
+        setSelectionEnd(end);
       }
-    } else {
-      // It was a drag - finalize the selection
-      setSelectionStart(start);
-      setSelectionEnd(end);
-    }
-  }, [isSelecting, selectionStart, samplesPerPixel, sampleRate, controls, seekTo, isPlaying, playoutRef, play]);
+    },
+    [
+      isSelecting,
+      selectionStart,
+      samplesPerPixel,
+      sampleRate,
+      controls,
+      seekTo,
+      isPlaying,
+      playoutRef,
+      play,
+    ]
+  );
 
   // Show loading if peaks not ready
   if (peaksDataArray.length === 0) {
@@ -211,18 +248,15 @@ export const MediaElementPlaylist: React.FC<MediaElementPlaylistProps> = ({
           onTracksMouseUp={handleMouseUp}
           scrollContainerRef={handleScrollContainerRef}
           isSelecting={isSelecting}
-          timescale={
-            timeScaleHeight > 0 ? (
-              <SmartScale />
-            ) : undefined
-          }
+          timescale={timeScaleHeight > 0 ? <SmartScale /> : undefined}
         >
           <>
             {peaksDataArray.map((trackClipPeaks, trackIndex) => {
               // For MediaElement, we have a single track with a single clip
-              const maxChannels = trackClipPeaks.length > 0
-                ? Math.max(...trackClipPeaks.map(clip => clip.peaks.data.length))
-                : 1;
+              const maxChannels =
+                trackClipPeaks.length > 0
+                  ? Math.max(...trackClipPeaks.map((clip) => clip.peaks.data.length))
+                  : 1;
 
               return (
                 <TrackControlsContext.Provider key={trackIndex} value={emptyControls}>

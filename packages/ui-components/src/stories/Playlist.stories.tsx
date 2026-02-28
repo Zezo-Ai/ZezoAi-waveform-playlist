@@ -42,16 +42,18 @@ const playlistInfo = {
 
 // Simple timescale component for demos
 const SimpleTimescale = () => (
-  <div style={{
-    height: '20px',
-    background: '#f0f0f0',
-    borderBottom: '1px solid #ddd',
-    display: 'flex',
-    alignItems: 'flex-end',
-    paddingLeft: '10px',
-    fontSize: '0.75rem',
-    color: '#666',
-  }}>
+  <div
+    style={{
+      height: '20px',
+      background: '#f0f0f0',
+      borderBottom: '1px solid #ddd',
+      display: 'flex',
+      alignItems: 'flex-end',
+      paddingLeft: '10px',
+      fontSize: '0.75rem',
+      color: '#666',
+    }}
+  >
     <span style={{ marginRight: '100px' }}>0:00</span>
     <span style={{ marginRight: '100px' }}>0:10</span>
     <span style={{ marginRight: '100px' }}>0:20</span>
@@ -60,7 +62,11 @@ const SimpleTimescale = () => (
 );
 
 // Wrapper component that uses theme from context for Channel colors
-const ThemedChannel = ({ outlineColor, fillColor, ...props }: {
+const ThemedChannel = ({
+  outlineColor,
+  fillColor,
+  ...props
+}: {
   index: number;
   data: Int8Array | Int16Array;
   bits: 8 | 16;
@@ -107,13 +113,7 @@ export const Default: Story = {
   render: (args) => (
     <Playlist {...args}>
       <Track numChannels={1}>
-        <ThemedChannel
-          index={0}
-          data={sampleData}
-          bits={8}
-          length={500}
-          waveHeight={80}
-        />
+        <ThemedChannel index={0} data={sampleData} bits={8} length={500} waveHeight={80} />
       </Track>
     </Playlist>
   ),
@@ -128,13 +128,7 @@ export const WithTimescale: Story = {
   render: (args) => (
     <Playlist {...args}>
       <Track numChannels={1}>
-        <ThemedChannel
-          index={0}
-          data={sampleData}
-          bits={8}
-          length={500}
-          waveHeight={80}
-        />
+        <ThemedChannel index={0} data={sampleData} bits={8} length={500} waveHeight={80} />
       </Track>
     </Playlist>
   ),
@@ -149,13 +143,7 @@ export const MultipleTracks: Story = {
   render: (args) => (
     <Playlist {...args}>
       <Track numChannels={1} backgroundColor="#e8f4ff">
-        <ThemedChannel
-          index={0}
-          data={sampleData}
-          bits={8}
-          length={500}
-          waveHeight={80}
-        />
+        <ThemedChannel index={0} data={sampleData} bits={8} length={500} waveHeight={80} />
       </Track>
       <Track numChannels={1} backgroundColor="#fff5e6">
         <ThemedChannel
@@ -194,13 +182,7 @@ export const WithClickHandler: Story = {
   render: (args) => (
     <Playlist {...args}>
       <Track numChannels={1}>
-        <ThemedChannel
-          index={0}
-          data={sampleData}
-          bits={8}
-          length={500}
-          waveHeight={80}
-        />
+        <ThemedChannel index={0} data={sampleData} bits={8} length={500} waveHeight={80} />
       </Track>
     </Playlist>
   ),
@@ -225,13 +207,7 @@ export const Scrollable: Story = {
   render: (args) => (
     <Playlist {...args}>
       <Track numChannels={1}>
-        <ThemedChannel
-          index={0}
-          data={sampleData}
-          bits={8}
-          length={500}
-          waveHeight={80}
-        />
+        <ThemedChannel index={0} data={sampleData} bits={8} length={500} waveHeight={80} />
       </Track>
     </Playlist>
   ),

@@ -1,6 +1,11 @@
 import React, { FunctionComponent, useRef, useEffect } from 'react';
 import styled from 'styled-components';
-import type { AnnotationData, AnnotationAction, AnnotationActionOptions, RenderAnnotationItemProps } from '@waveform-playlist/core';
+import type {
+  AnnotationData,
+  AnnotationAction,
+  AnnotationActionOptions,
+  RenderAnnotationItemProps,
+} from '@waveform-playlist/core';
 
 interface ContainerProps {
   $height?: number;
@@ -8,7 +13,7 @@ interface ContainerProps {
 
 const Container = styled.div<ContainerProps>`
   background: ${(props) => props.theme?.backgroundColor || '#fff'};
-  ${(props) => props.$height ? `height: ${props.$height}px;` : 'max-height: 200px;'}
+  ${(props) => (props.$height ? `height: ${props.$height}px;` : 'max-height: 200px;')}
   overflow-y: auto;
   padding: 8px;
 `;
@@ -21,11 +26,18 @@ const AnnotationItem = styled.div<{ $isActive?: boolean }>`
   border-radius: 4px;
   transition: all 0.2s;
   cursor: pointer;
-  box-shadow: ${(props) => (props.$isActive ? '0 2px 8px rgba(255, 152, 0, 0.25), inset 0 0 0 1px rgba(255, 152, 0, 0.3)' : 'none')};
+  box-shadow: ${(props) =>
+    props.$isActive
+      ? '0 2px 8px rgba(255, 152, 0, 0.25), inset 0 0 0 1px rgba(255, 152, 0, 0.3)'
+      : 'none'};
 
   &:hover {
-    background: ${(props) => (props.$isActive ? 'rgba(255, 152, 0, 0.2)' : props.theme?.annotationTextItemHoverBackground || 'rgba(0, 0, 0, 0.05)')};
-    border-left-color: ${(props) => (props.$isActive ? '#ff9800' : props.theme?.borderColor || '#ddd')};
+    background: ${(props) =>
+      props.$isActive
+        ? 'rgba(255, 152, 0, 0.2)'
+        : props.theme?.annotationTextItemHoverBackground || 'rgba(0, 0, 0, 0.05)'};
+    border-left-color: ${(props) =>
+      props.$isActive ? '#ff9800' : props.theme?.borderColor || '#ddd'};
   }
 
   &:focus-visible {
@@ -55,7 +67,8 @@ const AnnotationIdLabel = styled.span<{ $isEditable?: boolean }>`
   padding: 2px 6px;
   border-radius: 3px;
   min-width: 20px;
-  outline: ${(props) => (props.$isEditable ? `1px dashed ${props.theme?.borderColor || '#ddd'}` : 'none')};
+  outline: ${(props) =>
+    props.$isEditable ? `1px dashed ${props.theme?.borderColor || '#ddd'}` : 'none'};
 
   &[contenteditable='true']:focus {
     outline: 2px solid #ff9800;
@@ -103,7 +116,8 @@ const AnnotationTextContent = styled.div<{ $isEditable?: boolean }>`
   color: ${(props) => props.theme?.textColor || '#2a2a2a'};
   white-space: pre-wrap;
   word-break: break-word;
-  outline: ${(props) => (props.$isEditable ? `1px dashed ${props.theme?.borderColor || '#ddd'}` : 'none')};
+  outline: ${(props) =>
+    props.$isEditable ? `1px dashed ${props.theme?.borderColor || '#ddd'}` : 'none'};
   padding: ${(props) => (props.$isEditable ? '6px' : '0')};
   border-radius: 3px;
   min-height: 20px;
@@ -223,7 +237,11 @@ const AnnotationTextComponent: FunctionComponent<AnnotationTextProps> = ({
     onAnnotationUpdate(updatedAnnotations);
   };
 
-  const handleControlClick = (control: AnnotationAction, annotation: AnnotationData, index: number) => {
+  const handleControlClick = (
+    control: AnnotationAction,
+    annotation: AnnotationData,
+    index: number
+  ) => {
     if (!onAnnotationUpdate) return;
 
     const annotationsCopy = [...annotations];
@@ -244,10 +262,7 @@ const AnnotationTextComponent: FunctionComponent<AnnotationTextProps> = ({
         // Use custom render function if provided
         if (renderAnnotationItem) {
           return (
-            <div
-              key={annotation.id}
-              ref={isActive ? activeAnnotationRef : null}
-            >
+            <div key={annotation.id} ref={isActive ? activeAnnotationRef : null}>
               {renderAnnotationItem({
                 annotation,
                 index,
@@ -261,61 +276,65 @@ const AnnotationTextComponent: FunctionComponent<AnnotationTextProps> = ({
 
         // Default rendering
         return (
-        <AnnotationItem
-          key={annotation.id}
-          ref={isActive ? activeAnnotationRef : null}
-          $isActive={isActive}
-          onClick={handleClick}
-        >
-          <AnnotationHeader>
-            <AnnotationInfo>
-              <AnnotationIdLabel
-                $isEditable={editable}
-                contentEditable={editable}
-                suppressContentEditableWarning
-                onBlur={(e) => handleIdEdit(index, e.currentTarget.textContent || '')}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    (e.currentTarget as HTMLElement).blur();
-                  }
-                }}
-              >
-                {annotation.id}
-              </AnnotationIdLabel>
-              <TimeRange>
-                {formatTime(annotation.start)} - {formatTime(annotation.end)}
-              </TimeRange>
-            </AnnotationInfo>
-            {controls.length > 0 && (
-              <AnnotationControls onClick={(e) => e.stopPropagation()}>
-                {controls.map((control, idx) => (
-                  <ControlButton
-                    key={idx}
-                    title={control.title}
-                    onClick={() => handleControlClick(control, annotation, index)}
-                  >
-                    {control.text ? control.text : <i className={getIconClass(control.class || '')} />}
-                  </ControlButton>
-                ))}
-              </AnnotationControls>
-            )}
-          </AnnotationHeader>
-          <AnnotationTextContent
-            $isEditable={editable}
-            contentEditable={editable}
-            suppressContentEditableWarning
-            onBlur={(e) => handleTextEdit(index, e.currentTarget.textContent || '')}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                (e.currentTarget as HTMLElement).blur();
-              }
-            }}
+          <AnnotationItem
+            key={annotation.id}
+            ref={isActive ? activeAnnotationRef : null}
+            $isActive={isActive}
+            onClick={handleClick}
           >
-            {annotation.lines.join('\n')}
-          </AnnotationTextContent>
-        </AnnotationItem>
+            <AnnotationHeader>
+              <AnnotationInfo>
+                <AnnotationIdLabel
+                  $isEditable={editable}
+                  contentEditable={editable}
+                  suppressContentEditableWarning
+                  onBlur={(e) => handleIdEdit(index, e.currentTarget.textContent || '')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      (e.currentTarget as HTMLElement).blur();
+                    }
+                  }}
+                >
+                  {annotation.id}
+                </AnnotationIdLabel>
+                <TimeRange>
+                  {formatTime(annotation.start)} - {formatTime(annotation.end)}
+                </TimeRange>
+              </AnnotationInfo>
+              {controls.length > 0 && (
+                <AnnotationControls onClick={(e) => e.stopPropagation()}>
+                  {controls.map((control, idx) => (
+                    <ControlButton
+                      key={idx}
+                      title={control.title}
+                      onClick={() => handleControlClick(control, annotation, index)}
+                    >
+                      {control.text ? (
+                        control.text
+                      ) : (
+                        <i className={getIconClass(control.class || '')} />
+                      )}
+                    </ControlButton>
+                  ))}
+                </AnnotationControls>
+              )}
+            </AnnotationHeader>
+            <AnnotationTextContent
+              $isEditable={editable}
+              contentEditable={editable}
+              suppressContentEditableWarning
+              onBlur={(e) => handleTextEdit(index, e.currentTarget.textContent || '')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  (e.currentTarget as HTMLElement).blur();
+                }
+              }}
+            >
+              {annotation.lines.join('\n')}
+            </AnnotationTextContent>
+          </AnnotationItem>
         );
       })}
     </Container>

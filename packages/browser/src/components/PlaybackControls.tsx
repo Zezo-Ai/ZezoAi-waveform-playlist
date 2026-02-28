@@ -1,6 +1,11 @@
 import React from 'react';
 import { BaseControlButton } from '@waveform-playlist/ui-components';
-import { usePlaybackAnimation, usePlaylistState, usePlaylistControls, usePlaylistData } from '../WaveformPlaylistContext';
+import {
+  usePlaybackAnimation,
+  usePlaylistState,
+  usePlaylistControls,
+  usePlaylistData,
+} from '../WaveformPlaylistContext';
 
 export const PlayButton: React.FC<{ className?: string }> = ({ className }) => {
   const { isPlaying, currentTimeRef } = usePlaybackAnimation();
@@ -99,7 +104,7 @@ export const FastForwardButton: React.FC<{ className?: string }> = ({ className 
 
 export const SkipBackwardButton: React.FC<{ skipAmount?: number; className?: string }> = ({
   skipAmount = 5,
-  className
+  className,
 }) => {
   const { currentTimeRef, isPlaying } = usePlaybackAnimation();
   const { play, setCurrentTime } = usePlaylistControls();
@@ -124,7 +129,7 @@ export const SkipBackwardButton: React.FC<{ skipAmount?: number; className?: str
 
 export const SkipForwardButton: React.FC<{ skipAmount?: number; className?: string }> = ({
   skipAmount = 5,
-  className
+  className,
 }) => {
   const { currentTimeRef, isPlaying } = usePlaybackAnimation();
   const { play, setCurrentTime } = usePlaylistControls();
@@ -195,7 +200,13 @@ export const SetLoopRegionButton: React.FC<{ className?: string }> = ({ classNam
       onClick={handleClick}
       disabled={!hasValidSelection && !hasLoopRegion}
       className={className}
-      title={hasLoopRegion ? 'Clear loop region' : (hasValidSelection ? 'Set loop region from selection' : 'Create a selection first')}
+      title={
+        hasLoopRegion
+          ? 'Clear loop region'
+          : hasValidSelection
+            ? 'Set loop region from selection'
+            : 'Create a selection first'
+      }
     >
       {hasLoopRegion ? 'Clear Loop' : 'Set Loop'}
     </BaseControlButton>

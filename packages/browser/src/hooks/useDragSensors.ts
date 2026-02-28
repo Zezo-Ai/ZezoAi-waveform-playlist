@@ -93,7 +93,5 @@ export function useDragSensors(options: DragSensorOptions = {}) {
 
   // When touch-optimized, use separate sensors for better control
   // Otherwise, use unified PointerSensor for backwards compatibility
-  return useSensors(
-    ...(touchOptimized ? [mouseSensor, touchSensor] : [pointerSensor])
-  );
+  return useSensors(...(touchOptimized ? [mouseSensor, touchSensor] : [pointerSensor]));
 }

@@ -57,10 +57,14 @@ export function getFrequencyScale(
   name: FrequencyScaleName
 ): (f: number, minF: number, maxF: number) => number {
   switch (name) {
-    case 'logarithmic': return logarithmicScale;
-    case 'mel': return melScale;
-    case 'bark': return barkScale;
-    case 'erb': return erbScale;
+    case 'logarithmic':
+      return logarithmicScale;
+    case 'mel':
+      return melScale;
+    case 'bark':
+      return barkScale;
+    case 'erb':
+      return erbScale;
     case 'linear':
       return linearScale;
     default:

@@ -64,10 +64,13 @@ export const MediaElementAnnotationList: React.FC<MediaElementAnnotationListProp
 
   const resolvedConfig = annotationListConfig ?? { linkEndpoints: false, continuousPlay };
 
-  const handleAnnotationUpdate = useCallback((updatedAnnotations: AnnotationData[]) => {
-    setAnnotations(updatedAnnotations);
-    onAnnotationUpdate?.(updatedAnnotations);
-  }, [setAnnotations, onAnnotationUpdate]);
+  const handleAnnotationUpdate = useCallback(
+    (updatedAnnotations: AnnotationData[]) => {
+      setAnnotations(updatedAnnotations);
+      onAnnotationUpdate?.(updatedAnnotations);
+    },
+    [setAnnotations, onAnnotationUpdate]
+  );
 
   const { AnnotationText } = integration;
 

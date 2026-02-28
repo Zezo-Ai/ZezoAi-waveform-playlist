@@ -12,11 +12,7 @@ import { ClipTrack, createTrack, createClipFromSeconds } from '@waveform-playlis
 import { getGlobalAudioContext } from '@waveform-playlist/playout';
 
 /** A source that can be decoded into a track. */
-export type TrackSource =
-  | File
-  | Blob
-  | string
-  | { src: string; name?: string };
+export type TrackSource = File | Blob | string | { src: string; name?: string };
 
 /** Info about a track that failed to load. */
 export interface TrackLoadError {
@@ -53,9 +49,21 @@ function getSourceName(source: TrackSource): string {
     return 'Untitled';
   }
   if (typeof source === 'string') {
-    return source.split('/').pop()?.replace(/\.[^/.]+$/, '') ?? 'Untitled';
+    return (
+      source
+        .split('/')
+        .pop()
+        ?.replace(/\.[^/.]+$/, '') ?? 'Untitled'
+    );
   }
-  return source.name ?? source.src.split('/').pop()?.replace(/\.[^/.]+$/, '') ?? 'Untitled';
+  return (
+    source.name ??
+    source.src
+      .split('/')
+      .pop()
+      ?.replace(/\.[^/.]+$/, '') ??
+    'Untitled'
+  );
 }
 
 /** Decode a TrackSource into an AudioBuffer + clean name. */
@@ -110,13 +118,13 @@ export function useDynamicTracks(): UseDynamicTracksReturn {
     const audioContext = getGlobalAudioContext();
 
     // 1. Create placeholder tracks immediately
-    const placeholders = sources.map(source => ({
+    const placeholders = sources.map((source) => ({
       track: createTrack({ name: `${getSourceName(source)} (loading...)`, clips: [] }),
       source,
     }));
 
-    setTracks(prev => [...prev, ...placeholders.map(p => p.track)]);
-    setLoadingCount(prev => prev + sources.length);
+    setTracks((prev) => [...prev, ...placeholders.map((p) => p.track)]);
+    setLoadingCount((prev) => prev + sources.length);
 
     // 2. Decode each source in parallel (fire-and-forget per source)
     for (const { track, source } of placeholders) {
@@ -126,9 +134,7 @@ export function useDynamicTracks(): UseDynamicTracksReturn {
 
       (async () => {
         try {
-          const { audioBuffer, name } = await decodeSource(
-            source, audioContext, controller.signal
-          );
+          const { audioBuffer, name } = await decodeSource(source, audioContext, controller.signal);
           const clip = createClipFromSeconds({
             audioBuffer,
             startTime: 0,
@@ -139,25 +145,28 @@ export function useDynamicTracks(): UseDynamicTracksReturn {
 
           // Guard: skip state update if hook unmounted or track was removed while decoding
           if (!cancelledRef.current && loadingIdsRef.current.has(track.id)) {
-            setTracks(prev => prev.map(t =>
-              t.id === track.id ? { ...t, name, clips: [clip] } : t
-            ));
+            setTracks((prev) =>
+              prev.map((t) => (t.id === track.id ? { ...t, name, clips: [clip] } : t))
+            );
           }
         } catch (error) {
           if (error instanceof DOMException && error.name === 'AbortError') return;
           console.warn('[waveform-playlist] Error loading audio:', error);
           // Guard: skip state update if hook unmounted or track was removed while decoding
           if (!cancelledRef.current && loadingIdsRef.current.has(track.id)) {
-            setTracks(prev => prev.filter(t => t.id !== track.id));
-            setErrors(prev => [...prev, {
-              name: getSourceName(source),
-              error: error instanceof Error ? error : new Error(String(error)),
-            }]);
+            setTracks((prev) => prev.filter((t) => t.id !== track.id));
+            setErrors((prev) => [
+              ...prev,
+              {
+                name: getSourceName(source),
+                error: error instanceof Error ? error : new Error(String(error)),
+              },
+            ]);
           }
         } finally {
           abortControllersRef.current.delete(track.id);
           if (!cancelledRef.current && loadingIdsRef.current.delete(track.id)) {
-            setLoadingCount(prev => prev - 1);
+            setLoadingCount((prev) => prev - 1);
           }
         }
       })();
@@ -165,7 +174,7 @@ export function useDynamicTracks(): UseDynamicTracksReturn {
   }, []);
 
   const removeTrack = useCallback((trackId: string) => {
-    setTracks(prev => prev.filter(t => t.id !== trackId));
+    setTracks((prev) => prev.filter((t) => t.id !== trackId));
     // Abort in-flight fetch/decode and update loading state
     const controller = abortControllersRef.current.get(trackId);
     if (controller) {
@@ -173,7 +182,7 @@ export function useDynamicTracks(): UseDynamicTracksReturn {
       abortControllersRef.current.delete(trackId);
     }
     if (loadingIdsRef.current.delete(trackId)) {
-      setLoadingCount(prev => prev - 1);
+      setLoadingCount((prev) => prev - 1);
     }
   }, []);
 

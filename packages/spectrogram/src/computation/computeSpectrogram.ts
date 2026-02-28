@@ -33,7 +33,7 @@ export function computeSpectrogram(
 
   const sampleRate = audioBuffer.sampleRate;
   const frequencyBinCount = actualFftSize >> 1;
-  const totalSamples = durationSamples ?? (audioBuffer.length - offsetSamples);
+  const totalSamples = durationSamples ?? audioBuffer.length - offsetSamples;
 
   // Get channel data
   const channelIdx = Math.min(channel, audioBuffer.numberOfChannels - 1);
@@ -107,7 +107,7 @@ export function computeSpectrogramMono(
 
   const sampleRate = audioBuffer.sampleRate;
   const frequencyBinCount = actualFftSize >> 1;
-  const totalSamples = durationSamples ?? (audioBuffer.length - offsetSamples);
+  const totalSamples = durationSamples ?? audioBuffer.length - offsetSamples;
   const numChannels = audioBuffer.numberOfChannels;
 
   const window = getWindowFunction(windowName, windowSize, alpha);

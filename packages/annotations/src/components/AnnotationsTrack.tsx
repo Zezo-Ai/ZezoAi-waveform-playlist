@@ -67,12 +67,8 @@ export const AnnotationsTrack: FunctionComponent<AnnotationsTrackProps> = ({
       $controlWidth={show ? controlWidth : 0}
       $width={width}
     >
-      <ControlsPlaceholder $controlWidth={show ? controlWidth : 0}>
-        Annotations
-      </ControlsPlaceholder>
-      <AnnotationsContainer $offset={offset}>
-        {children}
-      </AnnotationsContainer>
+      <ControlsPlaceholder $controlWidth={show ? controlWidth : 0}>Annotations</ControlsPlaceholder>
+      <AnnotationsContainer $offset={offset}>{children}</AnnotationsContainer>
     </Container>
   );
 };

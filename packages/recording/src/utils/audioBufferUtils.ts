@@ -27,11 +27,7 @@ export function createAudioBuffer(
   sampleRate: number,
   channelCount: number = 1
 ): AudioBuffer {
-  const buffer = audioContext.createBuffer(
-    channelCount,
-    samples.length,
-    sampleRate
-  );
+  const buffer = audioContext.createBuffer(channelCount, samples.length, sampleRate);
 
   // Copy samples to buffer (for now, just mono)
   // Create a new Float32Array to ensure correct type

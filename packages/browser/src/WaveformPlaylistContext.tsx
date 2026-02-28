@@ -1,14 +1,42 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  type ReactNode,
+} from 'react';
 import { ThemeProvider } from 'styled-components';
-import { TonePlayout, type EffectsFunction, type TrackEffectsFunction } from '@waveform-playlist/playout';
-import { type Track, type ClipTrack, type Fade, type AnnotationAction } from '@waveform-playlist/core';
-import { type TimeFormat, type WaveformPlaylistTheme, defaultTheme } from '@waveform-playlist/ui-components';
+import {
+  TonePlayout,
+  type EffectsFunction,
+  type TrackEffectsFunction,
+} from '@waveform-playlist/playout';
+import {
+  type Track,
+  type ClipTrack,
+  type Fade,
+  type AnnotationAction,
+} from '@waveform-playlist/core';
+import {
+  type TimeFormat,
+  type WaveformPlaylistTheme,
+  defaultTheme,
+} from '@waveform-playlist/ui-components';
 import { getContext } from 'tone';
 import { extractPeaksFromWaveformDataFull } from './waveformDataLoader';
 import type WaveformData from 'waveform-data';
 import type { PeakData } from '@waveform-playlist/core';
 import type { AnnotationData } from '@waveform-playlist/core';
-import { useTimeFormat, useZoomControls, useMasterVolume, useAnimationFrameLoop, useWaveformDataCache } from './hooks';
+import {
+  useTimeFormat,
+  useZoomControls,
+  useMasterVolume,
+  useAnimationFrameLoop,
+  useWaveformDataCache,
+} from './hooks';
 
 // Types
 export interface ClipPeaks {
@@ -113,7 +141,6 @@ export interface PlaylistControlsContextValue {
   setLoopRegion: (start: number, end: number) => void;
   setLoopRegionFromSelection: () => void;
   clearLoopRegion: () => void;
-
 }
 
 export interface PlaylistDataContextValue {
@@ -205,7 +232,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   children,
 }) => {
   // Default progressBarWidth to barWidth + barGap (fills gaps)
-  const progressBarWidth = progressBarWidthProp ?? (barWidth + barGap);
+  const progressBarWidth = progressBarWidthProp ?? barWidth + barGap;
   // Annotations are derived from prop (single source of truth in parent)
   // In v6, annotations must be pre-parsed (numeric start/end). Use parseAeneas() from @waveform-playlist/annotations before passing.
   const annotations = useMemo(() => {
@@ -215,8 +242,9 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       if (typeof first.start !== 'number' || typeof first.end !== 'number') {
         console.error(
           '[waveform-playlist] Annotations must have numeric start/end values. ' +
-          'In v6, use parseAeneas() from @waveform-playlist/annotations before passing annotations. ' +
-          'Received start type: ' + typeof first.start
+            'In v6, use parseAeneas() from @waveform-playlist/annotations before passing annotations. ' +
+            'Received start type: ' +
+            typeof first.start
         );
         return [];
       }
@@ -240,7 +268,9 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const [selectionEnd, setSelectionEnd] = useState(0);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [isAutomaticScroll, setIsAutomaticScroll] = useState(automaticScroll);
-  const [continuousPlay, setContinuousPlayState] = useState(annotationList?.isContinuousPlay ?? false);
+  const [continuousPlay, setContinuousPlayState] = useState(
+    annotationList?.isContinuousPlay ?? false
+  );
   const [linkEndpoints, setLinkEndpoints] = useState(annotationList?.linkEndpoints ?? false);
   const [annotationsEditable, setAnnotationsEditable] = useState(annotationList?.editable ?? false);
   const [isLoopEnabled, setIsLoopEnabledState] = useState(false);
@@ -273,32 +303,33 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const zoom = useZoomControls({ initialSamplesPerPixel, zoomLevels });
   const samplesPerPixel = zoom.samplesPerPixel;
   const { masterVolume, setMasterVolume } = useMasterVolume({ playoutRef, initialVolume: 1.0 });
-  const { animationFrameRef, startAnimationFrameLoop, stopAnimationFrameLoop } = useAnimationFrameLoop();
+  const { animationFrameRef, startAnimationFrameLoop, stopAnimationFrameLoop } =
+    useAnimationFrameLoop();
 
   // Worker-based WaveformData cache for fast zoom resampling
   const baseScale = useMemo(
     () => Math.min(...(zoomLevels ?? [256, 512, 1024, 2048, 4096, 8192])),
-    [zoomLevels],
+    [zoomLevels]
   );
   const { cache: waveformDataCache } = useWaveformDataCache(tracks, baseScale);
 
   // Custom setter for continuousPlay that updates BOTH state and ref synchronously
   // This ensures the ref is updated immediately, before the animation loop can read it
   const setContinuousPlay = useCallback((value: boolean) => {
-    continuousPlayRef.current = value;  // Update ref synchronously
-    setContinuousPlayState(value);       // Update state (triggers re-render)
+    continuousPlayRef.current = value; // Update ref synchronously
+    setContinuousPlayState(value); // Update state (triggers re-render)
   }, []);
 
   // Custom setter for activeAnnotationId that updates BOTH state and ref synchronously
   const setActiveAnnotationId = useCallback((value: string | null) => {
-    activeAnnotationIdRef.current = value;  // Update ref synchronously
-    setActiveAnnotationIdState(value);       // Update state (triggers re-render)
+    activeAnnotationIdRef.current = value; // Update ref synchronously
+    setActiveAnnotationIdState(value); // Update state (triggers re-render)
   }, []);
 
   // Custom setter for isLoopEnabled that updates BOTH state and ref synchronously
   const setLoopEnabled = useCallback((value: boolean) => {
-    isLoopEnabledRef.current = value;  // Update ref synchronously
-    setIsLoopEnabledState(value);       // Update state (triggers re-render)
+    isLoopEnabledRef.current = value; // Update ref synchronously
+    setIsLoopEnabledState(value); // Update state (triggers re-render)
   }, []);
 
   // Loop region setters - Audacity-style separate loop points
@@ -427,7 +458,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
         // Initialize or update track states, preserving existing UI state (mute/solo/volume/pan)
         // Only initialize from ClipTrack props when trackStates is empty or track count changes
-        setTrackStates(prevStates => {
+        setTrackStates((prevStates) => {
           if (prevStates.length === tracks.length) {
             // Same number of tracks - preserve existing UI state, just update names
             return prevStates.map((state, i) => ({
@@ -460,14 +491,16 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         const currentTrackStates = trackStatesRef.current;
         tracks.forEach((track, index) => {
           // Filter to only clips with audioBuffer (peaks-only clips can't be played)
-          const playableClips = track.clips.filter(clip => clip.audioBuffer);
+          const playableClips = track.clips.filter((clip) => clip.audioBuffer);
 
           if (playableClips.length > 0) {
             // Calculate track start and end times from clips (converting samples to seconds)
             // Use clip.sampleRate which is always defined
             const sampleRate = playableClips[0].sampleRate;
-            const startTime = Math.min(...playableClips.map(c => c.startSample / sampleRate));
-            const endTime = Math.max(...playableClips.map(c => (c.startSample + c.durationSamples) / sampleRate));
+            const startTime = Math.min(...playableClips.map((c) => c.startSample / sampleRate));
+            const endTime = Math.max(
+              ...playableClips.map((c) => (c.startSample + c.durationSamples) / sampleRate)
+            );
 
             // Use current UI state if available, otherwise fall back to track props
             const trackState = currentTrackStates[index];
@@ -484,11 +517,11 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
             // Convert ClipTrack clips to ToneTrack ClipInfo format
             // Note: ClipInfo.startTime is relative to track start, not absolute timeline
-            const clipInfos = playableClips.map(clip => {
+            const clipInfos = playableClips.map((clip) => {
               const clipSampleRate = clip.sampleRate;
               return {
                 buffer: clip.audioBuffer!, // We filtered for audioBuffer above
-                startTime: (clip.startSample / clipSampleRate) - startTime, // Make relative to track start
+                startTime: clip.startSample / clipSampleRate - startTime, // Make relative to track start
                 duration: clip.durationSamples / clipSampleRate,
                 offset: clip.offsetSamples / clipSampleRate,
                 fadeIn: clip.fadeIn,
@@ -556,7 +589,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
               samplesPerPixel,
               mono,
               clip.offsetSamples,
-              clip.durationSamples,
+              clip.durationSamples
             );
           } catch (err) {
             console.warn('[waveform-playlist] Failed to extract peaks from waveformData:', err);
@@ -573,7 +606,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
                 samplesPerPixel,
                 mono,
                 clip.offsetSamples,
-                clip.durationSamples,
+                clip.durationSamples
               );
             } catch (err) {
               console.warn('[waveform-playlist] Failed to extract peaks from cache:', err);
@@ -586,7 +619,9 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         // when peaks arrive (mono mode collapses to 1 channel).
         if (!peaks) {
           if (!clip.audioBuffer && !clip.waveformData) {
-            console.warn(`[waveform-playlist] Clip "${clip.id}" has no audio data or waveform data`);
+            console.warn(
+              `[waveform-playlist] Clip "${clip.id}" has no audio data or waveform data`
+            );
           }
           const numChannels = mono ? 1 : (clip.audioBuffer?.numberOfChannels ?? 1);
           peaks = {
@@ -612,7 +647,6 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
     setPeaksDataArray(allTrackPeaks);
   }, [tracks, samplesPerPixel, mono, waveformDataCache]);
-
 
   // Animation loop
   const startAnimationLoop = useCallback(() => {
@@ -641,7 +675,9 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         } else {
           // Continuous play OFF: stop at end of current annotation
           if (activeAnnotationIdRef.current) {
-            const activeAnnotation = currentAnnotations.find(ann => ann.id === activeAnnotationIdRef.current);
+            const activeAnnotation = currentAnnotations.find(
+              (ann) => ann.id === activeAnnotationIdRef.current
+            );
             if (activeAnnotation && time >= activeAnnotation.end) {
               // Stop playback at end of current annotation
               if (playoutRef.current) {
@@ -691,8 +727,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       }
 
       // Audacity-style loop region: loop when cursor enters and reaches end of loop region
-      const hasValidLoopRegion = loopStartRef.current !== loopEndRef.current &&
-                                  loopEndRef.current > loopStartRef.current;
+      const hasValidLoopRegion =
+        loopStartRef.current !== loopEndRef.current && loopEndRef.current > loopStartRef.current;
 
       if (isLoopEnabledRef.current && hasValidLoopRegion) {
         // Check if we've reached or passed the loop end point
@@ -729,7 +765,14 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       startAnimationFrameLoop(updateTime);
     };
     startAnimationFrameLoop(updateTime);
-  }, [duration, audioBuffers, controls.show, controls.width, setActiveAnnotationId, startAnimationFrameLoop]);
+  }, [
+    duration,
+    audioBuffers,
+    controls.show,
+    controls.width,
+    setActiveAnnotationId,
+    startAnimationFrameLoop,
+  ]);
 
   const stopAnimationLoop = stopAnimationFrameLoop;
 
@@ -798,44 +841,48 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   }, [tracks, startAnimationLoop]);
 
   // Playback controls
-  const play = useCallback(async (startTime?: number, playDuration?: number) => {
-    if (!playoutRef.current || audioBuffers.length === 0) return;
+  const play = useCallback(
+    async (startTime?: number, playDuration?: number) => {
+      if (!playoutRef.current || audioBuffers.length === 0) return;
 
-    await playoutRef.current.init();
+      await playoutRef.current.init();
 
-    const actualStartTime = startTime ?? currentTimeRef.current;
-    playStartPositionRef.current = actualStartTime;
+      const actualStartTime = startTime ?? currentTimeRef.current;
+      playStartPositionRef.current = actualStartTime;
 
-    // Update currentTimeRef to match the actual start position
-    // This ensures the animation loop starts from the correct position
-    currentTimeRef.current = actualStartTime;
+      // Update currentTimeRef to match the actual start position
+      // This ensures the animation loop starts from the correct position
+      currentTimeRef.current = actualStartTime;
 
-    // Clear any existing playback complete callback before stopping
-    // Otherwise stopping will trigger the old callback and interfere with new playback
-    playoutRef.current.setOnPlaybackComplete(() => {});
+      // Clear any existing playback complete callback before stopping
+      // Otherwise stopping will trigger the old callback and interfere with new playback
+      playoutRef.current.setOnPlaybackComplete(() => {});
 
-    // Stop any existing playback and animation loop before starting
-    playoutRef.current.stop();
-    stopAnimationLoop();
+      // Stop any existing playback and animation loop before starting
+      playoutRef.current.stop();
+      stopAnimationLoop();
 
-    // Record timing for accurate position tracking using Tone.js context
-    const context = getContext();
-    // Tone.js context wraps Web Audio - need to use .currentTime from wrapped context
-    const startTimeNow = context.currentTime;
-    playbackStartTimeRef.current = startTimeNow;
-    audioStartPositionRef.current = actualStartTime;
+      // Record timing for accurate position tracking using Tone.js context
+      const context = getContext();
+      // Tone.js context wraps Web Audio - need to use .currentTime from wrapped context
+      const startTimeNow = context.currentTime;
+      playbackStartTimeRef.current = startTimeNow;
+      audioStartPositionRef.current = actualStartTime;
 
-    // Set playback end time if playing with duration (e.g., selection playback)
-    playbackEndTimeRef.current = playDuration !== undefined ? actualStartTime + playDuration : null;
+      // Set playback end time if playing with duration (e.g., selection playback)
+      playbackEndTimeRef.current =
+        playDuration !== undefined ? actualStartTime + playDuration : null;
 
-    // Don't set up playback complete callback for annotations
-    // The animation loop handles stopping at annotation boundaries
-    // This avoids callback timing issues when switching between annotations
+      // Don't set up playback complete callback for annotations
+      // The animation loop handles stopping at annotation boundaries
+      // This avoids callback timing issues when switching between annotations
 
-    playoutRef.current.play(startTimeNow, actualStartTime, playDuration);
-    setIsPlaying(true);
-    startAnimationLoop();
-  }, [audioBuffers.length, startAnimationLoop, stopAnimationLoop]);
+      playoutRef.current.play(startTimeNow, actualStartTime, playDuration);
+      setIsPlaying(true);
+      startAnimationLoop();
+    },
+    [audioBuffers.length, startAnimationLoop, stopAnimationLoop]
+  );
 
   const pause = useCallback(() => {
     if (!playoutRef.current) return;
@@ -866,94 +913,112 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   }, [stopAnimationLoop, setActiveAnnotationId]);
 
   // Seek to a specific time - works whether playing or stopped
-  const seekTo = useCallback((time: number) => {
-    // Clamp time to valid range
-    const clampedTime = Math.max(0, Math.min(time, duration));
+  const seekTo = useCallback(
+    (time: number) => {
+      // Clamp time to valid range
+      const clampedTime = Math.max(0, Math.min(time, duration));
 
-    // Update the current time state
-    currentTimeRef.current = clampedTime;
-    setCurrentTime(clampedTime);
+      // Update the current time state
+      currentTimeRef.current = clampedTime;
+      setCurrentTime(clampedTime);
 
-    // If currently playing, stop and restart at the new position
-    if (isPlaying && playoutRef.current) {
-      playoutRef.current.stop();
-      stopAnimationLoop();
-      // Use play() which handles all the timing setup
-      play(clampedTime);
-    }
-  }, [duration, isPlaying, play, stopAnimationLoop]);
+      // If currently playing, stop and restart at the new position
+      if (isPlaying && playoutRef.current) {
+        playoutRef.current.stop();
+        stopAnimationLoop();
+        // Use play() which handles all the timing setup
+        play(clampedTime);
+      }
+    },
+    [duration, isPlaying, play, stopAnimationLoop]
+  );
 
   // Track controls
-  const setTrackMute = useCallback((trackIndex: number, muted: boolean) => {
-    const trackId = tracksRef.current[trackIndex]?.id;
-    if (!trackId) return;
+  const setTrackMute = useCallback(
+    (trackIndex: number, muted: boolean) => {
+      const trackId = tracksRef.current[trackIndex]?.id;
+      if (!trackId) return;
 
-    const newStates = [...trackStates];
-    newStates[trackIndex] = { ...newStates[trackIndex], muted };
-    setTrackStates(newStates);
+      const newStates = [...trackStates];
+      newStates[trackIndex] = { ...newStates[trackIndex], muted };
+      setTrackStates(newStates);
 
-    if (playoutRef.current) {
-      playoutRef.current.setMute(trackId, muted);
-    }
-  }, [trackStates]);
-
-  const setTrackSolo = useCallback((trackIndex: number, soloed: boolean) => {
-    const trackId = tracksRef.current[trackIndex]?.id;
-    if (!trackId) return;
-
-    const newStates = [...trackStates];
-    newStates[trackIndex] = { ...newStates[trackIndex], soloed };
-    setTrackStates(newStates);
-
-    if (playoutRef.current) {
-      playoutRef.current.setSolo(trackId, soloed);
-    }
-  }, [trackStates]);
-
-  const setTrackVolume = useCallback((trackIndex: number, volume: number) => {
-    const trackId = tracksRef.current[trackIndex]?.id;
-    if (!trackId) return;
-
-    const newStates = [...trackStates];
-    newStates[trackIndex] = { ...newStates[trackIndex], volume };
-    setTrackStates(newStates);
-
-    if (playoutRef.current) {
-      const toneTrack = playoutRef.current.getTrack(trackId);
-      if (toneTrack) {
-        toneTrack.setVolume(volume);
+      if (playoutRef.current) {
+        playoutRef.current.setMute(trackId, muted);
       }
-    }
-  }, [trackStates]);
+    },
+    [trackStates]
+  );
 
-  const setTrackPan = useCallback((trackIndex: number, pan: number) => {
-    const trackId = tracksRef.current[trackIndex]?.id;
-    if (!trackId) return;
+  const setTrackSolo = useCallback(
+    (trackIndex: number, soloed: boolean) => {
+      const trackId = tracksRef.current[trackIndex]?.id;
+      if (!trackId) return;
 
-    const newStates = [...trackStates];
-    newStates[trackIndex] = { ...newStates[trackIndex], pan };
-    setTrackStates(newStates);
+      const newStates = [...trackStates];
+      newStates[trackIndex] = { ...newStates[trackIndex], soloed };
+      setTrackStates(newStates);
 
-    if (playoutRef.current) {
-      const toneTrack = playoutRef.current.getTrack(trackId);
-      if (toneTrack) {
-        toneTrack.setPan(pan);
+      if (playoutRef.current) {
+        playoutRef.current.setSolo(trackId, soloed);
       }
-    }
-  }, [trackStates]);
+    },
+    [trackStates]
+  );
+
+  const setTrackVolume = useCallback(
+    (trackIndex: number, volume: number) => {
+      const trackId = tracksRef.current[trackIndex]?.id;
+      if (!trackId) return;
+
+      const newStates = [...trackStates];
+      newStates[trackIndex] = { ...newStates[trackIndex], volume };
+      setTrackStates(newStates);
+
+      if (playoutRef.current) {
+        const toneTrack = playoutRef.current.getTrack(trackId);
+        if (toneTrack) {
+          toneTrack.setVolume(volume);
+        }
+      }
+    },
+    [trackStates]
+  );
+
+  const setTrackPan = useCallback(
+    (trackIndex: number, pan: number) => {
+      const trackId = tracksRef.current[trackIndex]?.id;
+      if (!trackId) return;
+
+      const newStates = [...trackStates];
+      newStates[trackIndex] = { ...newStates[trackIndex], pan };
+      setTrackStates(newStates);
+
+      if (playoutRef.current) {
+        const toneTrack = playoutRef.current.getTrack(trackId);
+        if (toneTrack) {
+          toneTrack.setPan(pan);
+        }
+      }
+    },
+    [trackStates]
+  );
 
   // Selection
-  const setSelection = useCallback((start: number, end: number) => {
-    setSelectionStart(start);
-    setSelectionEnd(end);
-    currentTimeRef.current = start;
-    setCurrentTime(start);
+  const setSelection = useCallback(
+    (start: number, end: number) => {
+      setSelectionStart(start);
+      setSelectionEnd(end);
+      currentTimeRef.current = start;
+      setCurrentTime(start);
 
-    if (isPlaying && playoutRef.current) {
-      playoutRef.current.stop();
-      playoutRef.current.play(getContext().currentTime, start);
-    }
-  }, [isPlaying]);
+      if (isPlaying && playoutRef.current) {
+        playoutRef.current.stop();
+        playoutRef.current.play(getContext().currentTime, start);
+      }
+    },
+    [isPlaying]
+  );
 
   // Memoize setScrollContainer callback
   const setScrollContainer = useCallback((element: HTMLDivElement | null) => {
@@ -966,14 +1031,12 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
   const setAnnotations: React.Dispatch<React.SetStateAction<AnnotationData[]>> = useCallback(
     (action) => {
-      const updated = typeof action === 'function'
-        ? action(annotationsRef.current)
-        : action;
+      const updated = typeof action === 'function' ? action(annotationsRef.current) : action;
       if (!onAnnotationsChangeRef.current) {
         if (process.env.NODE_ENV !== 'production') {
           console.warn(
             'waveform-playlist: setAnnotations was called but no onAnnotationsChange callback is provided. ' +
-            'Annotation edits will not persist. Pass onAnnotationsChange to WaveformPlaylistProvider to handle annotation updates.'
+              'Annotation edits will not persist. Pass onAnnotationsChange to WaveformPlaylistProvider to handle annotation updates.'
           );
         }
         return;
@@ -985,116 +1048,194 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
   const sampleRate = audioBuffers[0]?.sampleRate || 44100;
   const timeScaleHeight = timescale ? 30 : 0;
-  const minimumPlaylistHeight = (tracks.length * waveHeight) + timeScaleHeight;
+  const minimumPlaylistHeight = tracks.length * waveHeight + timeScaleHeight;
 
   // Split context values for performance optimization
   // Animation context only re-renders consumers on discrete events
   // (play/pause/stop/seek), never during the animation loop itself
 
-  const animationValue: PlaybackAnimationContextValue = useMemo(() => ({
-    isPlaying,
-    currentTime,
-    currentTimeRef,
-    playbackStartTimeRef,
-    audioStartPositionRef,
-  }), [isPlaying, currentTime, currentTimeRef, playbackStartTimeRef, audioStartPositionRef]);
+  const animationValue: PlaybackAnimationContextValue = useMemo(
+    () => ({
+      isPlaying,
+      currentTime,
+      currentTimeRef,
+      playbackStartTimeRef,
+      audioStartPositionRef,
+    }),
+    [isPlaying, currentTime, currentTimeRef, playbackStartTimeRef, audioStartPositionRef]
+  );
 
-  const stateValue: PlaylistStateContextValue = useMemo(() => ({
-    continuousPlay,
-    linkEndpoints,
-    annotationsEditable,
-    isAutomaticScroll,
-    isLoopEnabled,
-    annotations,
-    activeAnnotationId,
-    selectionStart,
-    selectionEnd,
-    selectedTrackId,
-    loopStart,
-    loopEnd,
-  }), [continuousPlay, linkEndpoints, annotationsEditable, isAutomaticScroll, isLoopEnabled, annotations, activeAnnotationId, selectionStart, selectionEnd, selectedTrackId, loopStart, loopEnd]);
+  const stateValue: PlaylistStateContextValue = useMemo(
+    () => ({
+      continuousPlay,
+      linkEndpoints,
+      annotationsEditable,
+      isAutomaticScroll,
+      isLoopEnabled,
+      annotations,
+      activeAnnotationId,
+      selectionStart,
+      selectionEnd,
+      selectedTrackId,
+      loopStart,
+      loopEnd,
+    }),
+    [
+      continuousPlay,
+      linkEndpoints,
+      annotationsEditable,
+      isAutomaticScroll,
+      isLoopEnabled,
+      annotations,
+      activeAnnotationId,
+      selectionStart,
+      selectionEnd,
+      selectedTrackId,
+      loopStart,
+      loopEnd,
+    ]
+  );
 
-  const setCurrentTimeControl = useCallback((time: number) => {
-    currentTimeRef.current = time;
-    setCurrentTime(time);
-  }, [currentTimeRef]);
+  const setCurrentTimeControl = useCallback(
+    (time: number) => {
+      currentTimeRef.current = time;
+      setCurrentTime(time);
+    },
+    [currentTimeRef]
+  );
 
   const setAutomaticScrollControl = useCallback((enabled: boolean) => {
     setIsAutomaticScroll(enabled);
   }, []);
 
-  const controlsValue: PlaylistControlsContextValue = useMemo(() => ({
-    // Playback controls
-    play,
-    pause,
-    stop,
-    seekTo,
-    setCurrentTime: setCurrentTimeControl,
+  const controlsValue: PlaylistControlsContextValue = useMemo(
+    () => ({
+      // Playback controls
+      play,
+      pause,
+      stop,
+      seekTo,
+      setCurrentTime: setCurrentTimeControl,
 
-    // Track controls
-    setTrackMute,
-    setTrackSolo,
-    setTrackVolume,
-    setTrackPan,
+      // Track controls
+      setTrackMute,
+      setTrackSolo,
+      setTrackVolume,
+      setTrackPan,
 
-    // Selection
-    setSelection,
-    setSelectedTrackId,
+      // Selection
+      setSelection,
+      setSelectedTrackId,
 
-    // Time format
-    setTimeFormat,
-    formatTime,
+      // Time format
+      setTimeFormat,
+      formatTime,
 
-    // Zoom
-    zoomIn: zoom.zoomIn,
-    zoomOut: zoom.zoomOut,
+      // Zoom
+      zoomIn: zoom.zoomIn,
+      zoomOut: zoom.zoomOut,
 
-    // Master volume
-    setMasterVolume,
+      // Master volume
+      setMasterVolume,
 
-    // Automatic scroll
-    setAutomaticScroll: setAutomaticScrollControl,
-    setScrollContainer,
-    scrollContainerRef,
+      // Automatic scroll
+      setAutomaticScroll: setAutomaticScrollControl,
+      setScrollContainer,
+      scrollContainerRef,
 
-    // Annotation controls
-    setContinuousPlay,
-    setLinkEndpoints,
-    setAnnotationsEditable,
-    setAnnotations,
-    setActiveAnnotationId,
+      // Annotation controls
+      setContinuousPlay,
+      setLinkEndpoints,
+      setAnnotationsEditable,
+      setAnnotations,
+      setActiveAnnotationId,
 
-    // Loop controls
-    setLoopEnabled,
-    setLoopRegion,
-    setLoopRegionFromSelection,
-    clearLoopRegion,
+      // Loop controls
+      setLoopEnabled,
+      setLoopRegion,
+      setLoopRegionFromSelection,
+      clearLoopRegion,
+    }),
+    [
+      play,
+      pause,
+      stop,
+      seekTo,
+      setCurrentTimeControl,
+      setTrackMute,
+      setTrackSolo,
+      setTrackVolume,
+      setTrackPan,
+      setSelection,
+      setSelectedTrackId,
+      setTimeFormat,
+      formatTime,
+      zoom.zoomIn,
+      zoom.zoomOut,
+      setMasterVolume,
+      setAutomaticScrollControl,
+      setScrollContainer,
+      scrollContainerRef,
+      setContinuousPlay,
+      setLinkEndpoints,
+      setAnnotationsEditable,
+      setAnnotations,
+      setActiveAnnotationId,
+      setLoopEnabled,
+      setLoopRegion,
+      setLoopRegionFromSelection,
+      clearLoopRegion,
+    ]
+  );
 
-  }), [play, pause, stop, seekTo, setCurrentTimeControl, setTrackMute, setTrackSolo, setTrackVolume, setTrackPan, setSelection, setSelectedTrackId, setTimeFormat, formatTime, zoom.zoomIn, zoom.zoomOut, setMasterVolume, setAutomaticScrollControl, setScrollContainer, scrollContainerRef, setContinuousPlay, setLinkEndpoints, setAnnotationsEditable, setAnnotations, setActiveAnnotationId, setLoopEnabled, setLoopRegion, setLoopRegionFromSelection, clearLoopRegion]);
-
-  const dataValue: PlaylistDataContextValue = useMemo(() => ({
-    duration,
-    audioBuffers,
-    peaksDataArray,
-    trackStates,
-    tracks,
-    sampleRate,
-    waveHeight,
-    timeScaleHeight,
-    minimumPlaylistHeight,
-    controls,
-    playoutRef,
-    samplesPerPixel,
-    timeFormat,
-    masterVolume,
-    canZoomIn: zoom.canZoomIn,
-    canZoomOut: zoom.canZoomOut,
-    barWidth,
-    barGap,
-    progressBarWidth,
-    isReady,
-    mono,
-  }), [duration, audioBuffers, peaksDataArray, trackStates, tracks, sampleRate, waveHeight, timeScaleHeight, minimumPlaylistHeight, controls, playoutRef, samplesPerPixel, timeFormat, masterVolume, zoom.canZoomIn, zoom.canZoomOut, barWidth, barGap, progressBarWidth, isReady, mono]);
+  const dataValue: PlaylistDataContextValue = useMemo(
+    () => ({
+      duration,
+      audioBuffers,
+      peaksDataArray,
+      trackStates,
+      tracks,
+      sampleRate,
+      waveHeight,
+      timeScaleHeight,
+      minimumPlaylistHeight,
+      controls,
+      playoutRef,
+      samplesPerPixel,
+      timeFormat,
+      masterVolume,
+      canZoomIn: zoom.canZoomIn,
+      canZoomOut: zoom.canZoomOut,
+      barWidth,
+      barGap,
+      progressBarWidth,
+      isReady,
+      mono,
+    }),
+    [
+      duration,
+      audioBuffers,
+      peaksDataArray,
+      trackStates,
+      tracks,
+      sampleRate,
+      waveHeight,
+      timeScaleHeight,
+      minimumPlaylistHeight,
+      controls,
+      playoutRef,
+      samplesPerPixel,
+      timeFormat,
+      masterVolume,
+      zoom.canZoomIn,
+      zoom.canZoomOut,
+      barWidth,
+      barGap,
+      progressBarWidth,
+      isReady,
+      mono,
+    ]
+  );
 
   // Merge user theme with default theme
   const mergedTheme = { ...defaultTheme, ...userTheme };
@@ -1105,7 +1246,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         <PlaylistStateContext.Provider value={stateValue}>
           <PlaylistControlsContext.Provider value={controlsValue}>
             <PlaylistDataContext.Provider value={dataValue}>
-                {children}
+              {children}
             </PlaylistDataContext.Provider>
           </PlaylistControlsContext.Provider>
         </PlaylistStateContext.Provider>

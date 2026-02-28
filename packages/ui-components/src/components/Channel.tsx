@@ -1,8 +1,14 @@
 import React, { FunctionComponent, useLayoutEffect } from 'react';
 import styled from 'styled-components';
 import type { Peaks, Bits } from '@waveform-playlist/core';
-import { WaveformColor, WaveformDrawMode, isWaveformGradient, waveformColorToCss } from '../wfpl-theme';
+import {
+  WaveformColor,
+  WaveformDrawMode,
+  isWaveformGradient,
+  waveformColorToCss,
+} from '../wfpl-theme';
 import { useVisibleChunkIndices } from '../contexts/ScrollViewport';
+import { useClipViewportOrigin } from '../contexts/ClipViewportOrigin';
 import { useChunkedCanvasRefs } from '../hooks/useChunkedCanvasRefs';
 import { MAX_CANVAS_WIDTH } from '@waveform-playlist/core';
 
@@ -123,8 +129,9 @@ export const Channel: FunctionComponent<ChannelProps> = (props) => {
     drawMode = 'inverted',
   } = props;
   const { canvasRef, canvasMapRef } = useChunkedCanvasRefs();
+  const clipOriginX = useClipViewportOrigin();
 
-  const visibleChunkIndices = useVisibleChunkIndices(length, MAX_CANVAS_WIDTH);
+  const visibleChunkIndices = useVisibleChunkIndices(length, MAX_CANVAS_WIDTH, clipOriginX);
 
   // Draw waveform bars on visible canvas chunks.
   // visibleChunkIndices changes only when chunks mount/unmount, not on every scroll pixel.
@@ -157,12 +164,7 @@ export const Channel: FunctionComponent<ChannelProps> = (props) => {
           // Inverted: canvas masks non-audio areas, background shows as bars
           fillColor = waveOutlineColor;
         }
-        ctx.fillStyle = createCanvasFillStyle(
-          ctx,
-          fillColor,
-          canvasWidth,
-          waveHeight
-        );
+        ctx.fillStyle = createCanvasFillStyle(ctx, fillColor, canvasWidth, waveHeight);
 
         // Calculate where bars should be drawn in this canvas
         // by finding where in the global bar pattern this canvas starts
@@ -176,7 +178,11 @@ export const Channel: FunctionComponent<ChannelProps> = (props) => {
         const firstBarGlobal = Math.floor((canvasStartGlobal - barWidth + step) / step) * step;
 
         // Draw bars at the correct positions
-        for (let barGlobal = Math.max(0, firstBarGlobal); barGlobal < canvasEndGlobal; barGlobal += step) {
+        for (
+          let barGlobal = Math.max(0, firstBarGlobal);
+          barGlobal < canvasEndGlobal;
+          barGlobal += step
+        ) {
           const x = barGlobal - canvasStartGlobal; // Local x position in this canvas
 
           // Skip if the entire bar would be before this canvas

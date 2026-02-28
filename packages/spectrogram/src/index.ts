@@ -1,5 +1,10 @@
 // Computation
-export { computeSpectrogram, computeSpectrogramMono, getColorMap, getFrequencyScale } from './computation';
+export {
+  computeSpectrogram,
+  computeSpectrogramMono,
+  getColorMap,
+  getFrequencyScale,
+} from './computation';
 export type { FrequencyScaleName } from './computation';
 
 // Components

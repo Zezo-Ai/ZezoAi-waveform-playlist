@@ -6,6 +6,7 @@ import { ClipHeader } from './ClipHeader';
 import { ClipBoundary } from './ClipBoundary';
 import { FadeOverlay } from './FadeOverlay';
 import type { Fade } from '@waveform-playlist/core';
+import { ClipViewportOriginProvider } from '../contexts/ClipViewportOrigin';
 
 interface ClipContainerProps {
   readonly $left?: number; // Horizontal position in pixels (optional for DragOverlay)
@@ -15,15 +16,17 @@ interface ClipContainerProps {
 }
 
 const ClipContainer = styled.div.attrs<ClipContainerProps>((props) => ({
-  style: props.$isOverlay ? {} : {
-    left: `${props.$left}px`,
-    width: `${props.$width}px`,
-  },
+  style: props.$isOverlay
+    ? {}
+    : {
+        left: `${props.$left}px`,
+        width: `${props.$width}px`,
+      },
 }))<ClipContainerProps>`
-  position: ${props => props.$isOverlay ? 'relative' : 'absolute'};
+  position: ${(props) => (props.$isOverlay ? 'relative' : 'absolute')};
   top: 0;
-  height: ${props => props.$isOverlay ? 'auto' : '100%'};
-  width: ${props => props.$isOverlay ? `${props.$width}px` : 'auto'};
+  height: ${(props) => (props.$isOverlay ? 'auto' : '100%')};
+  width: ${(props) => (props.$isOverlay ? `${props.$width}px` : 'auto')};
   display: flex;
   flex-direction: column;
   background: rgba(255, 255, 255, 0.05);
@@ -42,7 +45,7 @@ interface ChannelsWrapperProps {
 const ChannelsWrapper = styled.div<ChannelsWrapperProps>`
   flex: 1;
   position: relative;
-  overflow: ${props => props.$isOverlay ? 'visible' : 'hidden'};
+  overflow: ${(props) => (props.$isOverlay ? 'visible' : 'hidden')};
 `;
 
 export interface ClipProps {
@@ -116,11 +119,12 @@ export const Clip: FunctionComponent<ClipProps> = ({
 
   // Main clip draggable (for moving entire clip)
   const draggableId = `clip-${trackIndex}-${clipIndex}`;
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging } = useDraggable({
-    id: draggableId,
-    data: { clipId, trackIndex, clipIndex },
-    disabled: !enableDrag,
-  });
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging } =
+    useDraggable({
+      id: draggableId,
+      data: { clipId, trackIndex, clipIndex },
+      disabled: !enableDrag,
+    });
 
   // Left boundary draggable (for trimming start)
   const leftBoundaryId = `clip-boundary-left-${trackIndex}-${clipIndex}`;
@@ -149,10 +153,12 @@ export const Clip: FunctionComponent<ClipProps> = ({
   });
 
   // Apply transform for dragging
-  const style = transform ? {
-    transform: CSS.Translate.toString(transform),
-    zIndex: isDragging ? 100 : undefined, // Below controls (z-index: 999) but above other clips
-  } : undefined;
+  const style = transform
+    ? {
+        transform: CSS.Translate.toString(transform),
+        zIndex: isDragging ? 100 : undefined, // Below controls (z-index: 999) but above other clips
+      }
+    : undefined;
 
   return (
     <ClipContainer
@@ -177,26 +183,28 @@ export const Clip: FunctionComponent<ClipProps> = ({
           dragHandleProps={enableDrag ? { attributes, listeners, setActivatorNodeRef } : undefined}
         />
       )}
-      <ChannelsWrapper $isOverlay={isOverlay}>
-        {children}
-        {/* Fade overlays */}
-        {showFades && fadeIn && fadeIn.duration > 0 && (
-          <FadeOverlay
-            left={0}
-            width={Math.floor((fadeIn.duration * sampleRate) / samplesPerPixel)}
-            type="fadeIn"
-            curveType={fadeIn.type}
-          />
-        )}
-        {showFades && fadeOut && fadeOut.duration > 0 && (
-          <FadeOverlay
-            left={width - Math.floor((fadeOut.duration * sampleRate) / samplesPerPixel)}
-            width={Math.floor((fadeOut.duration * sampleRate) / samplesPerPixel)}
-            type="fadeOut"
-            curveType={fadeOut.type}
-          />
-        )}
-      </ChannelsWrapper>
+      <ClipViewportOriginProvider originX={left}>
+        <ChannelsWrapper $isOverlay={isOverlay}>
+          {children}
+          {/* Fade overlays */}
+          {showFades && fadeIn && fadeIn.duration > 0 && (
+            <FadeOverlay
+              left={0}
+              width={Math.floor((fadeIn.duration * sampleRate) / samplesPerPixel)}
+              type="fadeIn"
+              curveType={fadeIn.type}
+            />
+          )}
+          {showFades && fadeOut && fadeOut.duration > 0 && (
+            <FadeOverlay
+              left={width - Math.floor((fadeOut.duration * sampleRate) / samplesPerPixel)}
+              width={Math.floor((fadeOut.duration * sampleRate) / samplesPerPixel)}
+              type="fadeOut"
+              curveType={fadeOut.type}
+            />
+          )}
+        </ChannelsWrapper>
+      </ClipViewportOriginProvider>
       {/* Clip boundaries - outside ChannelsWrapper to avoid overflow:hidden clipping */}
       {showHeader && !disableHeaderDrag && !isOverlay && (
         <>

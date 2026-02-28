@@ -1,6 +1,16 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import React from 'react';
-import { Button, ButtonGroup, Header, Controls, Slider, SliderWrapper, VolumeDownIcon, VolumeUpIcon, TrashIcon } from '../components/TrackControls/index';
+import {
+  Button,
+  ButtonGroup,
+  Header,
+  Controls,
+  Slider,
+  SliderWrapper,
+  VolumeDownIcon,
+  VolumeUpIcon,
+  TrashIcon,
+} from '../components/TrackControls/index';
 
 // Button stories
 const ButtonMeta: Meta<typeof Button> = {

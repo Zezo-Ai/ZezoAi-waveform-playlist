@@ -19,7 +19,9 @@ export const BaseButton = styled.button`
   border-radius: ${(props) => props.theme.borderRadius};
   cursor: pointer;
   outline: none;
-  transition: background-color 0.15s ease-in-out, border-color 0.15s ease-in-out,
+  transition:
+    background-color 0.15s ease-in-out,
+    border-color 0.15s ease-in-out,
     box-shadow 0.15s ease-in-out;
 
   &:hover:not(:disabled) {

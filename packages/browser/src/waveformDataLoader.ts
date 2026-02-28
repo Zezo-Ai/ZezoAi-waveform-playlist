@@ -55,9 +55,7 @@ export function waveformDataToPeaks(
   // Use appropriate typed array based on source file bit depth
   // 8-bit: values range from -128 to 127
   // 16-bit: values range from -32768 to 32767
-  const peaks = bits === 8
-    ? new Int8Array(length * 2)
-    : new Int16Array(length * 2);
+  const peaks = bits === 8 ? new Int8Array(length * 2) : new Int16Array(length * 2);
 
   // Interleave min/max pairs
   for (let i = 0; i < length; i++) {
@@ -156,9 +154,7 @@ export function extractPeaksFromWaveformData(
   const maxArray = channel.max_array();
   const length = minArray.length;
 
-  const peaks = bits === 8
-    ? new Int8Array(length * 2)
-    : new Int16Array(length * 2);
+  const peaks = bits === 8 ? new Int8Array(length * 2) : new Int16Array(length * 2);
 
   for (let i = 0; i < length; i++) {
     peaks[i * 2] = minArray[i];
@@ -187,7 +183,7 @@ export function extractPeaksFromWaveformDataFull(
   samplesPerPixel: number,
   isMono: boolean,
   offsetSamples?: number,
-  durationSamples?: number,
+  durationSamples?: number
 ): PeakData {
   let processedData = waveformData;
 
@@ -215,9 +211,7 @@ export function extractPeaksFromWaveformDataFull(
     const maxArray = channel.max_array();
     const len = minArray.length;
 
-    const peaks: Peaks = bits === 8
-      ? new Int8Array(len * 2)
-      : new Int16Array(len * 2);
+    const peaks: Peaks = bits === 8 ? new Int8Array(len * 2) : new Int16Array(len * 2);
 
     for (let i = 0; i < len; i++) {
       peaks[i * 2] = minArray[i];
@@ -230,9 +224,8 @@ export function extractPeaksFromWaveformDataFull(
   if (isMono && channelPeaks.length > 1) {
     const weight = 1 / channelPeaks.length;
     const numPeaks = channelPeaks[0].length / 2;
-    const monoPeaks: Peaks = bits === 8
-      ? new Int8Array(numPeaks * 2)
-      : new Int16Array(numPeaks * 2);
+    const monoPeaks: Peaks =
+      bits === 8 ? new Int8Array(numPeaks * 2) : new Int16Array(numPeaks * 2);
 
     for (let i = 0; i < numPeaks; i++) {
       let min = 0;

@@ -12,10 +12,7 @@ export function useRecording(
   stream: MediaStream | null,
   options: RecordingOptions = {}
 ): UseRecordingReturn {
-  const {
-    channelCount = 1,
-    samplesPerPixel = 1024,
-  } = options;
+  const { channelCount = 1, samplesPerPixel = 1024 } = options;
 
   // State
   const [isRecording, setIsRecording] = useState(false);
@@ -54,10 +51,7 @@ export function useRecording(
       const context = getContext();
       // Load the worklet module
       // Use a relative path that works when bundled
-      const workletUrl = new URL(
-        './worklet/recording-processor.worklet.js',
-        import.meta.url
-      ).href;
+      const workletUrl = new URL('./worklet/recording-processor.worklet.js', import.meta.url).href;
 
       // Use Tone's addAudioWorkletModule for cross-browser compatibility
       await context.addAudioWorkletModule(workletUrl);
@@ -193,12 +187,7 @@ export function useRecording(
       const context = getContext();
       // Use rawContext for createBuffer (native AudioContext method)
       const rawContext = context.rawContext as AudioContext;
-      const buffer = createAudioBuffer(
-        rawContext,
-        allSamples,
-        rawContext.sampleRate,
-        channelCount
-      );
+      const buffer = createAudioBuffer(rawContext, allSamples, rawContext.sampleRate, channelCount);
 
       setAudioBuffer(buffer);
       setDuration(buffer.duration);

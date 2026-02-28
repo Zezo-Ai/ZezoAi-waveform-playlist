@@ -12,23 +12,26 @@ import { Analyser } from 'tone';
 export const useMasterAnalyser = (fftSize: number = 256) => {
   const analyserRef = useRef<Analyser | null>(null);
 
-  const masterEffects: EffectsFunction = useCallback((masterGainNode, destination, _isOffline) => {
-    // Create analyser and connect it in parallel to monitor the output
-    const analyserNode = new Analyser('fft', fftSize);
-    masterGainNode.connect(analyserNode);
+  const masterEffects: EffectsFunction = useCallback(
+    (masterGainNode, destination, _isOffline) => {
+      // Create analyser and connect it in parallel to monitor the output
+      const analyserNode = new Analyser('fft', fftSize);
+      masterGainNode.connect(analyserNode);
 
-    // Connect master to destination as normal
-    masterGainNode.connect(destination);
+      // Connect master to destination as normal
+      masterGainNode.connect(destination);
 
-    // Store analyser for visualization
-    analyserRef.current = analyserNode;
+      // Store analyser for visualization
+      analyserRef.current = analyserNode;
 
-    return function cleanup() {
-      // Cleanup when playlist is destroyed
-      analyserNode.dispose();
-      analyserRef.current = null;
-    };
-  }, [fftSize]);
+      return function cleanup() {
+        // Cleanup when playlist is destroyed
+        analyserNode.dispose();
+        analyserRef.current = null;
+      };
+    },
+    [fftSize]
+  );
 
   return { analyserRef, masterEffects };
 };

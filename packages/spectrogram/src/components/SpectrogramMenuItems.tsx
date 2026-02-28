@@ -79,7 +79,10 @@ export function SpectrogramMenuItems({
                 type="radio"
                 name="render-mode"
                 checked={renderMode === value}
-                onChange={() => { onRenderModeChange(value); onClose?.(); }}
+                onChange={() => {
+                  onRenderModeChange(value);
+                  onClose?.();
+                }}
               />
               {label}
             </RadioLabel>

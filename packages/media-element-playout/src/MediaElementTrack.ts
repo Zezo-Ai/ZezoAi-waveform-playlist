@@ -104,7 +104,7 @@ export class MediaElementTrack {
    */
   play(offset: number = 0): void {
     this.audioElement.currentTime = offset;
-    this.audioElement.play().catch(err => {
+    this.audioElement.play().catch((err) => {
       console.warn('MediaElementTrack: play() failed:', err);
     });
   }

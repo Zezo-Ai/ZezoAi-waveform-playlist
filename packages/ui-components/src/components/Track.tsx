@@ -60,7 +60,9 @@ const ControlsWrapper = styled.div.attrs<ControlsWrapperProps>((props) => ({
   transition: background 0.15s ease-in-out;
 
   /* Selected track: highlighted background */
-  ${(props) => props.$isSelected && `
+  ${(props) =>
+    props.$isSelected &&
+    `
     background: ${props.theme.selectedTrackControlsBackground};
   `}
 `;
@@ -105,10 +107,7 @@ export const Track: FunctionComponent<TrackProps> = ({
       $hasClipHeaders={hasClipHeaders}
       $isSelected={isSelected}
     >
-      <ControlsWrapper
-        $controlWidth={show ? controlWidth : 0}
-        $isSelected={isSelected}
-      >
+      <ControlsWrapper $controlWidth={show ? controlWidth : 0} $isSelected={isSelected}>
         {controls}
       </ControlsWrapper>
       <ChannelContainer

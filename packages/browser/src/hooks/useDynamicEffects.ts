@@ -5,10 +5,7 @@ import {
   getEffectDefinition,
   type EffectDefinition,
 } from '../effects/effectDefinitions';
-import {
-  createEffectInstance,
-  type EffectInstance,
-} from '../effects/effectFactory';
+import { createEffectInstance, type EffectInstance } from '../effects/effectFactory';
 import { Analyser, Volume, ToneAudioNode } from 'tone';
 
 export interface ActiveEffect {
@@ -27,7 +24,11 @@ export interface UseDynamicEffectsReturn {
   // Actions
   addEffect: (effectId: string) => void;
   removeEffect: (instanceId: string) => void;
-  updateParameter: (instanceId: string, paramName: string, value: number | string | boolean) => void;
+  updateParameter: (
+    instanceId: string,
+    paramName: string,
+    value: number | string | boolean
+  ) => void;
   toggleBypass: (instanceId: string) => void;
   reorderEffects: (fromIndex: number, toIndex: number) => void;
   clearAllEffects: () => void;
@@ -166,9 +167,7 @@ export function useDynamicEffects(fftSize: number = 256): UseDynamicEffectsRetur
       // Update state for UI
       setActiveEffects((prev) =>
         prev.map((e) =>
-          e.instanceId === instanceId
-            ? { ...e, params: { ...e.params, [paramName]: value } }
-            : e
+          e.instanceId === instanceId ? { ...e, params: { ...e.params, [paramName]: value } } : e
         )
       );
     },
@@ -176,32 +175,27 @@ export function useDynamicEffects(fftSize: number = 256): UseDynamicEffectsRetur
   );
 
   // Toggle bypass for an effect (uses wet parameter - 0 = bypass, restore original for active)
-  const toggleBypass = useCallback(
-    (instanceId: string) => {
-      // Get current state from ref to determine new bypassed value (avoids stale closure)
-      const effect = activeEffectsRef.current.find((e) => e.instanceId === instanceId);
-      if (!effect) return;
+  const toggleBypass = useCallback((instanceId: string) => {
+    // Get current state from ref to determine new bypassed value (avoids stale closure)
+    const effect = activeEffectsRef.current.find((e) => e.instanceId === instanceId);
+    if (!effect) return;
 
-      const newBypassed = !effect.bypassed;
+    const newBypassed = !effect.bypassed;
 
-      // Update the actual effect instance
-      // When bypassing: set wet to 0
-      // When un-bypassing: restore the original wet value from params
-      const instance = effectInstancesRef.current.get(instanceId);
-      if (instance) {
-        const originalWet = effect.params.wet as number ?? 1;
-        instance.setParameter('wet', newBypassed ? 0 : originalWet);
-      }
+    // Update the actual effect instance
+    // When bypassing: set wet to 0
+    // When un-bypassing: restore the original wet value from params
+    const instance = effectInstancesRef.current.get(instanceId);
+    if (instance) {
+      const originalWet = (effect.params.wet as number) ?? 1;
+      instance.setParameter('wet', newBypassed ? 0 : originalWet);
+    }
 
-      // Update state for UI
-      setActiveEffects((prev) =>
-        prev.map((e) =>
-          e.instanceId === instanceId ? { ...e, bypassed: newBypassed } : e
-        )
-      );
-    },
-    []
-  );
+    // Update state for UI
+    setActiveEffects((prev) =>
+      prev.map((e) => (e.instanceId === instanceId ? { ...e, bypassed: newBypassed } : e))
+    );
+  }, []);
 
   // Reorder effects in the chain
   const reorderEffects = useCallback((fromIndex: number, toIndex: number) => {

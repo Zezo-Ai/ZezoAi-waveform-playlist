@@ -70,7 +70,7 @@ function addPending<T>(
   map: Map<string, PendingEntry>,
   id: string,
   resolve: (value: T) => void,
-  reject: (reason: unknown) => void,
+  reject: (reason: unknown) => void
 ): void {
   map.set(id, { resolve: resolve as PendingEntry['resolve'], reject });
 }
@@ -149,8 +149,8 @@ export function createSpectrogramWorker(worker: Worker): SpectrogramWorkerApi {
         addPending(pending, id, resolve, reject);
 
         // Slice channel data so we can transfer without detaching the original AudioBuffer views
-        const transferableArrays = params.channelDataArrays.map(arr => arr.slice());
-        const transferables = transferableArrays.map(arr => arr.buffer);
+        const transferableArrays = params.channelDataArrays.map((arr) => arr.slice());
+        const transferables = transferableArrays.map((arr) => arr.buffer);
 
         worker.postMessage(
           {
@@ -162,7 +162,7 @@ export function createSpectrogramWorker(worker: Worker): SpectrogramWorkerApi {
             durationSamples: params.durationSamples,
             mono: params.mono,
           },
-          transferables,
+          transferables
         );
       });
     },
@@ -176,8 +176,10 @@ export function createSpectrogramWorker(worker: Worker): SpectrogramWorkerApi {
 
         // Skip transfer if audio data is pre-registered in the worker
         const isPreRegistered = registeredClipIds.has(params.clipId);
-        const transferableArrays = isPreRegistered ? [] : params.channelDataArrays.map(arr => arr.slice());
-        const transferables = transferableArrays.map(arr => arr.buffer);
+        const transferableArrays = isPreRegistered
+          ? []
+          : params.channelDataArrays.map((arr) => arr.slice());
+        const transferables = transferableArrays.map((arr) => arr.buffer);
 
         worker.postMessage(
           {
@@ -192,7 +194,7 @@ export function createSpectrogramWorker(worker: Worker): SpectrogramWorkerApi {
             mono: params.mono,
             ...(params.sampleRange ? { sampleRange: params.sampleRange } : {}),
           },
-          transferables,
+          transferables
         );
       });
     },
@@ -226,10 +228,7 @@ export function createSpectrogramWorker(worker: Worker): SpectrogramWorkerApi {
     },
 
     registerCanvas(canvasId: string, canvas: OffscreenCanvas): void {
-      worker.postMessage(
-        { type: 'register-canvas', canvasId, canvas },
-        [canvas],
-      );
+      worker.postMessage({ type: 'register-canvas', canvasId, canvas }, [canvas]);
     },
 
     unregisterCanvas(canvasId: string): void {
@@ -237,11 +236,11 @@ export function createSpectrogramWorker(worker: Worker): SpectrogramWorkerApi {
     },
 
     registerAudioData(clipId: string, channelDataArrays: Float32Array[], sampleRate: number): void {
-      const transferableArrays = channelDataArrays.map(arr => arr.slice());
-      const transferables = transferableArrays.map(arr => arr.buffer);
+      const transferableArrays = channelDataArrays.map((arr) => arr.slice());
+      const transferables = transferableArrays.map((arr) => arr.buffer);
       worker.postMessage(
         { type: 'register-audio-data', clipId, channelDataArrays: transferableArrays, sampleRate },
-        transferables,
+        transferables
       );
       registeredClipIds.add(clipId);
     },
@@ -258,8 +257,8 @@ export function createSpectrogramWorker(worker: Worker): SpectrogramWorkerApi {
       return new Promise<void>((resolve, reject) => {
         addPending(pending, id, resolve, reject);
 
-        const transferableArrays = params.channelDataArrays.map(arr => arr.slice());
-        const transferables: Transferable[] = transferableArrays.map(arr => arr.buffer);
+        const transferableArrays = params.channelDataArrays.map((arr) => arr.slice());
+        const transferables: Transferable[] = transferableArrays.map((arr) => arr.buffer);
 
         worker.postMessage(
           {
@@ -273,7 +272,7 @@ export function createSpectrogramWorker(worker: Worker): SpectrogramWorkerApi {
             mono: params.mono,
             render: params.render,
           },
-          transferables,
+          transferables
         );
       });
     },

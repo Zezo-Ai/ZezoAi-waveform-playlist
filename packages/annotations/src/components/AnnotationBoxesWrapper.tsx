@@ -63,9 +63,7 @@ export const AnnotationBoxesWrapper: FunctionComponent<AnnotationBoxesWrapperPro
       $width={width}
     >
       <ControlsPlaceholder $controlWidth={show ? controlWidth : 0} />
-      <BoxesContainer $offset={offset}>
-        {children}
-      </BoxesContainer>
+      <BoxesContainer $offset={offset}>{children}</BoxesContainer>
     </Container>
   );
 };

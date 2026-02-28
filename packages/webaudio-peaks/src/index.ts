@@ -46,11 +46,7 @@ function makeTypedArray(bits: Bits, length: number): Peaks {
 /**
  * Extract peaks from a single audio channel
  */
-function extractPeaks(
-  channel: Float32Array,
-  samplesPerPixel: number,
-  bits: Bits
-): Peaks {
+function extractPeaks(channel: Float32Array, samplesPerPixel: number, bits: Bits): Peaks {
   const chanLength = channel.length;
   const numPeaks = Math.ceil(chanLength / samplesPerPixel);
 

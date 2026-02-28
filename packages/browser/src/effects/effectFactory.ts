@@ -117,7 +117,10 @@ export function createEffectInstance(
         effect.disconnect();
         effect.dispose();
       } catch (e) {
-        console.warn(`[waveform-playlist] Error disposing effect "${definition.id}" (${instanceId}):`, e);
+        console.warn(
+          `[waveform-playlist] Error disposing effect "${definition.id}" (${instanceId}):`,
+          e
+        );
       }
     },
 
@@ -166,7 +169,10 @@ export function createEffectInstance(
       try {
         effect.disconnect();
       } catch (e) {
-        console.warn(`[waveform-playlist] Error disconnecting effect "${definition.id}" (${instanceId}):`, e);
+        console.warn(
+          `[waveform-playlist] Error disconnecting effect "${definition.id}" (${instanceId}):`,
+          e
+        );
       }
     },
   };
@@ -175,9 +181,7 @@ export function createEffectInstance(
 /**
  * Create a chain of effects connected in series
  */
-export function createEffectChain(
-  effects: EffectInstance[]
-): {
+export function createEffectChain(effects: EffectInstance[]): {
   input: ToneAudioNode;
   output: ToneAudioNode;
   dispose: () => void;

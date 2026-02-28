@@ -1,5 +1,9 @@
 import { useCallback } from 'react';
-import { usePlaybackAnimation, usePlaylistControls, usePlaylistData } from '../WaveformPlaylistContext';
+import {
+  usePlaybackAnimation,
+  usePlaylistControls,
+  usePlaylistData,
+} from '../WaveformPlaylistContext';
 import { useKeyboardShortcuts, type KeyboardShortcut } from './useKeyboardShortcuts';
 
 export interface UsePlaybackShortcutsOptions {

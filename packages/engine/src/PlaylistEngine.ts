@@ -18,12 +18,7 @@ import {
   clampSeekPosition,
   findClosestZoomIndex,
 } from './operations/timelineOperations';
-import type {
-  PlayoutAdapter,
-  EngineState,
-  EngineEvents,
-  PlaylistEngineOptions,
-} from './types';
+import type { PlayoutAdapter, EngineState, EngineEvents, PlaylistEngineOptions } from './types';
 
 const DEFAULT_SAMPLE_RATE = 44100;
 const DEFAULT_SAMPLES_PER_PIXEL = 1000;
@@ -113,31 +108,18 @@ export class PlaylistEngine {
   // Clip Editing (delegates to operations/)
   // ---------------------------------------------------------------------------
 
-  moveClip(
-    trackId: string,
-    clipId: string,
-    deltaSamples: number,
-  ): void {
+  moveClip(trackId: string, clipId: string, deltaSamples: number): void {
     const track = this._tracks.find((t) => t.id === trackId);
     if (!track) return;
 
-    const clipIndex = track.clips.findIndex(
-      (c: AudioClip) => c.id === clipId,
-    );
+    const clipIndex = track.clips.findIndex((c: AudioClip) => c.id === clipId);
     if (clipIndex === -1) return;
 
     const clip = track.clips[clipIndex];
     const sortedClips = sortClipsByTime(track.clips);
-    const sortedIndex = sortedClips.findIndex(
-      (c: AudioClip) => c.id === clipId,
-    );
+    const sortedIndex = sortedClips.findIndex((c: AudioClip) => c.id === clipId);
 
-    const constrainedDelta = constrainClipDrag(
-      clip,
-      deltaSamples,
-      sortedClips,
-      sortedIndex,
-    );
+    const constrainedDelta = constrainClipDrag(clip, deltaSamples, sortedClips, sortedIndex);
 
     if (constrainedDelta === 0) return;
 
@@ -149,7 +131,7 @@ export class PlaylistEngine {
               ...c,
               startSample: Math.floor(c.startSample + constrainedDelta),
             }
-          : c,
+          : c
       );
       return { ...t, clips: newClips };
     });
@@ -157,23 +139,15 @@ export class PlaylistEngine {
     this._emitStateChange();
   }
 
-  splitClip(
-    trackId: string,
-    clipId: string,
-    atSample: number,
-  ): void {
+  splitClip(trackId: string, clipId: string, atSample: number): void {
     const track = this._tracks.find((t) => t.id === trackId);
     if (!track) return;
 
-    const clipIndex = track.clips.findIndex(
-      (c: AudioClip) => c.id === clipId,
-    );
+    const clipIndex = track.clips.findIndex((c: AudioClip) => c.id === clipId);
     if (clipIndex === -1) return;
 
     const clip = track.clips[clipIndex];
-    const minDuration = Math.floor(
-      DEFAULT_MIN_DURATION_SECONDS * this._sampleRate,
-    );
+    const minDuration = Math.floor(DEFAULT_MIN_DURATION_SECONDS * this._sampleRate);
 
     if (!canSplitAt(clip, atSample, minDuration)) return;
 
@@ -193,24 +167,18 @@ export class PlaylistEngine {
     trackId: string,
     clipId: string,
     boundary: 'left' | 'right',
-    deltaSamples: number,
+    deltaSamples: number
   ): void {
     const track = this._tracks.find((t) => t.id === trackId);
     if (!track) return;
 
-    const clipIndex = track.clips.findIndex(
-      (c: AudioClip) => c.id === clipId,
-    );
+    const clipIndex = track.clips.findIndex((c: AudioClip) => c.id === clipId);
     if (clipIndex === -1) return;
 
     const clip = track.clips[clipIndex];
     const sortedClips = sortClipsByTime(track.clips);
-    const sortedIndex = sortedClips.findIndex(
-      (c: AudioClip) => c.id === clipId,
-    );
-    const minDuration = Math.floor(
-      DEFAULT_MIN_DURATION_SECONDS * this._sampleRate,
-    );
+    const sortedIndex = sortedClips.findIndex((c: AudioClip) => c.id === clipId);
+    const minDuration = Math.floor(DEFAULT_MIN_DURATION_SECONDS * this._sampleRate);
 
     const constrained = constrainBoundaryTrim(
       clip,
@@ -218,7 +186,7 @@ export class PlaylistEngine {
       boundary,
       sortedClips,
       sortedIndex,
-      minDuration,
+      minDuration
     );
 
     if (constrained === 0) return;
@@ -407,10 +375,7 @@ export class PlaylistEngine {
   }
 
   private _stopTimeUpdateLoop(): void {
-    if (
-      this._animFrameId !== null &&
-      typeof cancelAnimationFrame !== 'undefined'
-    ) {
+    if (this._animFrameId !== null && typeof cancelAnimationFrame !== 'undefined') {
       cancelAnimationFrame(this._animFrameId);
       this._animFrameId = null;
     }

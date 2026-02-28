@@ -52,7 +52,7 @@ export const DownloadAnnotationsButton: React.FC<DownloadAnnotationsButtonProps>
     }
 
     // Serialize annotations to Aeneas JSON format
-    const jsonData = annotations.map(annotation => serializeAeneas(annotation));
+    const jsonData = annotations.map((annotation) => serializeAeneas(annotation));
     const jsonString = JSON.stringify(jsonData, null, 2);
 
     // Create a blob and download link
@@ -76,7 +76,9 @@ export const DownloadAnnotationsButton: React.FC<DownloadAnnotationsButtonProps>
       onClick={handleDownload}
       disabled={disabled || annotations.length === 0}
       className={className}
-      title={annotations.length === 0 ? 'No annotations to download' : 'Download the annotations as JSON'}
+      title={
+        annotations.length === 0 ? 'No annotations to download' : 'Download the annotations as JSON'
+      }
     >
       {children}
     </StyledButton>

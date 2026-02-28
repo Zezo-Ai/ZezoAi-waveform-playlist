@@ -43,9 +43,7 @@ export function waveformColorToCss(color: WaveformColor): string {
   }
 
   const direction = color.direction === 'vertical' ? 'to bottom' : 'to right';
-  const stops = color.stops
-    .map((stop) => `${stop.color} ${stop.offset * 100}%`)
-    .join(', ');
+  const stops = color.stops.map((stop) => `${stop.color} ${stop.offset * 100}%`).join(', ');
 
   return `linear-gradient(${direction}, ${stops})`;
 }
@@ -146,7 +144,7 @@ export const defaultTheme: WaveformPlaylistTheme = {
   waveProgressColor: 'rgba(0, 0, 0, 0.10)', // Subtle dark overlay for light mode
 
   selectedWaveOutlineColor: '#ffffff',
-  selectedWaveFillColor: '#00b4d8',   // Selected: brighter cyan
+  selectedWaveFillColor: '#00b4d8', // Selected: brighter cyan
   selectedTrackControlsBackground: '#d9e9ff', // Light blue background for selected track controls
   timeColor: '#000',
   timescaleBackgroundColor: '#fff',

@@ -35,7 +35,9 @@ export const EditableCheckbox: React.FC<{ className?: string }> = ({ className }
   const { annotationsEditable } = usePlaylistState();
   const { setAnnotationsEditable } = usePlaylistControls();
 
-  return <Base checked={annotationsEditable} onChange={setAnnotationsEditable} className={className} />;
+  return (
+    <Base checked={annotationsEditable} onChange={setAnnotationsEditable} className={className} />
+  );
 };
 
 /**

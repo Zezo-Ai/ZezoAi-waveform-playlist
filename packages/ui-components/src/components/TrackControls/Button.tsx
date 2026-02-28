@@ -19,8 +19,11 @@ export const Button = styled.button.attrs({
   font-size: ${(props) => props.theme.fontSizeSmall};
   line-height: 1;
   border-radius: ${(props) => props.theme.borderRadius};
-  transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out,
-    border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  transition:
+    color 0.15s ease-in-out,
+    background-color 0.15s ease-in-out,
+    border-color 0.15s ease-in-out,
+    box-shadow 0.15s ease-in-out;
   cursor: pointer;
 
   ${(props) => {

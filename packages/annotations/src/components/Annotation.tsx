@@ -1,6 +1,10 @@
 import React, { FunctionComponent, useState } from 'react';
 import styled from 'styled-components';
-import type { AnnotationData, AnnotationAction, AnnotationActionOptions } from '@waveform-playlist/core';
+import type {
+  AnnotationData,
+  AnnotationAction,
+  AnnotationActionOptions,
+} from '@waveform-playlist/core';
 
 interface AnnotationOverlayProps {
   readonly $left: number;
@@ -67,7 +71,7 @@ const EditableText = styled.textarea`
 
   &:focus {
     outline: none;
-    border-color: #4CAF50;
+    border-color: #4caf50;
   }
 `;
 
@@ -109,14 +113,18 @@ const ControlButton = styled.button`
 `;
 
 // Re-export shared annotation types from core
-export type { AnnotationData, AnnotationAction, AnnotationActionOptions } from '@waveform-playlist/core';
+export type {
+  AnnotationData,
+  AnnotationAction,
+  AnnotationActionOptions,
+} from '@waveform-playlist/core';
 
 export interface AnnotationProps {
   annotation: AnnotationData;
   index: number;
   allAnnotations: AnnotationData[];
   startPosition: number; // Start position in pixels
-  endPosition: number;   // End position in pixels
+  endPosition: number; // End position in pixels
   color?: string;
   editable?: boolean;
   controls?: AnnotationAction[];
@@ -221,9 +229,7 @@ export const Annotation: FunctionComponent<AnnotationProps> = ({
           onDoubleClick={(e) => e.stopPropagation()}
         />
       ) : (
-        <AnnotationText>
-          {annotation.lines.join('\n')}
-        </AnnotationText>
+        <AnnotationText>{annotation.lines.join('\n')}</AnnotationText>
       )}
     </AnnotationOverlay>
   );
