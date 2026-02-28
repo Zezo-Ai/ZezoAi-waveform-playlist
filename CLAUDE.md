@@ -161,10 +161,7 @@ pnpm publish --filter @waveform-playlist/NEW-PACKAGE --no-git-checks --access pu
 - **TypeScript check**: `pnpm typecheck` (enforced in build scripts)
 - **Lint**: `pnpm lint` - ESLint across all packages. **Always run before committing.** This is a root-only script; run from repo root or use `pnpm -w lint`.
 - **Dev server**: `pnpm --filter website start` - Docusaurus dev server
-- **Engine unit tests**: `cd packages/engine && npx vitest run` — vitest (not Playwright)
-- **Core unit tests**: `cd packages/core && npx vitest run`
-- **Playout unit tests**: `cd packages/playout && npx vitest run`
-- **UI components unit tests**: `cd packages/ui-components && npx vitest run`
+- **Unit tests**: Run from each package directory with `npx vitest run` (engine, core, playout, ui-components)
 - **Hard refresh**: Always use Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows/Linux) after builds
 
 **CI Validation:** `.github/workflows/ci.yml` runs on PRs to `main`: build, lint, and `prettier --check`. Format code with `pnpm format` before pushing.
@@ -188,46 +185,6 @@ pnpm publish --filter @waveform-playlist/NEW-PACKAGE --no-git-checks --access pu
 - Always rebuild (`pnpm build`) after switching branches before running tests — stale artifacts cause false failures
 
 **Git Safety:** Always make intermediate commits before running `git stash` or switching branches. A failed `git stash pop` + `git checkout -- .` can destroy all uncommitted work permanently.
-
-### Engine Package (`@waveform-playlist/engine`)
-
-**Purpose:** Framework-agnostic timeline engine extracted from React hooks. Enables Svelte/Vue/vanilla bindings.
-
-**Architecture:** Two layers — pure operations functions + stateful `PlaylistEngine` class with event emitter.
-
-**Build:** Uses tsup (not vite) — `pnpm typecheck && tsup`. Outputs ESM + CJS + DTS.
-
-**Testing:** vitest unit tests in `src/__tests__/`. Run with `npx vitest run` from `packages/engine/`.
-
-**Key types:** `PlayoutAdapter` (pluggable audio backend interface), `EngineState` (state snapshot), `EngineEvents` (statechange, timeupdate, play/pause/stop).
-
-**Operations:** `clipOperations.ts` (drag constraints, trim, split), `viewportOperations.ts` (bounds, chunks, scroll threshold), `timelineOperations.ts` (duration, zoom, seek).
-
-**No React, no Tone.js** — zero framework dependencies. Only peer dependency is `@waveform-playlist/core`.
-
-**Design doc:** `docs/plans/2026-02-24-engine-extraction-design.md`
-
-### Tone.js Adapter (`createToneAdapter`)
-
-**Purpose:** Bridges `PlayoutAdapter` interface to existing `TonePlayout`/`ToneTrack` classes.
-
-**Location:** `packages/playout/src/TonePlayoutAdapter.ts`
-
-**Pattern:** Factory/closure (not class). Rebuild-on-`setTracks()` — disposes old `TonePlayout`, creates fresh one.
-
-**Key mappings:** `ClipTrack.volume` → `Track.gain`, `ClipTrack.pan` → `Track.stereoPan`, sample-based clips → seconds via core helpers.
-
-**Clip time helpers:** `clipStartTime`, `clipEndTime`, `clipOffsetTime`, `clipDurationTime` in `packages/core/src/clipTimeHelpers.ts`. Pure functions: `samples / sampleRate`.
-
-**Testing:** `packages/playout/src/__tests__/TonePlayoutAdapter.test.ts` — mocks `TonePlayout` to avoid AudioContext. `packages/core/src/__tests__/clipTimeHelpers.test.ts`.
-
-**Not yet wired:** Browser package still uses `TonePlayout` directly. Engine integration is a separate PR.
-
-**Patterns:**
-- All mutating methods (moveClip, trimClip, removeTrack, setZoomLevel) guard against no-op statechange emissions — bail early when constrained delta is 0, track not found, or zoom unchanged
-- `setTracks()` copies input array; `getState()` copies output tracks — defensive at both boundaries
-- `PlayoutAdapter.isPlaying()` is defined but not called by engine (engine tracks own `_isPlaying`). Known design gap.
-- Engine uses `seek()` while browser package uses `seekTo()` — naming divergence, noted in "Common Doc Drift"
 
 ---
 
@@ -285,94 +242,18 @@ interface AudioClip {
 3. Build simple components ourselves
 4. Create internal design system with shared theme tokens
 
-### Theming System
+### ESLint Baseline (2026-02-13)
 
-**When to add to `theme` object:**
-- Visual/styling properties (colors, backgrounds, borders)
-- Properties users want to customize for aesthetic consistency
-
-**When to use separate props:**
-- Functional/behavioral properties (callbacks, data, configuration)
-- Properties that control what is rendered or how it behaves
-
-**Example:** All clip header colors in `theme`, but `showClipHeaders` as boolean prop.
-
-**Implementation Pattern:**
-1. Define theme interface in `packages/ui-components/src/wfpl-theme.ts`
-2. Export `WaveformPlaylistTheme` interface and `defaultTheme`
-3. Extend styled-components DefaultTheme via `styled.d.ts`
-4. Components access theme via `props.theme.propertyName` in styled components
-5. No color/styling props passed through component interfaces
-
-**Type Safety:** Use `Partial<WaveformPlaylistTheme>` for theme props. Single source of truth in `wfpl-theme.ts`.
-
-**Location:** `ui-components/src/wfpl-theme.ts`, `ui-components/src/styled.d.ts`
-
-### Theme Provider Pattern
-
-**Decision:** Use styled-components `ThemeProvider` at the `WaveformPlaylistProvider` level.
+**Decision:** Add a root flat ESLint config with TypeScript + React Hooks checks.
 
 **Implementation:**
-1. `WaveformPlaylistProvider` accepts `theme?: Partial<WaveformPlaylistTheme>`
-2. Provider merges user theme with `defaultTheme`: `{ ...defaultTheme, ...userTheme }`
-3. Provider wraps children with styled-components `<ThemeProvider theme={mergedTheme}>`
-4. All child components access theme via `useTheme()` hook from `ui-components`
-5. `Waveform` component does NOT accept its own theme prop - gets from context
+- Config file: `eslint.config.mjs`
+- Root `package.json` devDependencies include:
+  - `eslint`, `@eslint/js`
+  - `@typescript-eslint/parser`, `@typescript-eslint/eslint-plugin`
+  - `eslint-plugin-react-hooks`, `globals`
 
-**Usage Pattern:**
-```typescript
-// Application level
-<WaveformPlaylistProvider tracks={tracks} theme={darkTheme}>
-  <Waveform />  {/* Gets theme from context */}
-</WaveformPlaylistProvider>
-```
-
-**Why NOT pass theme to Waveform:**
-- Single source of truth - theme set once at provider level
-- Automatic propagation to all styled components
-- Prevents theme conflicts from multiple ThemeProviders
-- Follows React context pattern
-
-**Docusaurus Integration:**
-- Use MutationObserver to detect `data-theme` attribute changes
-- Switch between `defaultTheme` and `darkTheme` based on Docusaurus mode
-- Example: `minimal-app.tsx` detects and responds to theme toggle
-
-### SpectrogramChannel Index vs ChannelIndex
-
-**`SpectrogramChannel`** has two index concerns: `index` (CSS positioning via Wrapper `top` offset) and `channelIndex` (canvas ID construction for worker registration, e.g. `clipId-ch{channelIndex}-chunk0`). In "both" mode, `SmartChannel` passes `index={props.index * 2}` for layout interleaving but `channelIndex={props.index}` for correct canvas identity. When `channelIndex` is omitted it defaults to `index`. Never use the visual `index` for canvas IDs — the worker and SpectrogramProvider registry expect sequential audio channel indices (0, 1).
-
-### Integration Context Pattern (Spectrogram, Annotations)
-
-**Pattern:** Browser package defines an interface + context, optional packages provide implementation via a Provider component. Used by both `@waveform-playlist/spectrogram` (SpectrogramIntegrationContext) and `@waveform-playlist/annotations` (AnnotationIntegrationContext).
-
-**Flow:** Browser defines `XxxIntegrationContext` → optional package creates `XxxProvider` that supplies components/functions → browser components use `useXxxIntegration()` and gracefully return `null` if unavailable.
-
-**Throwing Context Hooks (Kent C. Dodds Pattern):**
-Both `useAnnotationIntegration()` and `useSpectrogramIntegration()` throw if used without their respective providers. This follows the [Kent C. Dodds context pattern](https://kentcdodds.com/blog/how-to-use-react-context-effectively) — fail fast with a clear error instead of silently rendering nothing.
-
-```typescript
-// Components that need annotations — throws if <AnnotationProvider> missing
-const integration = useAnnotationIntegration();
-
-// Internal components that render with or without annotations/spectrograms
-// use useContext(XxxIntegrationContext) directly to get null when absent
-const annotationIntegration = useContext(AnnotationIntegrationContext);
-const spectrogram = useContext(SpectrogramIntegrationContext);
-```
-
-**Location:** `packages/browser/src/AnnotationIntegrationContext.tsx`, `packages/browser/src/SpectrogramIntegrationContext.tsx`
-
-### Annotation Provider Pattern
-
-**Critical:** When using `annotationList` on `WaveformPlaylistProvider`, always pair it with `onAnnotationsChange`. Without the callback, annotation edits won't persist and a console warning fires.
-
-```typescript
-<WaveformPlaylistProvider
-  annotationList={{ annotations, editable: true, linkEndpoints: false }}
-  onAnnotationsChange={setAnnotations}  // Required for edits to persist
->
-```
+**Usage:** Run `pnpm lint` before committing. Catches missing hook dependencies, unused variables, and React Hooks rule violations.
 
 ### Docusaurus Native Examples
 
@@ -409,260 +290,6 @@ const LazyExample = createLazyExample(
 
 **Location:** `website/src/components/examples/`, `website/src/components/BrowserOnlyWrapper.tsx`
 
-### Track Selection Styling
-
-**Theme Properties:** `selectedWaveOutlineColor`, `selectedTrackControlsBackground`, `selectedClipHeaderBackgroundColor`
-
-**Pattern:** `isSelected` prop flows: Waveform → Track → Clip → ClipHeader and SmartChannel. Selection shown via background colors, no borders.
-
-### Custom Hooks Architecture
-
-**Pattern:** Extract complex logic into reusable custom hooks.
-
-**Key Hooks:**
-- `useClipDragHandlers` - Drag-to-move and boundary trimming (300+ lines)
-- `useClipSplitting` - Split clips at playhead (150+ lines)
-- `useKeyboardShortcuts` - Flexible keyboard shortcut system (120+ lines)
-- `usePlaybackShortcuts` - Default playback shortcuts (0 = rewind to start)
-- `useAnnotationKeyboardControls` - Annotation navigation, editing, auto-scroll, and playback
-- `useDynamicEffects` - Master effects chain with runtime parameter updates
-- `useTrackDynamicEffects` - Per-track effects management
-- `useDynamicTracks` - Runtime track additions with placeholder-then-replace pattern
-- `usePlaybackControls`, `useTimeFormat`, `useZoomControls`, etc.
-
-**Location:** `packages/browser/src/hooks/`
-
-### Audio Effects Architecture
-
-**Implementation:** 20 Tone.js effects with full parameter control, organized by category.
-
-**Categories:** Reverb (3), Delay (2), Modulation (5), Filter (3), Distortion (3), Dynamics (3), Spatial (1)
-
-**Key Files:**
-- `packages/browser/src/effects/effectDefinitions.ts` - All effect metadata and parameters
-- `packages/browser/src/effects/effectFactory.ts` - Creates effect instances
-- `packages/browser/src/hooks/useDynamicEffects.ts` - Master chain management
-- `packages/browser/src/hooks/useTrackDynamicEffects.ts` - Per-track effects
-
-**Pattern:** Effects are created via factory, chained in series, support real-time parameter updates without rebuilding the chain.
-
-**Bypass Pattern:** When bypassing, store original wet value and set to 0. On re-enable, restore original wet value (not always 1).
-
-**Offline Rendering:** Both hooks provide `createOfflineEffectsFunction()` for WAV export via `Tone.Offline`.
-
-**Documentation:** `website/docs/effects.md`
-
-### Shared Animation Frame Loop Hook (Provider Refactor, 2026-02-13)
-
-**Decision:** Centralize requestAnimationFrame lifecycle logic in a shared hook used by both playlist providers.
-
-**Implementation:**
-- New hook: `packages/browser/src/hooks/useAnimationFrameLoop.ts`
-- Exported from: `packages/browser/src/hooks/index.ts`
-- Integrated into:
-  - `packages/browser/src/WaveformPlaylistContext.tsx`
-  - `packages/browser/src/MediaElementPlaylistContext.tsx`
-
-**Why:**
-- Removes duplicated `requestAnimationFrame` / `cancelAnimationFrame` logic across providers
-- Ensures a single in-flight animation frame per provider
-- Standardizes cleanup on unmount and playback transitions
-
-### SpectrogramChannel Hook Stability (2026-02-13)
-
-**Decision:** Use stable default references for LUT/scale and remove hook dependency suppression.
-
-**Implementation:** `packages/ui-components/src/components/SpectrogramChannel.tsx`
-- Hoisted stable defaults:
-  - `DEFAULT_COLOR_LUT`
-  - `LINEAR_FREQUENCY_SCALE`
-- Updated effect dependencies to include worker/callback references explicitly
-- Removed `react-hooks/exhaustive-deps` suppression
-
-**Why:**
-- Prevents unnecessary redraw/recompute caused by new inline default references each render
-- Reduces stale-closure risk in worker canvas registration effect
-
-### ESLint Baseline (2026-02-13)
-
-**Decision:** Add a root flat ESLint config with TypeScript + React Hooks checks.
-
-**Implementation:**
-- Config file: `eslint.config.mjs`
-- Root `package.json` devDependencies include:
-  - `eslint`, `@eslint/js`
-  - `@typescript-eslint/parser`, `@typescript-eslint/eslint-plugin`
-  - `eslint-plugin-react-hooks`, `globals`
-
-**Usage:** Run `pnpm lint` before committing. Catches missing hook dependencies, unused variables, and React Hooks rule violations.
-
-### Horizontal Virtual Scrolling (Phase 4, 2026-02-13)
-
-**Decision:** Viewport-aware canvas rendering — only mount canvas chunks visible in the scroll container + buffer.
-
-**Implementation:**
-- `ScrollViewportContext` in `packages/ui-components/src/contexts/ScrollViewport.tsx`
-- `ScrollViewportProvider` wraps content inside `Playlist.tsx`, observes `Wrapper` scroll element
-- `useScrollViewport()` returns `{ scrollLeft, containerWidth, visibleStart, visibleEnd }` or `null`
-- Buffer: 1.5x viewport width on each side
-- RAF-throttled scroll listener + ResizeObserver
-
-**Components affected:**
-- `TimeScale` — chunked into 1000px canvases (was single canvas, crashed with long files)
-- `Channel` — absolute positioning, only renders visible chunks
-- `SpectrogramChannel` — only mounts visible chunks (biggest memory win)
-- All use absolute positioning (`left: chunkIndex * 1000px`) instead of `float: left`
-
-**Shared hooks:**
-- `useVisibleChunkIndices(totalWidth, chunkWidth, originX?)` — returns memoized array of visible chunk indices. `originX` converts local chunk coords to global viewport space (required for clips not at position 0). Uses string-key comparison internally for re-render gating. Exported from `ui-components`.
-- `useChunkedCanvasRefs()` — callback ref + Map storage + stale cleanup for chunked canvases. Internal only (not exported from package public API). Uses `Map<number, HTMLCanvasElement>` instead of sparse arrays.
-
-**Clip coordinate space:** `ClipViewportOriginProvider` in `packages/ui-components/src/contexts/ClipViewportOrigin.tsx` supplies the clip's pixel `left` offset to descendant `Channel`/`SpectrogramChannel` components. Wrapped around `ChannelsWrapper` in `Clip.tsx`. Defaults to `0` for non-clip consumers (e.g., `TimeScale`).
-
-**Backwards compatibility:** `useScrollViewport()` returns `null` without provider. All components default to rendering everything when viewport is `null`.
-
-### Web Worker Peak Generation (2026-02-13)
-
-**Decision:** Generate `WaveformData` in a web worker at load time, then use `resample()` for near-instant zoom changes.
-
-**Key files:**
-- `packages/browser/src/workers/peaksWorker.ts` — Inline Blob worker (portable across bundlers)
-- `packages/browser/src/hooks/useWaveformDataCache.ts` — Cache hook, watches tracks for clips with `audioBuffer` but no `waveformData`
-- `packages/browser/src/waveformDataLoader.ts` — `extractPeaksFromWaveformDataFull()` for resample + channel extraction
-
-**Peak resolution order in WaveformPlaylistContext:** (1) `clip.waveformData` (external pre-computed), (2) worker cache hit, (3) empty peaks while worker runs.
-
-**Automatic:** Any clip with `audioBuffer` (loaded or recorded) gets worker treatment — no opt-in needed.
-
----
-
-## Recording Architecture
-
-### Global AudioContext Pattern
-
-**Implementation:** Recording uses global shared AudioContext (same as Tone.js).
-
-**Location:** `getGlobalAudioContext()` from `@waveform-playlist/playout`
-
-**Critical:** Context must be resumed on user interaction via `resumeGlobalAudioContext()`
-
-### MediaStreamSource Per Hook (Firefox Compatibility)
-
-**Pattern:** Each recording hook creates its own `MediaStreamSource` directly from Tone's `getContext()`.
-
-```typescript
-// ✅ CORRECT - Create source from same context as other audio nodes
-const context = getContext();  // Tone.js shared context
-const source = context.createMediaStreamSource(stream);
-const meter = new Meter({ smoothing, context });
-connect(source, meter);
-```
-
-**Why:** Firefox throws "Can't connect nodes from different AudioContexts" when:
-- A shared `MediaStreamSource` is created in one module (e.g., playout package)
-- Audio nodes (Meter, AudioWorklet) are created in another module (recording package)
-- Even though both use `getContext()` from Tone.js, bundler module resolution can cause different context instances
-
-**Solution:** Both `useRecording` and `useMicrophoneLevel` create their own source directly from `getContext()`. This ensures the source and connected nodes share the exact same context instance.
-
-**Note:** Creating multiple `MediaStreamAudioSourceNode` instances from the same `MediaStream` is valid - they independently read from the same underlying stream.
-
-### Debugging AudioWorklets
-
-**Critical Note:** `console.log()` in AudioWorklet **DOES NOT** appear in browser console!
-
-**Solutions:**
-1. Send debug data via `postMessage()` to main thread
-2. Update React state/UI to display values
-3. Use live waveform visualization
-
-**See:** `DEBUGGING.md` for complete worklet debugging guide.
-
-### Recording-Optimized Audio Constraints
-
-**Defaults in `useMicrophoneAccess`:** `echoCancellation: false`, `noiseSuppression: false`, `autoGainControl: false`, `latency: 0`
-
-Users can override via `audioConstraints` parameter.
-
-### VU Meter Level Normalization
-
-**Implementation:** `useMicrophoneLevel` uses Tone.js `Meter` which returns dB values.
-
-**dB to 0-1 Conversion:**
-```typescript
-// Meter returns -Infinity to 0 dB
-// Map -100dB..0dB to 0..1 (using -100dB floor for Firefox compatibility)
-const normalized = Math.max(0, Math.min(1, (dbValue + 100) / 100));
-```
-
-**Why -100dB floor:** Firefox reports lower dB values than Chrome (e.g., -70 to -85 dB for quiet input). Using -60dB floor caused all quiet signals to map to 0.
-
-### Tone.js Initialization
-
-**Critical:** Call `await Tone.start()` after user interaction and before `Tone.now()`.
-
-Without `Tone.start()`, `Tone.now()` returns null → RangeError in scheduling.
-
-**Safari Latency:** `TonePlayout.init()` already calls `await start()`. Do NOT call `await toneStart()` separately in play handlers — the redundant await adds ~2 seconds of latency on Safari.
-
-**Master volume:** Uses Web Audio standard 0-1.0 range (not 0-100).
-
-### Tone.js Internal AudioParam Access
-
-**Pattern:** Access raw `AudioParam` via `(signal as any)._param` for `setValueAtTime`/`cancelScheduledValues` when Tone.js Signal wrapper doesn't propagate changes (e.g., suspended AudioContext).
-
-**Used in:** `ToneTrack.setMute()`, `ToneTrack.scheduleFades()`
-
-**Risk:** `_param` is a private Tone.js 15.x internal. Pin version carefully. Consider consolidating into a shared utility with null guard.
-
-### Firefox Compatibility (standardized-audio-context)
-
-**Problem 1: AudioListener Error**
-Firefox throws `"param must be an AudioParam"` when Tone.js initializes because Firefox's `AudioListener` implementation differs from Chrome/Safari.
-
-**Problem 2: AudioWorkletNode Error**
-Firefox throws `"parameter 1 is not of type 'BaseAudioContext'"` when creating `AudioWorkletNode` with a native `AudioContext`.
-
-**Root Cause:** Both issues stem from using native `AudioContext` instead of `standardized-audio-context` which normalizes browser differences.
-
-**Solution:** Use Tone.js's `Context` class directly. It wraps `standardized-audio-context` and provides cross-browser compatible methods:
-
-```typescript
-// packages/playout/src/audioContext.ts
-import { Context, setContext } from 'tone';
-
-export function getGlobalContext(): Context {
-  if (!globalToneContext) {
-    globalToneContext = new Context();
-    setContext(globalToneContext);
-  }
-  return globalToneContext;
-}
-```
-
-**Recording/Monitoring:** Use Tone.js Context methods directly:
-
-```typescript
-// packages/recording/src/hooks/useRecording.ts
-import { getGlobalContext } from '@waveform-playlist/playout';
-
-const context = getGlobalContext();
-
-// These methods handle cross-browser compatibility automatically:
-await context.addAudioWorkletModule(workletUrl);
-const workletNode = context.createAudioWorkletNode('recording-processor');
-const source = context.createMediaStreamSource(stream);
-const analyser = context.createAnalyser();
-```
-
-**Key Files:**
-- `packages/playout/src/audioContext.ts` - Context management (`getGlobalContext()`)
-- `packages/recording/src/hooks/useRecording.ts` - Uses Tone.js Context methods
-- `packages/recording/src/hooks/useMicrophoneLevel.ts` - Uses Tone.js Context methods
-
-**References:**
-- [Tone.js Issue #681](https://github.com/Tonejs/Tone.js/issues/681) - AudioListener Firefox error
-
 ---
 
 ## Important Patterns
@@ -674,140 +301,16 @@ const analyser = context.createAnalyser();
 5. **Sample-Based Math** - Use integer samples for all timing calculations
 6. **TypeScript Enforcement** - Build scripts run `pnpm typecheck &&` before bundling
 7. **Refs for Dynamic Audio Callbacks** - When useCallback needs fresh state for audio graph rebuilding, store state in a ref and read from ref inside callback (avoids stale closures)
-8. **Smooth Playback Animation** - Use `requestAnimationFrame` + direct DOM manipulation for 60fps updates (playhead, progress, time display)
-9. **Animation Loop Restart** - When restarting playback, cancel existing animation frames AND reset `currentTimeRef` to the new start position before calling `startAnimationLoop()`
-10. **Constraint-First Drag Handling** - When implementing boundary trimming, calculate constrained delta first, then apply uniformly to all affected properties (startSample, offsetSamples, durationSamples)
-11. **Playlist Loading Detection** - Use `data-playlist-state` attribute and `waveform-playlist:ready` custom event for reliable loading detection in CSS, E2E tests, and external integrations
-12. **Stable React Keys for Tracks/Clips** - Always use `track.id` / `clip.clipId` as React keys, never array indices. Index-based keys cause DOM reuse on removal, breaking `transferControlToOffscreen()` (can only be called once per canvas) and causing stale OffscreenCanvas references.
-13. **Per-Track Maps Must Use Track ID** - Any `Map` storing per-track overrides (render modes, configs) must be keyed by `track.id` (string), not array index. Index keys break when tracks are added/removed.
-14. **Context Value Memoization** - All context value objects in providers must be wrapped with `useMemo`. Extract inline callbacks into `useCallback` first to avoid dependency churn.
-15. **Error Boundary Available** - `PlaylistErrorBoundary` from `@waveform-playlist/ui-components` catches render errors. Uses plain CSS (no styled-components) so it works without ThemeProvider.
-16. **Audio Disconnect Diagnostics** - Use `console.warn('[waveform-playlist] ...')` in catch blocks for audio node disconnect errors, never silently swallow.
-17. **Fetch Cleanup with AbortController** - `useAudioTracks` uses AbortController to cancel in-flight fetches on cleanup. Follow this pattern for any fetch in useEffect. For per-item abort (e.g., removing one loading track), use `Map<id, AbortController>` instead of `Set<AbortController>`.
-18. **Derive Render Guards from Props, Not Effect State** - Don't use effect-set state (e.g., `audioBuffers`) in render guards. Effect state lags props by one+ renders, causing content to flash/disappear. Compute values synchronously from props instead.
-19. **Copy Refs in useEffect Body** - When accessing a ref in `useEffect` cleanup, copy `.current` to a local variable inside the effect body. ESLint's `react-hooks/exhaustive-deps` rule flags refs that may change between render and cleanup.
-20. **Refs from Custom Hooks in Dep Arrays** - When a `useRef` is returned from a custom hook, ESLint's `exhaustive-deps` can't trace its stability. Include it in the dep array (harmless, never triggers) rather than using `eslint-disable-next-line` which would mask real missing dependencies.
-21. **Canvas Cleanup on Chunk Changes** - `useChunkedCanvasRefs` runs cleanup on every render (no dependency array) because the virtualizer can unmount canvases between any render. SpectrogramChannel's worker registration effect uses `visibleChunkIndices` as a dependency so it re-runs when chunks mount/unmount, cleaning stale registrations and transferring new canvases in a single pass.
-22. **Virtual Scrolling Chunk Offsets** - Canvas registries may contain non-consecutive chunks (e.g., chunks 50-55). Use `extractChunkNumber(canvasId)` to get the real chunk index — never compute offsets by summing widths from array index 0.
-23. **Multi-Channel Rendering Fairness** - Render visible chunks for ALL channels before background batches. Sequential per-channel rendering causes channel starvation when generation aborts interrupt background work.
-24. **Guard Against No-Op State Emissions** - In stateful classes with event emitters, check if an operation would actually change state before emitting. Zero-delta moves/trims, removing non-existent items, and setting zoom to the same level should bail early to avoid wasted listener calls and UI re-renders.
-25. **Guard Before State Update in Callbacks** - In callbacks that update both React state and audio engine, validate inputs (e.g., trackId lookup) BEFORE calling `setState`. If the guard is after `setState`, invalid inputs cause UI/audio desync (UI updates but audio doesn't).
-
-### Playlist Loading Detection
-
-**Problem:** Detecting when a playlist has finished loading all tracks for CSS styling, E2E testing, or external integrations.
-
-**Solution:** Three approaches available:
-
-1. **Data Attribute** (`data-playlist-state`) - For CSS and E2E tests:
-```css
-[data-playlist-state="loading"] { opacity: 0.5; }
-[data-playlist-state="ready"] { opacity: 1; }
-```
-```typescript
-// Playwright
-await page.waitForSelector('[data-playlist-state="ready"]', { timeout: 30000 });
-```
-
-2. **Custom Event** (`waveform-playlist:ready`) - For external integrations:
-```typescript
-window.addEventListener('waveform-playlist:ready', (event: CustomEvent) => {
-  console.log('Tracks loaded:', event.detail.trackCount);
-  console.log('Duration:', event.detail.duration);
-});
-```
-
-3. **React Hook** (`isReady` from `usePlaylistData()`) - For internal components:
-```typescript
-const { isReady, tracks } = usePlaylistData();
-if (!isReady) return <LoadingSpinner />;
-```
-
-**Applied in:** `WaveformPlaylistContext.tsx`, `Playlist.tsx`, all E2E tests
-
-### Refs for Dynamic Audio Callbacks
-
-**Problem:** useCallback with state dependencies creates stale closures when callbacks are stored and called later.
-
-**Solution:** Store current state in a ref, read from ref inside callback:
-
-```typescript
-const activeEffectsRef = useRef(activeEffects);
-activeEffectsRef.current = activeEffects; // Update on every render
-
-const rebuildChain = useCallback(() => {
-  const currentEffects = activeEffectsRef.current; // Fresh state
-}, []); // Stable function - no dependencies
-```
-
-**Applied in:** `useDynamicEffects`, `useTrackDynamicEffects`, `WaveformPlaylistContext` track controls (`tracksRef`)
-
-### Smooth Playback Animation Pattern
-
-**Problem:** React state updates during playback cause flickering and are throttled (every 500ms). Components like playhead position, progress overlay, and time display need 60fps updates.
-
-**Solution:** Use `requestAnimationFrame` with direct DOM manipulation via refs. Calculate time directly from audio context for perfect sync.
-
-**Pattern:**
-```typescript
-const elementRef = useRef<HTMLElement>(null);
-const animationFrameRef = useRef<number | null>(null);
-const { isPlaying, currentTimeRef, playbackStartTimeRef, audioStartPositionRef } = usePlaybackAnimation();
-
-useEffect(() => {
-  const update = () => {
-    if (elementRef.current) {
-      // Calculate time from audio context during playback
-      let time: number;
-      if (isPlaying) {
-        const elapsed = getContext().currentTime - (playbackStartTimeRef.current ?? 0);
-        time = (audioStartPositionRef.current ?? 0) + elapsed;
-      } else {
-        time = currentTimeRef.current ?? 0;
-      }
-      // Update DOM directly (no React state)
-      elementRef.current.style.transform = `translateX(${time * pixelsPerSecond}px)`;
-    }
-    if (isPlaying) {
-      animationFrameRef.current = requestAnimationFrame(update);
-    }
-  };
-
-  if (isPlaying) {
-    animationFrameRef.current = requestAnimationFrame(update);
-  } else {
-    update(); // Update once when stopped
-  }
-
-  return () => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-    }
-  };
-}, [isPlaying, ...dependencies]);
-
-// Also update when stopped (for seeks)
-useEffect(() => {
-  if (!isPlaying && elementRef.current) {
-    // Update position from currentTimeRef
-  }
-});
-```
-
-**Key Points:**
-- Use `getContext().currentTime` from Tone.js for accurate audio time
-- Calculate elapsed time: `audioContext.currentTime - playbackStartTimeRef`
-- Add to start position: `audioStartPositionRef + elapsed`
-- Update DOM directly via refs (no setState)
-- Cancel animation frame on cleanup and when stopping
-
-**Applied in:**
-- `AnimatedPlayhead` - Playhead line position
-- `ChannelWithProgress` - Per-channel progress overlay
-- `AudioPosition` - Time display (ContextualControls)
-- `PlayheadWithMarker` - Custom playhead with triangle marker (ui-components)
-
-**Location:** `packages/browser/src/components/`
+8. **Playlist Loading Detection** - Use `data-playlist-state` attribute and `waveform-playlist:ready` custom event for reliable loading detection in CSS, E2E tests, and external integrations
+9. **Stable React Keys for Tracks/Clips** - Always use `track.id` / `clip.clipId` as React keys, never array indices. Index-based keys cause DOM reuse on removal, breaking `transferControlToOffscreen()` (can only be called once per canvas) and causing stale OffscreenCanvas references.
+10. **Per-Track Maps Must Use Track ID** - Any `Map` storing per-track overrides (render modes, configs) must be keyed by `track.id` (string), not array index. Index keys break when tracks are added/removed.
+11. **Context Value Memoization** - All context value objects in providers must be wrapped with `useMemo`. Extract inline callbacks into `useCallback` first to avoid dependency churn.
+12. **Error Boundary Available** - `PlaylistErrorBoundary` from `@waveform-playlist/ui-components` catches render errors. Uses plain CSS (no styled-components) so it works without ThemeProvider.
+13. **Audio Disconnect Diagnostics** - Use `console.warn('[waveform-playlist] ...')` in catch blocks for audio node disconnect errors, never silently swallow.
+14. **Fetch Cleanup with AbortController** - `useAudioTracks` uses AbortController to cancel in-flight fetches on cleanup. Follow this pattern for any fetch in useEffect. For per-item abort (e.g., removing one loading track), use `Map<id, AbortController>` instead of `Set<AbortController>`.
+15. **Derive Render Guards from Props, Not Effect State** - Don't use effect-set state (e.g., `audioBuffers`) in render guards. Effect state lags props by one+ renders, causing content to flash/disappear. Compute values synchronously from props instead.
+16. **Copy Refs in useEffect Body** - When accessing a ref in `useEffect` cleanup, copy `.current` to a local variable inside the effect body. ESLint's `react-hooks/exhaustive-deps` rule flags refs that may change between render and cleanup.
+17. **Refs from Custom Hooks in Dep Arrays** - When a `useRef` is returned from a custom hook, ESLint's `exhaustive-deps` can't trace its stability. Include it in the dep array (harmless, never triggers) rather than using `eslint-disable-next-line` which would mask real missing dependencies.
 
 ---
 
@@ -830,4 +333,18 @@ useEffect(() => {
 
 ---
 
-**Last Updated:** 2025-11-26
+## Per-Package Documentation
+
+Package-specific conventions, architecture, and patterns live in each package's own CLAUDE.md:
+
+- `packages/engine/CLAUDE.md` — PlaylistEngine, PlayoutAdapter, operations
+- `packages/playout/CLAUDE.md` — Tone.js adapter, AudioContext, ToneTrack internals
+- `packages/browser/CLAUDE.md` — Hooks architecture, effects, animation, context providers
+- `packages/ui-components/CLAUDE.md` — Theming, virtual scrolling, ClipViewportOrigin
+- `packages/recording/CLAUDE.md` — AudioWorklets, Firefox compat, VU meter, mic access
+- `packages/annotations/CLAUDE.md` — Integration context, annotation provider pattern
+- `packages/spectrogram/CLAUDE.md` — Integration context, SpectrogramChannel index
+
+---
+
+**Last Updated:** 2026-02-28
