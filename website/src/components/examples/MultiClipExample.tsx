@@ -310,7 +310,7 @@ export function MultiClipExample() {
       theme={theme}
       timescale
       barWidth={4}
-      barGap={2}
+      barGap={0}
     >
       <PlaylistWithDrag tracks={tracks} onTracksChange={setTracks} loading={loading} loadedCount={loadedCount} totalCount={audioFiles.length} />
     </WaveformPlaylistProvider>

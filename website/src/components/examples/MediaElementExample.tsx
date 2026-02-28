@@ -221,7 +221,7 @@ export function MediaElementExample() {
         waveHeight={120}
         theme={theme}
         barWidth={2}
-        barGap={1}
+        barGap={0}
       >
         <PlaybackControls />
         <MediaElementWaveform />
