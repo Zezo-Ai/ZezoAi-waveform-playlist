@@ -9,6 +9,7 @@ import {
   useVisibleChunkIndices,
   ScrollViewportProvider,
 } from './ScrollViewport';
+import { ClipViewportOriginProvider, useClipViewportOrigin } from './ClipViewportOrigin';
 export type { ScrollViewport } from './ScrollViewport';
 
 export {
@@ -26,4 +27,6 @@ export {
   useScrollViewportSelector,
   useVisibleChunkIndices,
   ScrollViewportProvider,
+  ClipViewportOriginProvider,
+  useClipViewportOrigin,
 };

@@ -2,6 +2,7 @@ import React, { FunctionComponent, useLayoutEffect, useRef, useEffect } from 're
 import styled from 'styled-components';
 import type { SpectrogramData } from '@waveform-playlist/core';
 import { useVisibleChunkIndices } from '../contexts/ScrollViewport';
+import { useClipViewportOrigin } from '../contexts/ClipViewportOrigin';
 import { useChunkedCanvasRefs } from '../hooks/useChunkedCanvasRefs';
 import { MAX_CANVAS_WIDTH } from '@waveform-playlist/core';
 const LINEAR_FREQUENCY_SCALE = (f: number, minF: number, maxF: number) =>
@@ -120,8 +121,9 @@ export const SpectrogramChannel: FunctionComponent<SpectrogramChannelProps> = ({
 
   // Track whether we're in worker mode (canvas transferred)
   const isWorkerMode = !!(workerApi && clipId);
+  const clipOriginX = useClipViewportOrigin();
 
-  const visibleChunkIndices = useVisibleChunkIndices(length, MAX_CANVAS_WIDTH);
+  const visibleChunkIndices = useVisibleChunkIndices(length, MAX_CANVAS_WIDTH, clipOriginX);
 
   const lut = colorLUT ?? DEFAULT_COLOR_LUT;
   const maxF = maxFrequency ?? (data ? data.sampleRate / 2 : 22050);

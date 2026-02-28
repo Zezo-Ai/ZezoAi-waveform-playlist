@@ -158,8 +158,15 @@ export function useScrollViewportSelector<T>(selector: (viewport: ScrollViewport
  *
  * @param totalWidth Total width in CSS pixels of the content being chunked.
  * @param chunkWidth Width of each chunk in CSS pixels (typically MAX_CANVAS_WIDTH, 1000).
+ * @param originX Pixel offset of this content's origin within the global scroll container.
+ *   Clips not starting at position 0 must provide their left offset so chunk visibility
+ *   is computed in global viewport coordinates. Defaults to 0 (e.g., TimeScale).
  */
-export function useVisibleChunkIndices(totalWidth: number, chunkWidth: number): number[] {
+export function useVisibleChunkIndices(
+  totalWidth: number,
+  chunkWidth: number,
+  originX: number = 0
+): number[] {
   const visibleChunkKey = useScrollViewportSelector((viewport) => {
     const totalChunks = Math.ceil(totalWidth / chunkWidth);
     const indices: number[] = [];
@@ -169,8 +176,10 @@ export function useVisibleChunkIndices(totalWidth: number, chunkWidth: number): 
       const thisChunkWidth = Math.min(totalWidth - chunkLeft, chunkWidth);
 
       if (viewport) {
-        const chunkEnd = chunkLeft + thisChunkWidth;
-        if (chunkEnd <= viewport.visibleStart || chunkLeft >= viewport.visibleEnd) {
+        // Convert local chunk coordinates to global viewport space
+        const chunkLeftGlobal = originX + chunkLeft;
+        const chunkEndGlobal = chunkLeftGlobal + thisChunkWidth;
+        if (chunkEndGlobal <= viewport.visibleStart || chunkLeftGlobal >= viewport.visibleEnd) {
           continue;
         }
       }

@@ -8,6 +8,7 @@ import {
   waveformColorToCss,
 } from '../wfpl-theme';
 import { useVisibleChunkIndices } from '../contexts/ScrollViewport';
+import { useClipViewportOrigin } from '../contexts/ClipViewportOrigin';
 import { useChunkedCanvasRefs } from '../hooks/useChunkedCanvasRefs';
 import { MAX_CANVAS_WIDTH } from '@waveform-playlist/core';
 
@@ -128,8 +129,9 @@ export const Channel: FunctionComponent<ChannelProps> = (props) => {
     drawMode = 'inverted',
   } = props;
   const { canvasRef, canvasMapRef } = useChunkedCanvasRefs();
+  const clipOriginX = useClipViewportOrigin();
 
-  const visibleChunkIndices = useVisibleChunkIndices(length, MAX_CANVAS_WIDTH);
+  const visibleChunkIndices = useVisibleChunkIndices(length, MAX_CANVAS_WIDTH, clipOriginX);
 
   // Draw waveform bars on visible canvas chunks.
   // visibleChunkIndices changes only when chunks mount/unmount, not on every scroll pixel.
