@@ -609,6 +609,51 @@ Catches render errors in child components. Uses plain CSS (works without ThemePr
 
 ---
 
+## Virtual Scrolling (@waveform-playlist/ui-components)
+
+Viewport-aware canvas rendering — only mounts canvas chunks visible in the scroll container plus a 1.5x overscan buffer.
+
+```typescript
+// ScrollViewport — viewport state
+interface ScrollViewport {
+  scrollLeft: number;
+  containerWidth: number;
+  visibleStart: number;  // Left edge including overscan buffer
+  visibleEnd: number;    // Right edge including overscan buffer
+}
+
+// ScrollViewportProvider — wraps scrollable container
+interface ScrollViewportProviderProps {
+  containerRef: React.RefObject<HTMLElement | null>;
+  children: React.ReactNode;
+}
+const ScrollViewportProvider: React.FC<ScrollViewportProviderProps>;
+
+// useScrollViewport — full viewport state (re-renders on every scroll update)
+function useScrollViewport(): ScrollViewport | null;
+
+// useScrollViewportSelector — fine-grained subscription (re-renders only when selector result changes)
+function useScrollViewportSelector<T>(selector: (viewport: ScrollViewport | null) => T): T;
+
+// useVisibleChunkIndices — which canvas chunks are visible
+// originX converts local chunk coords to global viewport space (for clips not at position 0)
+function useVisibleChunkIndices(totalWidth: number, chunkWidth: number, originX?: number): number[];
+
+// ClipViewportOriginProvider — provides clip's pixel offset to descendant Channel/SpectrogramChannel
+interface ClipViewportOriginProviderProps {
+  originX: number;       // Clip's pixel-space left offset within the timeline
+  children: React.ReactNode;
+}
+const ClipViewportOriginProvider: React.FC<ClipViewportOriginProviderProps>;
+
+// useClipViewportOrigin — read clip's pixel offset (defaults to 0 outside provider)
+function useClipViewportOrigin(): number;
+```
+
+Used internally by `Channel`, `SpectrogramChannel`, and `TimeScale`. Returns `null` without provider (backwards compatible).
+
+---
+
 ## Spectrogram (@waveform-playlist/spectrogram)
 
 Spectrogram is an **optional** package. Integrate via `SpectrogramProvider`:
