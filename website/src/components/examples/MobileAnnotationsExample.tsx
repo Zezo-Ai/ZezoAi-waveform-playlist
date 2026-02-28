@@ -419,7 +419,7 @@ export function MobileAnnotationsExample() {
       theme={theme}
       timescale
       barWidth={4}
-      barGap={2}
+      barGap={0}
       annotationList={{
         annotations: annotations,
         editable: true,

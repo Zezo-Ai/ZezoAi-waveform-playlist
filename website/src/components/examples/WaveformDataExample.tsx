@@ -239,7 +239,7 @@ export function WaveformDataExample() {
         theme={theme}
         timescale
         barWidth={4}
-        barGap={2}
+        barGap={0}
       >
         <Controls>
           <ControlGroup>

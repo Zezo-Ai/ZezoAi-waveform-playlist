@@ -70,7 +70,7 @@ export function StereoExample() {
       samplesPerPixel={1000}
       theme={theme}
       barWidth={2}
-      barGap={1}
+      barGap={0}
       controls={{ show: true, width: 200 }}
     >
       <Controls>

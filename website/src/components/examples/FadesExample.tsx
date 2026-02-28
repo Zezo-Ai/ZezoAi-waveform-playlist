@@ -111,7 +111,7 @@ function FadePlayer({ fadeType, title, description }: FadePlayerProps) {
     <FadeCard>
       <FadeTitle>{title}</FadeTitle>
       <FadeDescription>{description}</FadeDescription>
-      <WaveformPlaylistProvider tracks={tracks} samplesPerPixel={512} mono theme={theme} barWidth={4} barGap={2}>
+      <WaveformPlaylistProvider tracks={tracks} samplesPerPixel={512} mono theme={theme} barWidth={4} barGap={0}>
         <Controls>
           <PlayButton />
           <PauseButton />

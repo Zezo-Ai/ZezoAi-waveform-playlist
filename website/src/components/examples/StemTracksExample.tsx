@@ -131,7 +131,7 @@ export function StemTracksExample() {
         theme={theme}
         timescale
         barWidth={4}
-        barGap={2}
+        barGap={0}
       >
         <PlaybackShortcuts />
         <Controls>
