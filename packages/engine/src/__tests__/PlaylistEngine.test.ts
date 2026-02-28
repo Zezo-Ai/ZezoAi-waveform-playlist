@@ -145,6 +145,15 @@ describe('PlaylistEngine', () => {
       engine.dispose();
     });
 
+    it('selectTrack does not emit when track unchanged', () => {
+      engine.selectTrack('t1');
+      const listener = vi.fn();
+      engine.on('statechange', listener);
+      engine.selectTrack('t1'); // same track
+      expect(listener).not.toHaveBeenCalled();
+      engine.dispose();
+    });
+
     it('copies input tracks to prevent external mutation', () => {
       const tracks = [makeTrack('t1', [])];
       engine.setTracks(tracks);
@@ -470,6 +479,150 @@ describe('PlaylistEngine', () => {
       // Both listeners were called; the error didn't block the second
       expect(errorListener).toHaveBeenCalledTimes(1);
       expect(goodListener).toHaveBeenCalledTimes(1);
+      engine.dispose();
+    });
+  });
+
+  describe('selection', () => {
+    it('sets selection and emits statechange', () => {
+      const engine = new PlaylistEngine();
+      const listener = vi.fn();
+      engine.on('statechange', listener);
+
+      engine.setSelection(1.5, 3.0);
+      const state = engine.getState();
+      expect(state.selectionStart).toBe(1.5);
+      expect(state.selectionEnd).toBe(3.0);
+      expect(listener).toHaveBeenCalledTimes(1);
+      engine.dispose();
+    });
+
+    it('normalizes start > end so selectionStart <= selectionEnd', () => {
+      const engine = new PlaylistEngine();
+      engine.setSelection(5.0, 2.0);
+      const state = engine.getState();
+      expect(state.selectionStart).toBe(2.0);
+      expect(state.selectionEnd).toBe(5.0);
+      engine.dispose();
+    });
+
+    it('emits when only start changes', () => {
+      const engine = new PlaylistEngine();
+      engine.setSelection(1.0, 3.0);
+      const listener = vi.fn();
+      engine.on('statechange', listener);
+
+      engine.setSelection(1.5, 3.0);
+      expect(listener).toHaveBeenCalledTimes(1);
+      const state = engine.getState();
+      expect(state.selectionStart).toBe(1.5);
+      expect(state.selectionEnd).toBe(3.0);
+      engine.dispose();
+    });
+
+    it('does not emit when selection unchanged', () => {
+      const engine = new PlaylistEngine();
+      engine.setSelection(1.0, 2.0);
+      const listener = vi.fn();
+      engine.on('statechange', listener);
+
+      engine.setSelection(1.0, 2.0);
+      expect(listener).not.toHaveBeenCalled();
+      engine.dispose();
+    });
+  });
+
+  describe('loop region', () => {
+    it('sets loop region and emits statechange', () => {
+      const engine = new PlaylistEngine();
+      const listener = vi.fn();
+      engine.on('statechange', listener);
+
+      engine.setLoopRegion(2.0, 5.0);
+      const state = engine.getState();
+      expect(state.loopStart).toBe(2.0);
+      expect(state.loopEnd).toBe(5.0);
+      expect(listener).toHaveBeenCalledTimes(1);
+      engine.dispose();
+    });
+
+    it('normalizes start > end so loopStart <= loopEnd', () => {
+      const engine = new PlaylistEngine();
+      engine.setLoopRegion(8.0, 3.0);
+      const state = engine.getState();
+      expect(state.loopStart).toBe(3.0);
+      expect(state.loopEnd).toBe(8.0);
+      engine.dispose();
+    });
+
+    it('does not emit when loop region unchanged', () => {
+      const engine = new PlaylistEngine();
+      engine.setLoopRegion(1.0, 3.0);
+      const listener = vi.fn();
+      engine.on('statechange', listener);
+
+      engine.setLoopRegion(1.0, 3.0);
+      expect(listener).not.toHaveBeenCalled();
+      engine.dispose();
+    });
+
+    it('sets loop enabled and emits statechange', () => {
+      const engine = new PlaylistEngine();
+      const listener = vi.fn();
+      engine.on('statechange', listener);
+
+      engine.setLoopEnabled(true);
+      expect(engine.getState().isLoopEnabled).toBe(true);
+      expect(listener).toHaveBeenCalledTimes(1);
+      engine.dispose();
+    });
+
+    it('does not emit when loop enabled unchanged', () => {
+      const engine = new PlaylistEngine();
+      const listener = vi.fn();
+      engine.on('statechange', listener);
+
+      engine.setLoopEnabled(false); // default is false
+      expect(listener).not.toHaveBeenCalled();
+      engine.dispose();
+    });
+  });
+
+  describe('master volume', () => {
+    it('stores value, delegates to adapter, and emits statechange', () => {
+      const adapter = createMockAdapter();
+      const engine = new PlaylistEngine({ adapter });
+      const listener = vi.fn();
+      engine.on('statechange', listener);
+
+      engine.setMasterVolume(0.75);
+      expect(engine.getState().masterVolume).toBe(0.75);
+      expect(adapter.setMasterVolume).toHaveBeenCalledWith(0.75);
+      expect(listener).toHaveBeenCalledTimes(1);
+      engine.dispose();
+    });
+
+    it('does not emit when volume unchanged', () => {
+      const engine = new PlaylistEngine();
+      const listener = vi.fn();
+      engine.on('statechange', listener);
+
+      engine.setMasterVolume(1.0); // default is 1.0
+      expect(listener).not.toHaveBeenCalled();
+      engine.dispose();
+    });
+  });
+
+  describe('getState defaults', () => {
+    it('includes all new fields with correct defaults', () => {
+      const engine = new PlaylistEngine();
+      const state = engine.getState();
+      expect(state.selectionStart).toBe(0);
+      expect(state.selectionEnd).toBe(0);
+      expect(state.masterVolume).toBe(1.0);
+      expect(state.loopStart).toBe(0);
+      expect(state.loopEnd).toBe(0);
+      expect(state.isLoopEnabled).toBe(false);
       engine.dispose();
     });
   });
