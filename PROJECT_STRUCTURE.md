@@ -125,7 +125,10 @@ const clip = createClipFromSeconds({
   │   ├── Selection.tsx
   │   ├── AnnotationBox.tsx
   │   └── TrackControls/
-  ├── contexts/          # React contexts (theme, playlist info, playout, scroll viewport)
+  ├── contexts/          # React contexts
+  │   ├── ScrollViewport.tsx    # Virtual scrolling: viewport state, chunk visibility
+  │   ├── ClipViewportOrigin.tsx # Clip pixel offset for correct chunk culling
+  │   └── ...                   # Theme, playlist info, playout contexts
   ├── utils/             # Utilities (time formatting, conversions)
   ├── styled/            # Shared styled components
   │   ├── CheckboxStyles.tsx  # Checkbox, label, wrapper
@@ -186,6 +189,13 @@ const clip = createClipFromSeconds({
   - `AutomaticScrollCheckbox` - Auto-scroll toggle
   - `TrackMenu` - Per-track dropdown menu
   - `TrackControls/` - Mute, solo, volume, pan controls
+- **Virtual Scrolling:**
+  - `ScrollViewportProvider` wraps the scrollable container, tracks scroll position via `useSyncExternalStore` with RAF-throttled listener + ResizeObserver
+  - `useScrollViewport()` returns full viewport state; `useScrollViewportSelector()` for fine-grained subscriptions
+  - `useVisibleChunkIndices(totalWidth, chunkWidth, originX?)` returns memoized array of visible chunk indices. `originX` converts local chunk coordinates to global viewport space
+  - `ClipViewportOriginProvider` wraps each clip's channels, supplying the clip's pixel `left` offset. Without it, clips not at position 0 get incorrect chunk culling
+  - 1.5x viewport overscan buffer on each side; 100px scroll threshold skips updates that won't affect chunk visibility
+  - Components affected: `TimeScale`, `Channel`, `SpectrogramChannel` — all use absolute positioning (`left: chunkIndex * 1000px`)
 
 #### `@waveform-playlist/browser`
 
