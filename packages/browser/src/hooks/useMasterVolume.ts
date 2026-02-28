@@ -1,8 +1,8 @@
 import { useState, useCallback, RefObject } from 'react';
-import { TonePlayout } from '@waveform-playlist/playout';
+import type { PlaylistEngine } from '@waveform-playlist/engine';
 
 export interface UseMasterVolumeProps {
-  playoutRef: RefObject<TonePlayout | null>;
+  engineRef: RefObject<PlaylistEngine | null>;
   initialVolume?: number; // 0-1.0 (linear gain, consistent with Web Audio API)
   onVolumeChange?: (volume: number) => void;
 }
@@ -18,7 +18,7 @@ export interface MasterVolumeControls {
  * @example
  * ```tsx
  * const { masterVolume, setMasterVolume } = useMasterVolume({
- *   playoutRef,
+ *   engineRef,
  *   initialVolume: 1.0,
  * });
  *
@@ -29,7 +29,7 @@ export interface MasterVolumeControls {
  * ```
  */
 export function useMasterVolume({
-  playoutRef,
+  engineRef,
   initialVolume = 1.0,
   onVolumeChange,
 }: UseMasterVolumeProps): MasterVolumeControls {
@@ -39,15 +39,15 @@ export function useMasterVolume({
     (volume: number) => {
       setMasterVolumeState(volume);
 
-      // Update the playout with linear gain (0-1.0 range)
-      if (playoutRef.current) {
-        playoutRef.current.setMasterGain(volume);
+      // Update the engine with linear gain (0-1.0 range)
+      if (engineRef.current) {
+        engineRef.current.setMasterVolume(volume);
       }
 
       // Call optional callback
       onVolumeChange?.(volume);
     },
-    [playoutRef, onVolumeChange]
+    [engineRef, onVolumeChange]
   );
 
   return {

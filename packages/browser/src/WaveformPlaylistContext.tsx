@@ -10,16 +10,12 @@ import React, {
 } from 'react';
 import { ThemeProvider } from 'styled-components';
 import {
-  TonePlayout,
+  createToneAdapter,
   type EffectsFunction,
   type TrackEffectsFunction,
 } from '@waveform-playlist/playout';
-import {
-  type Track,
-  type ClipTrack,
-  type Fade,
-  type AnnotationAction,
-} from '@waveform-playlist/core';
+import { PlaylistEngine } from '@waveform-playlist/engine';
+import { type ClipTrack, type Fade, type AnnotationAction } from '@waveform-playlist/core';
 import {
   type TimeFormat,
   type WaveformPlaylistTheme,
@@ -154,7 +150,7 @@ export interface PlaylistDataContextValue {
   timeScaleHeight: number;
   minimumPlaylistHeight: number;
   controls: { show: boolean; width: number };
-  playoutRef: React.RefObject<TonePlayout | null>;
+  playoutRef: React.RefObject<PlaylistEngine | null>;
   samplesPerPixel: number;
   timeFormat: TimeFormat;
   masterVolume: number;
@@ -279,7 +275,10 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const [isReady, setIsReady] = useState(false);
 
   // Refs
-  const playoutRef = useRef<TonePlayout | null>(null);
+  // Engine's internal state (currentTime, isPlaying) is NOT read —
+  // React state (currentTimeRef, isPlaying state) is the source of truth.
+  // Engine also runs its own RAF time-update loop during playback (harmless overhead).
+  const engineRef = useRef<PlaylistEngine | null>(null);
   const playStartPositionRef = useRef<number>(0);
   const currentTimeRef = useRef<number>(0);
   const tracksRef = useRef<ClipTrack[]>(tracks);
@@ -302,7 +301,10 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const { timeFormat, setTimeFormat, formatTime } = useTimeFormat();
   const zoom = useZoomControls({ initialSamplesPerPixel, zoomLevels });
   const samplesPerPixel = zoom.samplesPerPixel;
-  const { masterVolume, setMasterVolume } = useMasterVolume({ playoutRef, initialVolume: 1.0 });
+  const { masterVolume, setMasterVolume } = useMasterVolume({
+    engineRef,
+    initialVolume: 1.0,
+  });
   const { animationFrameRef, startAnimationFrameLoop, stopAnimationFrameLoop } =
     useAnimationFrameLoop();
 
@@ -409,9 +411,9 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       setDuration(0);
       setTrackStates([]);
       setPeaksDataArray([]);
-      if (playoutRef.current) {
-        playoutRef.current.dispose();
-        playoutRef.current = null;
+      if (engineRef.current) {
+        engineRef.current.dispose();
+        engineRef.current = null;
       }
       return;
     }
@@ -421,8 +423,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     const resumePosition = currentTimeRef.current;
 
     // Stop current playback and animation before disposing
-    if (playoutRef.current && wasPlaying) {
-      playoutRef.current.stop();
+    if (engineRef.current && wasPlaying) {
+      engineRef.current.stop();
       stopAnimationFrameLoop();
       // Mark that we need to resume playback after playout is rebuilt
       pendingResumeRef.current = { position: resumePosition };
@@ -476,72 +478,30 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
           }));
         });
 
-        // Dispose old playout before creating new one
-        if (playoutRef.current) {
-          playoutRef.current.dispose();
+        // Dispose old engine before creating new one
+        if (engineRef.current) {
+          engineRef.current.dispose();
         }
 
-        // Create playout with clips
-        const playout = new TonePlayout({
-          effects,
-        });
+        // Create engine with Tone.js adapter
+        const adapter = createToneAdapter({ effects });
+        const engine = new PlaylistEngine({ adapter });
 
-        // For each track, create a ToneTrack with all clips
-        // Use trackStatesRef for current UI state (mute/solo/volume/pan) instead of track props
+        // Merge current UI state into tracks before passing to engine
         const currentTrackStates = trackStatesRef.current;
-        tracks.forEach((track, index) => {
-          // Filter to only clips with audioBuffer (peaks-only clips can't be played)
-          const playableClips = track.clips.filter((clip) => clip.audioBuffer);
-
-          if (playableClips.length > 0) {
-            // Calculate track start and end times from clips (converting samples to seconds)
-            // Use clip.sampleRate which is always defined
-            const sampleRate = playableClips[0].sampleRate;
-            const startTime = Math.min(...playableClips.map((c) => c.startSample / sampleRate));
-            const endTime = Math.max(
-              ...playableClips.map((c) => (c.startSample + c.durationSamples) / sampleRate)
-            );
-
-            // Use current UI state if available, otherwise fall back to track props
-            const trackState = currentTrackStates[index];
-            const trackObj: Track = {
-              id: track.id,
-              name: track.name,
-              gain: trackState?.volume ?? track.volume,
-              muted: trackState?.muted ?? track.muted,
-              soloed: trackState?.soloed ?? track.soloed,
-              stereoPan: trackState?.pan ?? track.pan,
-              startTime,
-              endTime,
-            };
-
-            // Convert ClipTrack clips to ToneTrack ClipInfo format
-            // Note: ClipInfo.startTime is relative to track start, not absolute timeline
-            const clipInfos = playableClips.map((clip) => {
-              const clipSampleRate = clip.sampleRate;
-              return {
-                buffer: clip.audioBuffer!, // We filtered for audioBuffer above
-                startTime: clip.startSample / clipSampleRate - startTime, // Make relative to track start
-                duration: clip.durationSamples / clipSampleRate,
-                offset: clip.offsetSamples / clipSampleRate,
-                fadeIn: clip.fadeIn,
-                fadeOut: clip.fadeOut,
-                gain: clip.gain,
-              };
-            });
-
-            playout.addTrack({
-              clips: clipInfos,
-              track: trackObj,
-              effects: track.effects, // Pass track effects
-            });
-          }
+        const tracksWithState = tracks.map((track, index) => {
+          const trackState = currentTrackStates[index];
+          return {
+            ...track,
+            volume: trackState?.volume ?? track.volume,
+            muted: trackState?.muted ?? track.muted,
+            soloed: trackState?.soloed ?? track.soloed,
+            pan: trackState?.pan ?? track.pan,
+          };
         });
 
-        // Apply solo muting after all tracks are added
-        playout.applyInitialSoloState();
-
-        playoutRef.current = playout;
+        engine.setTracks(tracksWithState);
+        engineRef.current = engine;
         setIsReady(true);
 
         // Dispatch custom event for external listeners
@@ -563,8 +523,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
     return () => {
       stopAnimationFrameLoop();
-      if (playoutRef.current) {
-        playoutRef.current.dispose();
+      if (engineRef.current) {
+        engineRef.current.dispose();
       }
     };
   }, [tracks, onReady, isPlaying, effects, stopAnimationFrameLoop]);
@@ -680,8 +640,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
             );
             if (activeAnnotation && time >= activeAnnotation.end) {
               // Stop playback at end of current annotation
-              if (playoutRef.current) {
-                playoutRef.current.stop();
+              if (engineRef.current) {
+                engineRef.current.stop();
               }
               setIsPlaying(false);
               currentTimeRef.current = playStartPositionRef.current;
@@ -716,8 +676,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       // Check if we've reached the playback end time (for selection playback)
       if (playbackEndTimeRef.current !== null && time >= playbackEndTimeRef.current) {
         // Stop playback at selection end (selection playback is separate from looping)
-        if (playoutRef.current) {
-          playoutRef.current.stop();
+        if (engineRef.current) {
+          engineRef.current.stop();
         }
         setIsPlaying(false);
         currentTimeRef.current = playbackEndTimeRef.current;
@@ -734,7 +694,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         // Check if we've reached or passed the loop end point
         if (time >= loopEndRef.current) {
           // Loop: restart from loop start
-          playoutRef.current?.stop();
+          engineRef.current?.stop();
 
           const context = getContext();
           const timeNow = context.currentTime;
@@ -743,7 +703,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
           currentTimeRef.current = loopStartRef.current;
 
           // Restart playback from loop start (no duration limit - will loop again when reaching loop end)
-          playoutRef.current?.play(timeNow, loopStartRef.current);
+          // Fire-and-forget: adapter.init() is already resolved after first play, so this is synchronous in practice
+          engineRef.current?.play(loopStartRef.current);
 
           // Continue animation loop
           startAnimationFrameLoop(updateTime);
@@ -753,8 +714,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
       if (time >= duration) {
         // Stop playback - inline to avoid circular dependency
-        if (playoutRef.current) {
-          playoutRef.current.stop();
+        if (engineRef.current) {
+          engineRef.current.stop();
         }
         setIsPlaying(false);
         currentTimeRef.current = playStartPositionRef.current;
@@ -781,21 +742,15 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   // and removes duration limits when switching to continuous play
   useEffect(() => {
     const reschedulePlayback = async () => {
-      if (isPlaying && animationFrameRef.current && playoutRef.current) {
+      if (isPlaying && animationFrameRef.current && engineRef.current) {
         // When toggling continuous play ON, reschedule playout without duration limit
         // so audio continues past the current annotation boundary
         if (continuousPlay) {
           const currentPos = currentTimeRef.current;
 
           // Stop current playout (which may have duration limit + pause callback)
-          playoutRef.current.stop();
+          engineRef.current.stop();
           stopAnimationLoop();
-
-          // Initialize and restart from current position without duration limit
-          await playoutRef.current.init();
-
-          // Clear any existing playback complete callback
-          playoutRef.current.setOnPlaybackComplete(() => {});
 
           const context = getContext();
           const timeNow = context.currentTime;
@@ -803,7 +758,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
           audioStartPositionRef.current = currentPos;
 
           // Play without duration - will play to end of track
-          playoutRef.current.play(timeNow, currentPos);
+          await engineRef.current.play(currentPos);
           startAnimationLoop();
         } else {
           // Just restart animation loop for continuous play OFF
@@ -819,19 +774,16 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   // Resume playback after tracks change (e.g., after splitting a clip during playback)
   useEffect(() => {
     const resumePlayback = async () => {
-      if (pendingResumeRef.current && playoutRef.current) {
+      if (pendingResumeRef.current && engineRef.current) {
         const { position } = pendingResumeRef.current;
         pendingResumeRef.current = null;
-
-        await playoutRef.current.init();
-        playoutRef.current.setOnPlaybackComplete(() => {});
 
         const context = getContext();
         const timeNow = context.currentTime;
         playbackStartTimeRef.current = timeNow;
         audioStartPositionRef.current = position;
 
-        playoutRef.current.play(timeNow, position);
+        await engineRef.current.play(position);
         setIsPlaying(true);
         startAnimationLoop();
       }
@@ -843,9 +795,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   // Playback controls
   const play = useCallback(
     async (startTime?: number, playDuration?: number) => {
-      if (!playoutRef.current || audioBuffers.length === 0) return;
-
-      await playoutRef.current.init();
+      if (!engineRef.current || audioBuffers.length === 0) return;
 
       const actualStartTime = startTime ?? currentTimeRef.current;
       playStartPositionRef.current = actualStartTime;
@@ -854,12 +804,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       // This ensures the animation loop starts from the correct position
       currentTimeRef.current = actualStartTime;
 
-      // Clear any existing playback complete callback before stopping
-      // Otherwise stopping will trigger the old callback and interfere with new playback
-      playoutRef.current.setOnPlaybackComplete(() => {});
-
       // Stop any existing playback and animation loop before starting
-      playoutRef.current.stop();
+      engineRef.current.stop();
       stopAnimationLoop();
 
       // Record timing for accurate position tracking using Tone.js context
@@ -877,7 +823,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       // The animation loop handles stopping at annotation boundaries
       // This avoids callback timing issues when switching between annotations
 
-      playoutRef.current.play(startTimeNow, actualStartTime, playDuration);
+      const endTime = playDuration !== undefined ? actualStartTime + playDuration : undefined;
+      await engineRef.current.play(actualStartTime, endTime);
       setIsPlaying(true);
       startAnimationLoop();
     },
@@ -885,13 +832,13 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   );
 
   const pause = useCallback(() => {
-    if (!playoutRef.current) return;
+    if (!engineRef.current) return;
 
     // Calculate exact pause position using context.currentTime timing
     const elapsed = getContext().currentTime - playbackStartTimeRef.current;
     const pauseTime = audioStartPositionRef.current + elapsed;
 
-    playoutRef.current.pause();
+    engineRef.current.pause();
     setIsPlaying(false);
     stopAnimationLoop();
 
@@ -901,9 +848,9 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   }, [stopAnimationLoop]);
 
   const stop = useCallback(() => {
-    if (!playoutRef.current) return;
+    if (!engineRef.current) return;
 
-    playoutRef.current.stop();
+    engineRef.current.stop();
     setIsPlaying(false);
     stopAnimationLoop();
 
@@ -923,8 +870,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       setCurrentTime(clampedTime);
 
       // If currently playing, stop and restart at the new position
-      if (isPlaying && playoutRef.current) {
-        playoutRef.current.stop();
+      if (isPlaying && engineRef.current) {
+        engineRef.current.stop();
         stopAnimationLoop();
         // Use play() which handles all the timing setup
         play(clampedTime);
@@ -943,8 +890,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       newStates[trackIndex] = { ...newStates[trackIndex], muted };
       setTrackStates(newStates);
 
-      if (playoutRef.current) {
-        playoutRef.current.setMute(trackId, muted);
+      if (engineRef.current) {
+        engineRef.current.setTrackMute(trackId, muted);
       }
     },
     [trackStates]
@@ -959,8 +906,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       newStates[trackIndex] = { ...newStates[trackIndex], soloed };
       setTrackStates(newStates);
 
-      if (playoutRef.current) {
-        playoutRef.current.setSolo(trackId, soloed);
+      if (engineRef.current) {
+        engineRef.current.setTrackSolo(trackId, soloed);
       }
     },
     [trackStates]
@@ -975,11 +922,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       newStates[trackIndex] = { ...newStates[trackIndex], volume };
       setTrackStates(newStates);
 
-      if (playoutRef.current) {
-        const toneTrack = playoutRef.current.getTrack(trackId);
-        if (toneTrack) {
-          toneTrack.setVolume(volume);
-        }
+      if (engineRef.current) {
+        engineRef.current.setTrackVolume(trackId, volume);
       }
     },
     [trackStates]
@@ -994,11 +938,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       newStates[trackIndex] = { ...newStates[trackIndex], pan };
       setTrackStates(newStates);
 
-      if (playoutRef.current) {
-        const toneTrack = playoutRef.current.getTrack(trackId);
-        if (toneTrack) {
-          toneTrack.setPan(pan);
-        }
+      if (engineRef.current) {
+        engineRef.current.setTrackPan(trackId, pan);
       }
     },
     [trackStates]
@@ -1006,15 +947,15 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
   // Selection
   const setSelection = useCallback(
-    (start: number, end: number) => {
+    async (start: number, end: number) => {
       setSelectionStart(start);
       setSelectionEnd(end);
       currentTimeRef.current = start;
       setCurrentTime(start);
 
-      if (isPlaying && playoutRef.current) {
-        playoutRef.current.stop();
-        playoutRef.current.play(getContext().currentTime, start);
+      if (isPlaying && engineRef.current) {
+        engineRef.current.stop();
+        await engineRef.current.play(start);
       }
     },
     [isPlaying]
@@ -1200,7 +1141,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       timeScaleHeight,
       minimumPlaylistHeight,
       controls,
-      playoutRef,
+      playoutRef: engineRef,
       samplesPerPixel,
       timeFormat,
       masterVolume,
@@ -1223,7 +1164,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       timeScaleHeight,
       minimumPlaylistHeight,
       controls,
-      playoutRef,
+      engineRef,
       samplesPerPixel,
       timeFormat,
       masterVolume,
