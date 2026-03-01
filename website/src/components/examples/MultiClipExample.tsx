@@ -118,15 +118,17 @@ interface PlaylistWithDragProps {
 }
 
 const PlaylistWithDrag: React.FC<PlaylistWithDragProps> = ({ tracks, onTracksChange, loading, loadedCount, totalCount }) => {
-  const { samplesPerPixel, sampleRate } = usePlaylistData();
+  const { samplesPerPixel, sampleRate, playoutRef, isDraggingRef } = usePlaylistData();
   const { setSelectedTrackId } = usePlaylistControls();
 
   const sensors = useDragSensors();
-  const { onDragStart: handleDragStart, onDragMove, onDragEnd, collisionModifier } = useClipDragHandlers({
+  const { onDragStart: handleDragStart, onDragMove, onDragEnd, onDragCancel, collisionModifier } = useClipDragHandlers({
     tracks,
     onTracksChange,
     samplesPerPixel,
     sampleRate,
+    engineRef: playoutRef,
+    isDraggingRef,
   });
 
   const onDragStart = (event: any) => {
@@ -139,9 +141,9 @@ const PlaylistWithDrag: React.FC<PlaylistWithDragProps> = ({ tracks, onTracksCha
 
   const { splitClipAtPlayhead } = useClipSplitting({
     tracks,
-    onTracksChange,
     sampleRate,
     samplesPerPixel,
+    engineRef: playoutRef,
   });
 
   // Enable default playback shortcuts (0 = rewind to start) plus split shortcut
@@ -162,6 +164,7 @@ const PlaylistWithDrag: React.FC<PlaylistWithDragProps> = ({ tracks, onTracksCha
       onDragStart={onDragStart}
       onDragMove={onDragMove}
       onDragEnd={onDragEnd}
+      onDragCancel={onDragCancel}
       modifiers={[restrictToHorizontalAxis, collisionModifier]}
     >
       <Controls>
@@ -302,6 +305,7 @@ export function MultiClipExample() {
   return (
     <WaveformPlaylistProvider
       tracks={tracks}
+      onTracksChange={setTracks}
       samplesPerPixel={1024}
       mono
       waveHeight={100}

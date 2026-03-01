@@ -41,6 +41,7 @@ export class PlaylistEngine {
   private _loopStart = 0;
   private _loopEnd = 0;
   private _isLoopEnabled = false;
+  private _tracksVersion = 0;
   private _adapter: PlayoutAdapter | null;
   private _animFrameId: number | null = null;
   private _disposed = false;
@@ -67,6 +68,7 @@ export class PlaylistEngine {
   getState(): EngineState {
     return {
       tracks: this._tracks.map((t) => ({ ...t, clips: [...t.clips] })),
+      tracksVersion: this._tracksVersion,
       duration: calculateDuration(this._tracks),
       currentTime: this._currentTime,
       isPlaying: this._isPlaying,
@@ -91,12 +93,14 @@ export class PlaylistEngine {
 
   setTracks(tracks: ClipTrack[]): void {
     this._tracks = [...tracks];
+    this._tracksVersion++;
     this._adapter?.setTracks(this._tracks);
     this._emitStateChange();
   }
 
   addTrack(track: ClipTrack): void {
     this._tracks = [...this._tracks, track];
+    this._tracksVersion++;
     this._adapter?.setTracks(this._tracks);
     this._emitStateChange();
   }
@@ -104,6 +108,7 @@ export class PlaylistEngine {
   removeTrack(trackId: string): void {
     if (!this._tracks.some((t) => t.id === trackId)) return;
     this._tracks = this._tracks.filter((t) => t.id !== trackId);
+    this._tracksVersion++;
     if (this._selectedTrackId === trackId) {
       this._selectedTrackId = null;
     }
@@ -123,10 +128,18 @@ export class PlaylistEngine {
 
   moveClip(trackId: string, clipId: string, deltaSamples: number): void {
     const track = this._tracks.find((t) => t.id === trackId);
-    if (!track) return;
+    if (!track) {
+      console.warn(`[waveform-playlist/engine] moveClip: track "${trackId}" not found`);
+      return;
+    }
 
     const clipIndex = track.clips.findIndex((c: AudioClip) => c.id === clipId);
-    if (clipIndex === -1) return;
+    if (clipIndex === -1) {
+      console.warn(
+        `[waveform-playlist/engine] moveClip: clip "${clipId}" not found in track "${trackId}"`
+      );
+      return;
+    }
 
     const clip = track.clips[clipIndex];
     const sortedClips = sortClipsByTime(track.clips);
@@ -149,20 +162,36 @@ export class PlaylistEngine {
       return { ...t, clips: newClips };
     });
 
+    this._tracksVersion++;
+    this._adapter?.setTracks(this._tracks);
     this._emitStateChange();
   }
 
   splitClip(trackId: string, clipId: string, atSample: number): void {
     const track = this._tracks.find((t) => t.id === trackId);
-    if (!track) return;
+    if (!track) {
+      console.warn(`[waveform-playlist/engine] splitClip: track "${trackId}" not found`);
+      return;
+    }
 
     const clipIndex = track.clips.findIndex((c: AudioClip) => c.id === clipId);
-    if (clipIndex === -1) return;
+    if (clipIndex === -1) {
+      console.warn(
+        `[waveform-playlist/engine] splitClip: clip "${clipId}" not found in track "${trackId}"`
+      );
+      return;
+    }
 
     const clip = track.clips[clipIndex];
     const minDuration = Math.floor(DEFAULT_MIN_DURATION_SECONDS * this._sampleRate);
 
-    if (!canSplitAt(clip, atSample, minDuration)) return;
+    if (!canSplitAt(clip, atSample, minDuration)) {
+      console.warn(
+        `[waveform-playlist/engine] splitClip: cannot split clip "${clipId}" at sample ${atSample} ` +
+          `(clip range: ${clip.startSample}–${clip.startSample + clip.durationSamples}, minDuration: ${minDuration})`
+      );
+      return;
+    }
 
     const { left, right } = splitClipOp(clip, atSample);
 
@@ -173,6 +202,8 @@ export class PlaylistEngine {
       return { ...t, clips: newClips };
     });
 
+    this._tracksVersion++;
+    this._adapter?.setTracks(this._tracks);
     this._emitStateChange();
   }
 
@@ -183,10 +214,18 @@ export class PlaylistEngine {
     deltaSamples: number
   ): void {
     const track = this._tracks.find((t) => t.id === trackId);
-    if (!track) return;
+    if (!track) {
+      console.warn(`[waveform-playlist/engine] trimClip: track "${trackId}" not found`);
+      return;
+    }
 
     const clipIndex = track.clips.findIndex((c: AudioClip) => c.id === clipId);
-    if (clipIndex === -1) return;
+    if (clipIndex === -1) {
+      console.warn(
+        `[waveform-playlist/engine] trimClip: clip "${clipId}" not found in track "${trackId}"`
+      );
+      return;
+    }
 
     const clip = track.clips[clipIndex];
     const sortedClips = sortClipsByTime(track.clips);
@@ -222,6 +261,8 @@ export class PlaylistEngine {
       return { ...t, clips: newClips };
     });
 
+    this._tracksVersion++;
+    this._adapter?.setTracks(this._tracks);
     this._emitStateChange();
   }
 

@@ -167,6 +167,9 @@ export interface PlaylistDataContextValue {
   isReady: boolean;
   /** Whether tracks are rendered in mono mode */
   mono: boolean;
+  /** Ref set by useClipDragHandlers during boundary trim drags.
+   *  When true, loadAudio skips engine rebuild — visual updates flow via React state only. */
+  isDraggingRef: React.MutableRefObject<boolean>;
 }
 
 // Create the 4 separate contexts
@@ -207,6 +210,15 @@ export interface WaveformPlaylistProviderProps {
   barGap?: number;
   /** Width in pixels of progress bars. Default: barWidth + barGap (fills gaps). */
   progressBarWidth?: number;
+  /** Callback when engine clip operations (move, trim, split) change tracks.
+   * The provider calls this so the parent can update its tracks state without
+   * triggering a full engine rebuild.
+   *
+   * **Important:** The parent must pass the received `tracks` reference back as
+   * the `tracks` prop (i.e. `setState(tracks)`). The provider uses reference
+   * identity (`tracks === engineTracksRef.current`) to detect engine-originated
+   * updates and skip the expensive `loadAudio` rebuild. */
+  onTracksChange?: (tracks: ClipTrack[]) => void;
   children: ReactNode;
 }
 
@@ -228,6 +240,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   barWidth = 1,
   barGap = 0,
   progressBarWidth: progressBarWidthProp,
+  onTracksChange,
   children,
 }) => {
   // Default progressBarWidth to barWidth + barGap (fills gaps)
@@ -297,6 +310,22 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const isAutomaticScrollRef = useRef<boolean>(false);
   const continuousPlayRef = useRef<boolean>(annotationList?.isContinuousPlay ?? false);
   const activeAnnotationIdRef = useRef<string | null>(null);
+  // Engine clip operations guard: tracks reference from the last engine statechange.
+  // When engine methods (moveClip, trimClip, splitClip) mutate tracks, the statechange
+  // handler stores state.tracks here and calls onTracksChange with the same reference.
+  // loadAudio checks tracks === engineTracksRef.current to skip the full rebuild.
+  const engineTracksRef = useRef<ClipTrack[] | null>(null);
+  // Monotonic counter from engine.getState().tracksVersion — used to detect
+  // track mutations (move/trim/split/add/remove) vs other statechange events.
+  const lastTracksVersionRef = useRef(0);
+  // Flag set during render to prevent the previous effect cleanup from disposing the
+  // engine when we're skipping the rebuild. React runs previous cleanup before the
+  // current effect body, so the flag must be set during render (which precedes cleanup).
+  const skipEngineDisposeRef = useRef(false);
+  // Set by useClipDragHandlers during boundary trim drags. When true,
+  // loadAudio skips the full engine rebuild — visual updates flow via React
+  // state only. On drag end, engine.trimClip() commits the final delta.
+  const isDraggingRef = useRef(false);
   // Provider-level ref for scroll-position math and animation loop pixel
   // calculation. Distinct from useZoomControls's internal ref (statechange guard).
   const samplesPerPixelRef = useRef<number>(initialSamplesPerPixel);
@@ -336,6 +365,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     selectedTrackId,
     setSelectedTrackId: setSelectedTrackIdControl,
     onEngineState: onSelectedTrackEngineState,
+    selectedTrackIdRef,
   } = useSelectedTrack({ engineRef });
   const { animationFrameRef, startAnimationFrameLoop, stopAnimationFrameLoop } =
     useAnimationFrameLoop();
@@ -380,6 +410,13 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
   tracksRef.current = tracks;
 
+  // Render-phase guard: detect when tracks prop came from an engine clip operation.
+  // Must be set before effects run so the previous effect cleanup can skip disposal.
+  // Also skip disposal during active boundary trim drags — onDragMove updates React
+  // tracks per-frame, triggering effect re-runs whose cleanup would dispose the engine.
+  const isEngineTracks = tracks === engineTracksRef.current;
+  skipEngineDisposeRef.current = isEngineTracks || isDraggingRef.current;
+
   // Adjust scroll position proportionally when zoom changes
   useEffect(() => {
     if (!scrollContainerRef.current || !audioBuffers.length) return;
@@ -411,7 +448,29 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
   // Load audio from clips (only when tracks change)
   useEffect(() => {
-    // Reset ready state when tracks change
+    // Guard: skip full rebuild when tracks came from an engine clip operation
+    // (moveClip, trimClip, splitClip). The engine and adapter already have the
+    // correct tracks — we just need to update duration for the timeline.
+    // Also skip during active boundary trim drags — visual updates flow via
+    // React state only; engine.trimClip() commits the final delta on drag end.
+    if (isEngineTracks || isDraggingRef.current) {
+      if (isEngineTracks) {
+        engineTracksRef.current = null;
+      }
+
+      // Recalculate duration from updated clip positions
+      let maxDuration = 0;
+      tracks.forEach((track) => {
+        track.clips.forEach((clip) => {
+          const clipEnd = (clip.startSample + clip.durationSamples) / clip.sampleRate;
+          maxDuration = Math.max(maxDuration, clipEnd);
+        });
+      });
+      setDuration(maxDuration);
+      return;
+    }
+
+    // Reset ready state for full rebuild
     setIsReady(false);
 
     if (tracks.length === 0) {
@@ -492,6 +551,10 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
           engineRef.current.dispose();
         }
 
+        // Reset tracks version tracking for the new engine
+        lastTracksVersionRef.current = 0;
+        engineTracksRef.current = null;
+
         // Create engine with Tone.js adapter
         const adapter = createToneAdapter({ effects });
         const engine = new PlaylistEngine({
@@ -501,11 +564,12 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         });
 
         // Seed engine with current UI state so a fresh engine doesn't
-        // reset selection/loop to zeros on the first statechange emission.
+        // reset selection/loop/selectedTrack to defaults on the first statechange emission.
         engine.setSelection(selectionStartRef.current ?? 0, selectionEndRef.current ?? 0);
         engine.setLoopRegion(loopStartRef.current ?? 0, loopEndRef.current ?? 0);
         if (isLoopEnabledRef.current) engine.setLoopEnabled(true);
         engine.setMasterVolume(masterVolumeRef.current ?? 1.0);
+        if (selectedTrackIdRef.current) engine.selectTrack(selectedTrackIdRef.current);
 
         // Merge current UI state into tracks before passing to engine
         const currentTrackStates = trackStatesRef.current;
@@ -525,15 +589,37 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         // Seeding statechanges fired above are harmless — they contain values
         // that already match the hooks' current state, so onEngineState()
         // ref guards skip them.
+        // Suppress tracks mirroring during the initial setTracks — the parent
+        // already has these tracks. The flag is local so it becomes false
+        // after setTracks returns (statechange fires synchronously).
+        let suppressTracksMirroring = true;
         engine.on('statechange', (state: EngineState) => {
           onSelectionEngineState(state);
           onLoopEngineState(state);
           onSelectedTrackEngineState(state);
           onZoomEngineState(state);
           onVolumeEngineState(state);
+
+          // Mirror engine tracks changes to parent via onTracksChange.
+          // tracksVersion only increments on track mutations (move, trim, split,
+          // setTracks, addTrack, removeTrack), not on selection/zoom/volume changes.
+          if (!suppressTracksMirroring && state.tracksVersion !== lastTracksVersionRef.current) {
+            lastTracksVersionRef.current = state.tracksVersion;
+            engineTracksRef.current = state.tracks;
+            if (onTracksChange) {
+              onTracksChange(state.tracks);
+            } else {
+              console.warn(
+                '[waveform-playlist] Engine tracks changed but onTracksChange prop is not set — ' +
+                  'UI will revert on next render. Pass onTracksChange to WaveformPlaylistProvider.'
+              );
+            }
+          }
         });
 
         engine.setTracks(tracksWithState);
+        suppressTracksMirroring = false;
+        lastTracksVersionRef.current = engine.getState().tracksVersion;
         engineRef.current = engine;
 
         setIsReady(true);
@@ -556,13 +642,23 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     loadAudio();
 
     return () => {
+      // Skip disposal when the next render's guard will keep the engine alive.
+      // skipEngineDisposeRef is set during the render phase (before this cleanup runs).
+      if (skipEngineDisposeRef.current) {
+        skipEngineDisposeRef.current = false;
+        return;
+      }
       stopAnimationFrameLoop();
       if (engineRef.current) {
         engineRef.current.dispose();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     tracks,
+    // isEngineTracks is intentionally excluded — it's a render-phase guard read
+    // inside the effect body, not a trigger. Including it causes a spurious re-run
+    // when it flips from true→false after engineTracksRef is cleared.
     onReady,
     isPlaying,
     effects,
@@ -572,6 +668,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     onSelectedTrackEngineState,
     onZoomEngineState,
     onVolumeEngineState,
+    onTracksChange,
     masterVolumeRef,
     selectionStartRef,
     selectionEndRef,
@@ -1207,6 +1304,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       progressBarWidth,
       isReady,
       mono,
+      isDraggingRef,
     }),
     [
       duration,
@@ -1230,6 +1328,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       progressBarWidth,
       isReady,
       mono,
+      isDraggingRef,
     ]
   );
 
