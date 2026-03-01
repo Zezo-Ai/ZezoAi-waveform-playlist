@@ -30,6 +30,9 @@ import {
   useTimeFormat,
   useZoomControls,
   useMasterVolume,
+  useSelectionState,
+  useLoopState,
+  useSelectedTrack,
   useAnimationFrameLoop,
   useWaveformDataCache,
 } from './hooks';
@@ -229,6 +232,16 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 }) => {
   // Default progressBarWidth to barWidth + barGap (fills gaps)
   const progressBarWidth = progressBarWidthProp ?? barWidth + barGap;
+
+  // Stabilize zoomLevels reference — inline arrays (e.g. zoomLevels={[256, 512]})
+  // create a new reference every render, which would trigger engine rebuild via
+  // loadAudio deps. Content-based comparison avoids spurious rebuilds.
+  const stableZoomLevels = useMemo(
+    () => zoomLevels,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [zoomLevels?.join(',')]
+  );
+
   // Annotations are derived from prop (single source of truth in parent)
   // In v6, annotations must be pre-parsed (numeric start/end). Use parseAeneas() from @waveform-playlist/annotations before passing.
   const annotations = useMemo(() => {
@@ -260,24 +273,17 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const [audioBuffers, setAudioBuffers] = useState<AudioBuffer[]>([]);
   const [peaksDataArray, setPeaksDataArray] = useState<TrackClipPeaks[]>([]); // Updated for clip-based peaks
   const [trackStates, setTrackStates] = useState<TrackState[]>([]);
-  const [selectionStart, setSelectionStart] = useState(0);
-  const [selectionEnd, setSelectionEnd] = useState(0);
-  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [isAutomaticScroll, setIsAutomaticScroll] = useState(automaticScroll);
   const [continuousPlay, setContinuousPlayState] = useState(
     annotationList?.isContinuousPlay ?? false
   );
   const [linkEndpoints, setLinkEndpoints] = useState(annotationList?.linkEndpoints ?? false);
   const [annotationsEditable, setAnnotationsEditable] = useState(annotationList?.editable ?? false);
-  const [isLoopEnabled, setIsLoopEnabledState] = useState(false);
-  const [loopStart, setLoopStartState] = useState(0);
-  const [loopEnd, setLoopEndState] = useState(0);
   const [isReady, setIsReady] = useState(false);
 
   // Refs
-  // Engine owns selection, loop, and selectedTrackId state.
+  // Engine owns selection, loop, selectedTrackId, zoom, and masterVolume state.
   // React subscribes to engine statechange and mirrors into useState/refs.
-  // masterVolume still uses dual-write (useMasterVolume hook manages React state).
   // Playback timing (currentTime, isPlaying) remains in React for animation loop.
   const engineRef = useRef<PlaylistEngine | null>(null);
   const playStartPositionRef = useRef<number>(0);
@@ -291,29 +297,53 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const isAutomaticScrollRef = useRef<boolean>(false);
   const continuousPlayRef = useRef<boolean>(annotationList?.isContinuousPlay ?? false);
   const activeAnnotationIdRef = useRef<string | null>(null);
+  // Provider-level ref for scroll-position math and animation loop pixel
+  // calculation. Distinct from useZoomControls's internal ref (statechange guard).
   const samplesPerPixelRef = useRef<number>(initialSamplesPerPixel);
-  const isLoopEnabledRef = useRef<boolean>(false);
-  const selectionStartRef = useRef<number>(0);
-  const selectionEndRef = useRef<number>(0);
-  const loopStartRef = useRef<number>(0);
-  const loopEndRef = useRef<number>(0);
-  const selectedTrackIdRef = useRef<string | null>(null);
 
-  // Custom hooks
+  // Custom hooks — engine-owned state delegated to hooks with onEngineState() pattern
   const { timeFormat, setTimeFormat, formatTime } = useTimeFormat();
-  const zoom = useZoomControls({ initialSamplesPerPixel, zoomLevels });
-  const samplesPerPixel = zoom.samplesPerPixel;
-  const { masterVolume, setMasterVolume } = useMasterVolume({
-    engineRef,
-    initialVolume: 1.0,
-  });
+  const zoom = useZoomControls({ engineRef, initialSamplesPerPixel });
+  const { samplesPerPixel, onEngineState: onZoomEngineState } = zoom;
+  const volume = useMasterVolume({ engineRef, initialVolume: 1.0 });
+  const {
+    masterVolume,
+    setMasterVolume,
+    masterVolumeRef,
+    onEngineState: onVolumeEngineState,
+  } = volume;
+  const {
+    selectionStart,
+    selectionEnd,
+    setSelection: setSelectionEngine,
+    selectionStartRef,
+    selectionEndRef,
+    onEngineState: onSelectionEngineState,
+  } = useSelectionState({ engineRef });
+  const {
+    isLoopEnabled,
+    loopStart,
+    loopEnd,
+    setLoopEnabled,
+    setLoopRegion,
+    clearLoopRegion,
+    isLoopEnabledRef,
+    loopStartRef,
+    loopEndRef,
+    onEngineState: onLoopEngineState,
+  } = useLoopState({ engineRef });
+  const {
+    selectedTrackId,
+    setSelectedTrackId: setSelectedTrackIdControl,
+    onEngineState: onSelectedTrackEngineState,
+  } = useSelectedTrack({ engineRef });
   const { animationFrameRef, startAnimationFrameLoop, stopAnimationFrameLoop } =
     useAnimationFrameLoop();
 
   // Worker-based WaveformData cache for fast zoom resampling
   const baseScale = useMemo(
-    () => Math.min(...(zoomLevels ?? [256, 512, 1024, 2048, 4096, 8192])),
-    [zoomLevels]
+    () => Math.min(...(stableZoomLevels ?? [256, 512, 1024, 2048, 4096, 8192])),
+    [stableZoomLevels]
   );
   const { cache: waveformDataCache } = useWaveformDataCache(tracks, baseScale);
 
@@ -330,27 +360,14 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     setActiveAnnotationIdState(value); // Update state (triggers re-render)
   }, []);
 
-  // Delegates to engine — statechange subscription updates state + refs
-  const setLoopEnabled = useCallback((value: boolean) => {
-    engineRef.current?.setLoopEnabled(value);
-  }, []);
-
-  // Delegates to engine — statechange subscription updates state + refs
-  const setLoopRegion = useCallback((start: number, end: number) => {
-    engineRef.current?.setLoopRegion(start, end);
-  }, []);
-
+  // Cross-hook concern: reads selection refs to set loop region
   const setLoopRegionFromSelection = useCallback(() => {
-    const start = selectionStartRef.current;
-    const end = selectionEndRef.current;
+    const start = selectionStartRef.current ?? 0;
+    const end = selectionEndRef.current ?? 0;
     if (start !== end && end > start) {
       setLoopRegion(start, end);
     }
-  }, [setLoopRegion]);
-
-  const clearLoopRegion = useCallback(() => {
-    setLoopRegion(0, 0);
-  }, [setLoopRegion]);
+  }, [setLoopRegion, selectionStartRef, selectionEndRef]);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -477,13 +494,18 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
 
         // Create engine with Tone.js adapter
         const adapter = createToneAdapter({ effects });
-        const engine = new PlaylistEngine({ adapter });
+        const engine = new PlaylistEngine({
+          adapter,
+          samplesPerPixel: samplesPerPixelRef.current,
+          zoomLevels: stableZoomLevels,
+        });
 
         // Seed engine with current UI state so a fresh engine doesn't
         // reset selection/loop to zeros on the first statechange emission.
-        engine.setSelection(selectionStartRef.current, selectionEndRef.current);
-        engine.setLoopRegion(loopStartRef.current, loopEndRef.current);
+        engine.setSelection(selectionStartRef.current ?? 0, selectionEndRef.current ?? 0);
+        engine.setLoopRegion(loopStartRef.current ?? 0, loopEndRef.current ?? 0);
         if (isLoopEnabledRef.current) engine.setLoopEnabled(true);
+        engine.setMasterVolume(masterVolumeRef.current ?? 1.0);
 
         // Merge current UI state into tracks before passing to engine
         const currentTrackStates = trackStatesRef.current;
@@ -498,42 +520,21 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
           };
         });
 
+        // Subscribe to engine statechange BEFORE setTracks() so the first
+        // emission (which carries correct canZoomIn/canZoomOut) is captured.
+        // Seeding statechanges fired above are harmless — they contain values
+        // that already match the hooks' current state, so onEngineState()
+        // ref guards skip them.
+        engine.on('statechange', (state: EngineState) => {
+          onSelectionEngineState(state);
+          onLoopEngineState(state);
+          onSelectedTrackEngineState(state);
+          onZoomEngineState(state);
+          onVolumeEngineState(state);
+        });
+
         engine.setTracks(tracksWithState);
         engineRef.current = engine;
-
-        // Subscribe to engine statechange — engine is the source of truth
-        // for selection, loop, and selectedTrackId. Ref assignments are
-        // synchronous (available to the animation loop immediately);
-        // setState calls are batched by React and applied asynchronously.
-        // Guards skip setState when the field didn't actually change,
-        // avoiding unnecessary re-renders during unrelated engine events
-        // (e.g., clip drags, zoom, play/pause).
-        engine.on('statechange', (state: EngineState) => {
-          if (state.selectionStart !== selectionStartRef.current) {
-            selectionStartRef.current = state.selectionStart;
-            setSelectionStart(state.selectionStart);
-          }
-          if (state.selectionEnd !== selectionEndRef.current) {
-            selectionEndRef.current = state.selectionEnd;
-            setSelectionEnd(state.selectionEnd);
-          }
-          if (state.selectedTrackId !== selectedTrackIdRef.current) {
-            selectedTrackIdRef.current = state.selectedTrackId;
-            setSelectedTrackId(state.selectedTrackId);
-          }
-          if (state.isLoopEnabled !== isLoopEnabledRef.current) {
-            isLoopEnabledRef.current = state.isLoopEnabled;
-            setIsLoopEnabledState(state.isLoopEnabled);
-          }
-          if (state.loopStart !== loopStartRef.current) {
-            loopStartRef.current = state.loopStart;
-            setLoopStartState(state.loopStart);
-          }
-          if (state.loopEnd !== loopEndRef.current) {
-            loopEndRef.current = state.loopEnd;
-            setLoopEndState(state.loopEnd);
-          }
-        });
 
         setIsReady(true);
 
@@ -560,7 +561,25 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         engineRef.current.dispose();
       }
     };
-  }, [tracks, onReady, isPlaying, effects, stopAnimationFrameLoop]);
+  }, [
+    tracks,
+    onReady,
+    isPlaying,
+    effects,
+    stopAnimationFrameLoop,
+    onSelectionEngineState,
+    onLoopEngineState,
+    onSelectedTrackEngineState,
+    onZoomEngineState,
+    onVolumeEngineState,
+    masterVolumeRef,
+    selectionStartRef,
+    selectionEndRef,
+    loopStartRef,
+    loopEndRef,
+    isLoopEnabledRef,
+    stableZoomLevels,
+  ]);
 
   // Regenerate peaks when zoom, mono, or waveformDataCache changes (without reloading audio)
   // Peak sources in priority order:
@@ -720,24 +739,25 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       }
 
       // Audacity-style loop region: loop when cursor enters and reaches end of loop region
-      const hasValidLoopRegion =
-        loopStartRef.current !== loopEndRef.current && loopEndRef.current > loopStartRef.current;
+      const loopS = loopStartRef.current ?? 0;
+      const loopE = loopEndRef.current ?? 0;
+      const hasValidLoopRegion = loopS !== loopE && loopE > loopS;
 
       if (isLoopEnabledRef.current && hasValidLoopRegion) {
         // Check if we've reached or passed the loop end point
-        if (time >= loopEndRef.current) {
+        if (time >= loopE) {
           // Loop: restart from loop start
           engineRef.current?.stop();
 
           const context = getContext();
           const timeNow = context.currentTime;
           playbackStartTimeRef.current = timeNow;
-          audioStartPositionRef.current = loopStartRef.current;
-          currentTimeRef.current = loopStartRef.current;
+          audioStartPositionRef.current = loopS;
+          currentTimeRef.current = loopS;
 
           // Restart playback from loop start (no duration limit - will loop again when reaching loop end)
           // Fire-and-forget: adapter.init() is already resolved after first play, so this is synchronous in practice
-          engineRef.current?.play(loopStartRef.current);
+          engineRef.current?.play(loopS);
 
           // Continue animation loop
           startAnimationFrameLoop(updateTime);
@@ -766,6 +786,9 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     controls.width,
     setActiveAnnotationId,
     startAnimationFrameLoop,
+    isLoopEnabledRef,
+    loopStartRef,
+    loopEndRef,
   ]);
 
   const stopAnimationLoop = stopAnimationFrameLoop;
@@ -978,11 +1001,10 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     [trackStates]
   );
 
-  // Selection — delegates to engine; statechange subscription updates React state + refs.
-  // Also updates currentTime to selection start (playback concern stays in React).
+  // Selection — wraps hook setter with playback side-effects (provider concern).
   const setSelection = useCallback(
     async (start: number, end: number) => {
-      engineRef.current?.setSelection(start, end);
+      setSelectionEngine(start, end);
       currentTimeRef.current = start;
       setCurrentTime(start);
 
@@ -991,13 +1013,8 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         await engineRef.current.play(start);
       }
     },
-    [isPlaying]
+    [isPlaying, setSelectionEngine]
   );
-
-  // Delegates to engine — statechange subscription updates React state
-  const setSelectedTrackIdControl = useCallback((trackId: string | null) => {
-    engineRef.current?.selectTrack(trackId);
-  }, []);
 
   // Memoize setScrollContainer callback
   const setScrollContainer = useCallback((element: HTMLDivElement | null) => {
