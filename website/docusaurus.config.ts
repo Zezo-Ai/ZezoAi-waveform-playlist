@@ -208,9 +208,9 @@ const config: Config = {
 
   themeConfig: {
     announcementBar: {
-      id: 'v7_release',
+      id: 'v8_release',
       content:
-        '🎉 <strong>v7 Released!</strong> — Removed combined context hook; use split hooks (usePlaylistData, usePlaylistControls, usePlaybackAnimation, usePlaylistState) for optimal performance. <a href="/waveform-playlist/docs/api/hooks">See hooks API →</a>',
+        '🎉 <strong>v8 Released!</strong> — Framework-agnostic PlaylistEngine powers all state and playback. Use the engine directly with Svelte, Vue, or vanilla JS. <a href="/waveform-playlist/docs/guides/engine">Engine guide →</a>',
       isCloseable: true,
     },
     // Social card image for Open Graph and Twitter

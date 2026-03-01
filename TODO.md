@@ -34,7 +34,6 @@ Multi-track audio editor roadmap for waveform-playlist.
 
 ### Nice to Have
 
-- [ ] Migration guide from v4
 - [ ] Contributing guidelines
 - [ ] Bundle size monitoring
 - [ ] Performance benchmarks
