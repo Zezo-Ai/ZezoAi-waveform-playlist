@@ -150,6 +150,41 @@ describe('DawEditorElement', () => {
     expect(el.effectiveSampleRate).toBe(44100);
   });
 
+  describe('adapter pluggability', () => {
+    it('throws when _ensureEngine is called without adapter', async () => {
+      const editor = document.createElement('daw-editor') as any;
+      document.body.appendChild(editor);
+      await expect(editor._ensureEngine()).rejects.toThrow('No PlayoutAdapter set');
+      editor.remove();
+    });
+
+    it('audioContext getter throws without adapter', () => {
+      const editor = document.createElement('daw-editor') as any;
+      expect(() => editor.audioContext).toThrow('No PlayoutAdapter set');
+    });
+
+    it('rejects adapter with closed AudioContext', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const editor = document.createElement('daw-editor') as any;
+      editor.adapter = { audioContext: { state: 'closed', sampleRate: 48000 } };
+      expect(editor.adapter).toBeNull();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('already closed'));
+      warnSpy.mockRestore();
+    });
+
+    it('warns when adapter set after engine is built', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const editor = document.createElement('daw-editor') as any;
+      // Simulate engine being built
+      editor._engine = {};
+      editor.adapter = { audioContext: { state: 'running', sampleRate: 48000 } };
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('adapter set after engine is built')
+      );
+      warnSpy.mockRestore();
+    });
+  });
+
   it('passes eager-resume="document" to controller target', async () => {
     const docSpy = vi.spyOn(document, 'addEventListener');
     const el = document.createElement('daw-editor') as any;

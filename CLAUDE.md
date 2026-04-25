@@ -179,6 +179,8 @@ pnpm publish --filter @waveform-playlist/NEW-PACKAGE --no-git-checks --access pu
 - **Lint**: `pnpm lint` - Prettier check + ESLint across all packages. **Always run before committing.** This is a root-only script; run from repo root or use `pnpm -w lint`. Fix formatting issues with `pnpm format`.
 - **New packages**: After adding a new `packages/*/package.json`, run `pnpm install` and commit `pnpm-lock.yaml`. CI uses `--frozen-lockfile` and will fail if the lockfile is stale.
 - **Dev server**: `pnpm --filter website start` - Docusaurus dev server
+- **Example: dawcore-native**: `pnpm example:dawcore-native` — Vite dev server at localhost:5173
+- **Example: dawcore-tone**: `pnpm example:dawcore-tone` — Vite dev server at localhost:5174
 - **Unit tests**: Run from each package directory with `npx vitest run` (engine, core, playout, ui-components, browser)
 - **Hard refresh**: Always use Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows/Linux) after builds
 - **Vitest cleanup:** `npx vitest run` in pnpm monorepos can leave orphaned Node processes at ~100% CPU. After running tests across multiple packages, verify with `pgrep -f vitest` and kill strays with `pkill -f vitest` if needed.
@@ -270,6 +272,26 @@ interface AudioClip {
 2. Use **Radix UI** or **React Aria** selectively for complex components (headless only)
 3. Build simple components ourselves
 4. Create internal design system with shared theme tokens
+
+### Adapter-Pluggable `<daw-editor>` (Issue #378)
+
+**Decision:** `<daw-editor>` requires an externally-provided `PlayoutAdapter`. No default adapter or AudioContext created.
+
+**Why:** Consumers choose their audio backend — `NativePlayoutAdapter` (native Web Audio, multi-tempo) or `TonePlayoutAdapter` (Tone.js, effects/MIDI). AudioContext owned by the adapter, not the editor.
+
+**Interface:** `PlayoutAdapter` has required `readonly audioContext: AudioContext` and optional `readonly ppqn?: number`. Engine reads `adapter.ppqn` on construction to align tick resolution.
+
+**Breaking changes (dawcore 0.0.x):** `adapter` property required, `transport` getter removed, `audioContext` setter removed, `sample-rate` attribute removed, `@dawcore/transport` is optional peer dep.
+
+### Examples Directory Structure
+
+**Decision:** Standalone Vite examples live in `examples/` at repo root, not inside packages.
+
+**Why:** Decouples examples from package builds. Each example has its own `vite.config.ts` with source aliases. Shares `website/static/` as publicDir for audio assets.
+
+**Structure:**
+- `examples/dawcore-native/` — Web components + NativePlayoutAdapter (moved from `packages/dawcore/dev/`)
+- `examples/dawcore-tone/` — Web components + TonePlayoutAdapter (Tone.js backend)
 
 ### ESLint Baseline (2026-02-13)
 
@@ -365,7 +387,7 @@ const LazyExample = createLazyExample(() =>
 34. **Global AudioContext for Decode** — Use `getGlobalAudioContext()` from `@waveform-playlist/playout` for `decodeAudioData()`. Works while suspended (pre-gesture). Never create a separate AudioContext — the global one is shared with Tone.js and has the correct sample rate.
 35. **Web Component Packages Need `sideEffects: true`** — Packages that call `customElements.define()` at import time are side-effectful. Setting `"sideEffects": false` in package.json causes bundlers to tree-shake bare imports, silently dropping element registrations.
 36. **Detached Elements Cannot Dispatch Bubbling Events** — In `disconnectedCallback`, the element is already removed from the DOM. Events dispatched with `bubbles: true` will not reach ancestor elements. Use MutationObserver on the parent to detect child removal instead.
-37. **effectiveSampleRate Pattern in dawcore** — `<daw-editor>` `sampleRate` `@property` is an initial hint. Internal calculations use `effectiveSampleRate` getter which returns `_resolvedSampleRate ?? sampleRate`. The resolved rate is set from decoded audio buffers. `PointerHandlerHost` and all pixel/time conversions use `effectiveSampleRate`.
+37. **effectiveSampleRate Pattern in dawcore** — `<daw-editor>` `sampleRate` is a derived getter reading from `adapter.audioContext.sampleRate` (or 48000 fallback). Internal calculations use `effectiveSampleRate` getter which returns `_resolvedSampleRate ?? sampleRate`. The resolved rate is set from decoded audio buffers. `PointerHandlerHost` and all pixel/time conversions use `effectiveSampleRate`.
 38. **WaveformData.resample() Only Upsamples** — `WaveformData.resample({ scale })` can only resample to a coarser (larger) scale than the source. Attempting to resample to a finer scale throws. When caching WaveformData, validate `cached.scale <= requestedScale` before returning cache hits.
 39. **Track ID Alignment in dawcore** — `createTrack()` from core generates its own `id` via `generateId()`. The dawcore editor uses a different ID (`<daw-track>.trackId` or `crypto.randomUUID()` for drops) as its map key. Must set `track.id = trackId` after `createTrack()` so engine methods (`setTrackSolo`, `setTrackMute`, etc.) can find the track by ID.
 40. **Prefer `createClip()` Over `createClipFromSeconds()` When Samples Known** — `createClipFromSeconds` round-trips through float seconds: `samples/rate → seconds → Math.round(seconds*rate)`. Safe when the same rate is used for division and multiplication, but drifts silently when rates differ (e.g., `effectiveSampleRate` vs `audioBuffer.sampleRate`). Use `createClip()` with integer samples when available. For tick-based creation (variable-tempo), use `createClipFromTicks()` which sets `startTick` as authoritative and derives `startSample`.
@@ -377,14 +399,15 @@ const LazyExample = createLazyExample(() =>
 46. **`createClipFromSeconds` Supports Peaks-First Rendering** — `audioBuffer` is optional. Provide `waveformData` (from `waveform-data.js`) + `sampleRate` + `sourceDuration` instead. This enables rendering waveforms before audio decode completes. The `WaveformDataObject` interface in `@waveform-playlist/core` defines the required shape.
 47. **Opus Always Encodes at 48000 Hz** — Per spec, Opus resamples all input to 48000 Hz. This makes Opus ideal for pre-computed peaks workflows since most browser AudioContexts run at 48000 Hz. WAV/FLAC at 44100 Hz will cause rate mismatches on 48000 Hz hardware.
 48. **Pre-Computed Peaks Require Sample Rate Match** — `.dat` file `sample_rate` must match `AudioContext.sampleRate`. On mismatch, `createClip` warns per-clip (includes clip name) and callers fall back to worker-generated peaks. Dawcore rejects `.dat` and falls to worker. Browser converts offsets for preview (`ratio = wdRate / clipRate` on offsetSamples/durationSamples/samplesPerPixel), worker replaces on next cycle. `configureGlobalContext({ sampleRate })` from playout creates a standard `new Context()` and compares the requested rate against the actual hardware rate — it warns but cannot force the rate (native AudioContext wrapping caused Tone.js issues, reverted).
-49. **`sampleRate` Prop for Pre-Computed Peaks Matching** — `WaveformPlaylistProvider` accepts a `sampleRate` prop; `<daw-editor>` accepts a `sample-rate` attribute. `configureGlobalContext({ sampleRate })` compares against the AudioContext's actual rate and warns on mismatch. Cannot force the rate — Tone.js 15.1.22 doesn't pass `sampleRate` through to `standardized-audio-context`, and passing a `StdAudioContext` directly causes `AudioParam` errors. Peaks fall back to worker on mismatch. Revisit when Tone.js releases the upstream fix.
+49. **`sampleRate` Prop for Pre-Computed Peaks Matching** — `WaveformPlaylistProvider` accepts a `sampleRate` prop; `<daw-editor>` reads sample rate from the adapter's AudioContext (no `sample-rate` attribute). `configureGlobalContext({ sampleRate })` compares against the AudioContext's actual rate and warns on mismatch. Cannot force the rate — Tone.js 15.1.22 doesn't pass `sampleRate` through to `standardized-audio-context`, and passing a `StdAudioContext` directly causes `AudioParam` errors. Peaks fall back to worker on mismatch. Revisit when Tone.js releases the upstream fix.
 50. **Loop Wrap Clock Seek Offset** — When the Scheduler wraps at `loopEnd` inside the lookahead window, seek the clock to `loopStart - (loopEnd - clockTime)`, not `loopStart`. The lookahead means the wrap fires before real time reaches the boundary; `seekTo(loopStart)` makes post-wrap events schedule at "now" instead of at the boundary's audio time. `getCurrentTime()` clamps to `loopStart` during the brief window when the clock is behind.
 51. **`_renderSpp` Pattern in dawcore Beats Mode** — In beats mode, `samplesPerPixel` must be derived from `ticksPerPixel` via `(60 × sampleRate × ticksPerPixel) / (ppqn × bpm)`. Every rendering path (clip positions, peak generation, peak re-extraction after trim/split, trim visual feedback) must use this derived value. Using raw `samplesPerPixel` causes coordinate mismatches. Exposed as `renderSamplesPerPixel` getter for `ClipPointerHost` and `ClipPeakSyncHost` interfaces.
 52. **Snap Absolute Position, Not Delta** — When snapping clip drag/trim to a musical grid, snap the clip's absolute timeline position — not the delta. Delta-snapping preserves off-grid offsets permanently. Applies to both dawcore `ClipPointerHandler._snapDeltaToSamples()` and React `SnapToGridModifier`. Pass the anchor sample (left edge for move/left-trim, right edge for right-trim) to compute the correct absolute target.
 53. **Tick-Space Pixel Positioning in Beats Mode** — In beats mode, clip pixel positions must be derived from tick space, not from `startSample / _renderSpp`. When `clip.startTick` is available, use `clip.startTick / ticksPerPixel` directly. Fall back to `startSample → seconds → ticks → ticks/ticksPerPixel` for clips without `startTick`. Never use `startSample / _renderSpp` — the sample round-trip introduces 1-2px quantization error.
 54. **Engine Tempo Forwarding** — `<daw-editor>` BPM setter must call `engine.setTempo()` to keep the adapter's Transport in sync. `_buildEngine` initializes the adapter with `adapter.setTempo(this._bpm)` BEFORE creating the engine, so `setTracks()` enriches clips with `startTick` at the correct tempo. Without this, clips at non-zero positions get wrong tick values (computed at default 120 BPM).
 55. **`startTick` is Authoritative, `startSample` is Cache** — `AudioClip.startTick` is the authoritative timeline position. `startSample` is a derived cache recomputed via `TempoMap.ticksToSeconds(startTick) * sampleRate` when tempo changes. Engine's `setTracks()` enriches clips missing `startTick` by computing it from `startSample`. In beats mode, rendering must use `clip.startTick / ticksPerPixel` for pixel position — NOT the sample round-trip which drifts when BPM changes.
-56. **Two Transport Instances in Dev Demos** — Dawcore dev demos that create their own `Transport` (for metronome preview) have a DIFFERENT Transport from the editor's internal `NativePlayoutAdapter.transport`. Tempo set on the demo's Transport doesn't affect the engine's clip scheduling. Use `editor.transport` (exposed getter) for tempo that affects clip `startTick` enrichment. Apply tempo to BOTH transports when metronome preview is needed.
+56. **Cross-Context Worklet Support (SAC Pattern)** — `new AudioWorkletNode(ctx, ...)` fails when `ctx` is standardized-audio-context (Tone.js), but `ctx.audioWorklet.addModule(url)` works on both. Use callback injection: `addRecordingWorkletModule((url) => ctx.audioWorklet.addModule(url))` from worklets package. For node/source creation only, `PlayoutAdapter` exposes optional `createAudioWorkletNode`/`createMediaStreamSource` methods — adapters implement these using their context type. `<daw-editor>` bridges via `RecordingHost` interface methods, falling back to native APIs.
+57. **Two Transport Instances in Dev Demos** — Dawcore dev demos that create their own `Transport` (for metronome preview) have a DIFFERENT Transport from the editor's internal `NativePlayoutAdapter.transport`. Tempo set on the demo's Transport doesn't affect the engine's clip scheduling. Use `editor.transport` (exposed getter) for tempo that affects clip `startTick` enrichment. Apply tempo to BOTH transports when metronome preview is needed.
 
 ---
 

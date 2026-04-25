@@ -31,8 +31,15 @@ function makeTrack(id: string, clips: AudioClip[]): ClipTrack {
   };
 }
 
+const mockAudioContext = {
+  sampleRate: 48000,
+  state: 'running',
+} as unknown as AudioContext;
+
 function createMockAdapter(): PlayoutAdapter {
   return {
+    audioContext: mockAudioContext,
+    ppqn: 960,
     init: vi.fn().mockResolvedValue(undefined),
     setTracks: vi.fn(),
     play: vi.fn(),
@@ -138,6 +145,8 @@ describe('PlaylistEngine', () => {
       const mockAddTrack = vi.fn();
       const mockSetTracks = vi.fn();
       const adapter = {
+        audioContext: mockAudioContext,
+        ppqn: 960,
         init: vi.fn().mockResolvedValue(undefined),
         setTracks: mockSetTracks,
         addTrack: mockAddTrack,

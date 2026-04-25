@@ -20,9 +20,7 @@ import type { DawTrackElement } from './daw-track';
 import type { DawClipElement } from './daw-clip';
 import type { DawPlayheadElement } from './daw-playhead';
 import type { WaveformSegment } from './daw-waveform';
-import type { PlaylistEngine } from '@waveform-playlist/engine';
-import type { NativePlayoutAdapter } from '@dawcore/transport';
-import type { Transport } from '@dawcore/transport';
+import type { PlaylistEngine, PlayoutAdapter } from '@waveform-playlist/engine';
 import '../elements/daw-track-controls';
 import '../elements/daw-grid';
 import { hostStyles, clipStyles } from '../styles/theme';
@@ -45,6 +43,18 @@ import { splitAtPlayhead as performSplitAtPlayhead } from '../interactions/split
 import { syncPeaksForChangedClips } from '../interactions/clip-peak-sync';
 import { loadWaveformDataFromUrl } from '../interactions/peaks-loader';
 import { extractPeaks } from '../workers/waveformDataUtils';
+
+const NO_ADAPTER_ERROR =
+  'No PlayoutAdapter set on <daw-editor>. ' +
+  'Set editor.adapter before use.\n\n' +
+  '  // Option 1: Native Web Audio (no Tone.js)\n' +
+  '  npm install @dawcore/transport\n' +
+  "  import { NativePlayoutAdapter } from '@dawcore/transport';\n" +
+  '  editor.adapter = new NativePlayoutAdapter(new AudioContext());\n\n' +
+  '  // Option 2: Tone.js (effects, MIDI synths)\n' +
+  '  npm install @waveform-playlist/playout\n' +
+  "  import { createToneAdapter } from '@waveform-playlist/playout';\n" +
+  '  editor.adapter = createToneAdapter();';
 
 @customElement('daw-editor')
 export class DawEditorElement extends LitElement {
@@ -137,9 +147,10 @@ export class DawEditorElement extends LitElement {
   /** Optional tempo-aware conversion: PPQN ticks → seconds. Required alongside secondsToTicks. */
   @property({ attribute: false })
   ticksToSeconds?: (ticks: number) => number;
-  /** Desired sample rate. Creates a cross-browser AudioContext at this rate.
-   *  Pre-computed .dat peaks render instantly when they match. */
-  @property({ type: Number, attribute: 'sample-rate' }) sampleRate = 48000;
+  /** Sample rate — reads from adapter's AudioContext when available, otherwise falls back to 48000. */
+  get sampleRate(): number {
+    return this._resolvedSampleRate ?? this._externalAdapter?.audioContext.sampleRate ?? 48000;
+  }
   /** Resolved sample rate — falls back to sampleRate property until first audio decode. */
   _resolvedSampleRate: number | null = null;
   @state() _tracks: Map<string, TrackDescriptor> = new Map();
@@ -153,42 +164,32 @@ export class DawEditorElement extends LitElement {
   _selectionStartTime = 0;
   _selectionEndTime = 0;
   _currentTime = 0;
-  /** Consumer-provided AudioContext. When set, used for decode, playback, and recording. */
-  private _externalAudioContext: AudioContext | null = null;
-  private _ownedAudioContext: AudioContext | null = null;
-
-  /** Set an AudioContext to use for all audio operations. Must be set before tracks load. */
-  set audioContext(ctx: AudioContext | null) {
-    if (ctx && ctx.state === 'closed') {
-      console.warn('[dawcore] Provided AudioContext is already closed. Ignoring.');
+  @property({ attribute: false })
+  set adapter(value: PlayoutAdapter | null) {
+    if (value && value.audioContext.state === 'closed') {
+      console.warn('[dawcore] Adapter AudioContext is already closed. Ignoring.');
       return;
     }
     if (this._engine) {
       console.warn(
-        '[dawcore] audioContext set after engine is built. ' +
-          'The engine will continue using the previous context.'
+        '[dawcore] adapter set after engine is built. ' +
+          'The engine will continue using the previous adapter.'
       );
     }
-    this._externalAudioContext = ctx;
+    this._externalAdapter = value;
   }
+  get adapter(): PlayoutAdapter | null {
+    return this._externalAdapter;
+  }
+  private _externalAdapter: PlayoutAdapter | null = null;
 
   get audioContext(): AudioContext {
-    if (this._externalAudioContext) return this._externalAudioContext;
-    if (!this._ownedAudioContext) {
-      this._ownedAudioContext = new AudioContext({ sampleRate: this.sampleRate });
-      if (this._ownedAudioContext.sampleRate !== this.sampleRate) {
-        console.warn(
-          '[dawcore] Requested sampleRate ' +
-            this.sampleRate +
-            ' but AudioContext is running at ' +
-            this._ownedAudioContext.sampleRate
-        );
-      }
+    if (!this._externalAdapter) {
+      throw new Error(NO_ADAPTER_ERROR);
     }
-    return this._ownedAudioContext;
+    return this._externalAdapter.audioContext;
   }
   _engine: PlaylistEngine | null = null;
-  private _adapter: NativePlayoutAdapter | null = null;
   private _warnedMissingTicksToSeconds = false;
   private _warnedMissingSecondsToTicks = false;
   private _enginePromise: Promise<PlaylistEngine> | null = null;
@@ -211,10 +212,6 @@ export class DawEditorElement extends LitElement {
   }
   get engine() {
     return this._engine;
-  }
-  /** The adapter's Transport — use for tempo, metronome, and effects. */
-  get transport(): Transport | null {
-    return this._adapter?.transport ?? null;
   }
   get renderSamplesPerPixel() {
     return this._renderSpp;
@@ -429,14 +426,6 @@ export class DawEditorElement extends LitElement {
       this._disposeEngine();
     } catch (err) {
       console.warn('[dawcore] Error disposing engine: ' + String(err));
-    }
-    // Close owned AudioContext to release hardware resources.
-    // Skip when consumer provided an external context (they own its lifecycle).
-    if (this._ownedAudioContext) {
-      this._ownedAudioContext.close().catch((err) => {
-        console.warn('[dawcore] Error closing AudioContext: ' + String(err));
-      });
-      this._ownedAudioContext = null;
     }
   }
   willUpdate(changedProperties: Map<string, unknown>) {
@@ -858,21 +847,35 @@ export class DawEditorElement extends LitElement {
     return this._enginePromise;
   }
   private async _buildEngine() {
-    const [{ PlaylistEngine }, { NativePlayoutAdapter }] = await Promise.all([
-      import('@waveform-playlist/engine'),
-      import('@dawcore/transport'),
-    ]);
-    const adapter = new NativePlayoutAdapter(this.audioContext);
-    this._adapter = adapter;
-    // Set tempo on the adapter's Transport BEFORE creating the engine,
-    // so engine.setTracks() enriches clips with startTick at the correct BPM.
-    adapter.setTempo(this._bpm);
+    if (!this._externalAdapter) {
+      throw new Error(NO_ADAPTER_ERROR);
+    }
+
+    const { PlaylistEngine } = await import('@waveform-playlist/engine');
+    const adapter = this._externalAdapter;
+
+    // Forward initial tempo if adapter supports it
+    if (adapter.setTempo) {
+      adapter.setTempo(this._bpm);
+    } else if (this._bpm !== 120) {
+      console.warn(
+        '[dawcore] Adapter does not implement setTempo. ' +
+          'Initial BPM ' +
+          this._bpm +
+          ' will not be applied — clips may use wrong tempo.'
+      );
+    }
+
+    // Try to set the editor's desired PPQN on the adapter, then sync back.
+    // Adapter is the source of truth — it may ignore the request.
+    adapter.setPpqn?.(this._ppqn);
+    this.ppqn = adapter.ppqn;
+
     const engine = new PlaylistEngine({
       adapter,
       sampleRate: this.effectiveSampleRate,
       samplesPerPixel: this.samplesPerPixel,
       bpm: this._bpm,
-      ppqn: this._ppqn,
       zoomLevels: [256, 512, 1024, 2048, 4096, 8192, this.samplesPerPixel]
         .filter((v, i, a) => a.indexOf(v) === i)
         .sort((a, b) => a - b),
@@ -910,7 +913,6 @@ export class DawEditorElement extends LitElement {
       this._engine.dispose();
       this._engine = null;
     }
-    this._adapter = null;
     this._enginePromise = null;
   }
   // --- File Drop ---
@@ -1087,6 +1089,31 @@ export class DawEditorElement extends LitElement {
   ) {
     addRecordedClip(this, trackId, buf, startSample, durSamples, offsetSamples);
   }
+  // --- RecordingHost bridge methods for cross-context worklet support ---
+  // These delegate to the adapter's context type (native or standardized-audio-context).
+  // The RecordingController calls these when available, falling back to native APIs.
+
+  addWorkletModule(url: string): Promise<void> {
+    return (
+      this._externalAdapter?.addWorkletModule?.(url) ??
+      this.audioContext.audioWorklet.addModule(url)
+    );
+  }
+
+  createAudioWorkletNode(name: string, options?: AudioWorkletNodeOptions): AudioWorkletNode {
+    return (
+      this._externalAdapter?.createAudioWorkletNode?.(name, options) ??
+      new AudioWorkletNode(this.audioContext, name, options)
+    );
+  }
+
+  createMediaStreamSource(stream: MediaStream): MediaStreamAudioSourceNode {
+    return (
+      this._externalAdapter?.createMediaStreamSource?.(stream) ??
+      this.audioContext.createMediaStreamSource(stream)
+    );
+  }
+
   async startRecording(stream?: MediaStream, options?: RecordingOptions): Promise<void> {
     const s = stream ?? this.recordingStream;
     if (!s) {

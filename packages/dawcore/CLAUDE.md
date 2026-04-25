@@ -14,11 +14,11 @@
 - `canvas.getContext('2d')` returns `null` in happy-dom. Tests must mock it: `vi.spyOn(canvas, 'getContext').mockReturnValue(mockCtx as any)` where `mockCtx` has `clearRect`, `resetTransform`, `scale`, `fillStyle`, `fillRect` as `vi.fn()`.
 - `PointerHandlerHost` and `ClipPointerHost` test mocks must include beats-mode fields (`scaleMode`, `ticksPerPixel`, `bpm`, `ppqn`, `_meterEntries`, `snapTo`, `renderSamplesPerPixel`). Default to `scaleMode: 'temporal'`, `snapTo: 'off'` for non-beats tests.
 
-**Dev page:** `pnpm dev:page` starts Vite at `http://localhost:5173/dev/index.html`. Uses `website/static/` as publicDir for audio files.
+**Dev page:** `pnpm example:dawcore-native` starts Vite at `http://localhost:5173/` (config in `examples/dawcore-native/vite.config.ts`). Uses `website/static/` as publicDir for audio files.
 
 ## Dev Page Dependencies
 
-- **`pnpm dev:page` resolves peer packages from source** — `dev/vite.config.ts` has `resolve.alias` for core, engine, and transport pointing to `src/index.ts`. Changes are picked up immediately without rebuilding.
+- **`pnpm example:dawcore-native` resolves peer packages from source** — `examples/dawcore-native/vite.config.ts` has `resolve.alias` for core, engine, transport, and `@dawcore/components` pointing to `src/index.ts`. Changes are picked up immediately without rebuilding.
 - **Incremental track removal** — `engine.removeTrack(trackId)` uses `adapter.removeTrack()` when available (disposes single track, preserves playback). Falls back to `adapter.setTracks()` (full rebuild, stops Transport).
 
 ## Element Types
@@ -38,9 +38,15 @@
 - `<daw-play-button>`, `<daw-pause-button>`, `<daw-stop-button>` — Walk up to closest `<daw-transport>` for target resolution. Warn when target is null.
 - `<daw-record-button>` — Transport button. Toggles `startRecording()`/`stopRecording()` on target editor. Listens for `daw-recording-start`/`daw-recording-complete` events to update visual state.
 
+## Cross-Context Worklet Support
+
+- **`RecordingHost` bridge methods** — `addWorkletModule`, `createAudioWorkletNode`, `createMediaStreamSource` on the host interface. `<daw-editor>` implements these by delegating to the adapter when it has matching methods, falling back to native `AudioContext` APIs.
+- **Why:** `new AudioWorkletNode(stdCtx, ...)` fails with standardized-audio-context ("parameter 1 is not of type BaseAudioContext"). Tone.js wraps standardized-audio-context, so `TonePlayoutAdapter.audioContext` (which returns `rawContext`) is not a native `BaseAudioContext`. The bridge methods use `context.createAudioWorkletNode()` (Tone.js wrapper) which handles both context types.
+- **`NativePlayoutAdapter` needs no bridge methods** — Its `audioContext` is a real native `AudioContext`, so the fallback path in `RecordingController` works directly.
+
 ## Recording
 
-- **`RecordingController`** — Lit reactive controller on `<daw-editor>`. Manages AudioWorklet lifecycle, per-channel sample accumulation, incremental peak generation via `appendPeaks()` from `@waveform-playlist/core`, and live preview via `setPeaksQuiet()` + `updatePeaks()` on `<daw-waveform>`. `recordingProcessorUrl` is loaded via dynamic `import('@waveform-playlist/worklets')` inside `startRecording()` so the worklets package is only required when recording is used.
+- **`RecordingController`** — Lit reactive controller on `<daw-editor>`. Manages AudioWorklet lifecycle, per-channel sample accumulation, incremental peak generation via `appendPeaks()` from `@waveform-playlist/core`, and live preview via `setPeaksQuiet()` + `updatePeaks()` on `<daw-waveform>`. `addRecordingWorkletModule` is loaded via dynamic `import('@waveform-playlist/worklets')` inside `startRecording()` so the worklets package is only required when recording is used.
 - **Session map** — `Map<string, RecordingSession>` keyed by track ID. Single session for now; map structure supports future multi-mic.
 - **Consumer provides stream** — `editor.recordingStream = stream` or pass to `startRecording(stream)`. Mic access/permission is consumer responsibility.
 - **Cancelable clip creation** — `daw-recording-complete` event is cancelable. `preventDefault()` skips automatic clip creation; consumer handles the `AudioBuffer` themselves.
@@ -98,18 +104,14 @@ Custom properties on `<daw-editor>` or any ancestor, inherited through Shadow DO
 
 **Lit controller lifecycle gotcha:** `hostConnected()` fires during `connectedCallback()`, BEFORE the first `willUpdate()`. Controllers that read properties set from attributes must defer work with `requestAnimationFrame` (as `ViewportController` and `AudioResumeController` do), otherwise the property will still be `undefined`.
 
-## Transport Access
+## Adapter Pluggability
 
-- **`editor.transport` getter** — Returns the `NativePlayoutAdapter`'s `Transport` instance (or `null` before engine is built). Use for tempo, metronome, and effects configuration on the same clock that schedules clips.
-- **`editor.bpm` setter forwards to engine** — Calls `engine.setTempo(value)` when engine exists, keeping the adapter's Transport in sync. `_buildEngine` calls `adapter.setTempo(this._bpm)` before creating the engine so initial `setTracks()` enrichment uses the correct BPM.
-
-## AudioContext Ownership
-
-**`audioContext` JS property** — Optional `AudioContext` on `<daw-editor>`. When set before tracks load, the editor uses it for decode, playback (via `NativePlayoutAdapter`), and recording. When not set, the editor creates its own `AudioContext({ sampleRate })` lazily on first audio operation.
-
-Example: `editor.audioContext = new AudioContext({ sampleRate: 48000, latencyHint: 0 });`
-
-- **Close owned AudioContext on disconnect** — `disconnectedCallback` calls `_ownedAudioContext.close()`. Skip when consumer provided an external context (they own its lifecycle).
+- **`editor.adapter` required** — Set a `PlayoutAdapter` before use. No default adapter created. Throws helpful error with install instructions if missing.
+- **AudioContext from adapter** — `editor.audioContext` reads `adapter.audioContext`. No setter, no owned context. Adapter owns the AudioContext lifecycle.
+- **`transport` getter removed** — Consumers access transport-specific APIs on their own adapter reference (e.g., `adapter.transport.setMetronomeEnabled(true)` for `NativePlayoutAdapter`).
+- **`sample-rate` attribute removed** — Sample rate determined by adapter's AudioContext. `sampleRate` is a derived getter.
+- **`editor.bpm` setter forwards to engine** — Calls `engine.setTempo(value)` when engine exists. `_buildEngine` calls `adapter.setTempo?.(this._bpm)` before creating the engine so initial `setTracks()` enrichment uses the correct BPM.
+- **`adapter.ppqn` drives engine** — `_buildEngine` reads `adapter.ppqn ?? this._ppqn` for the engine's PPQN. No translation layer.
 
 ## Ported Utilities
 
@@ -163,7 +165,7 @@ Example: `editor.audioContext = new AudioContext({ sampleRate: 48000, latencyHin
 
 ## Sample Rate
 
-- `sampleRate` `@property` is an initial hint (default 48000). `_resolvedSampleRate` is set from decoded audio.
+- `sampleRate` is a derived getter reading from `adapter.audioContext.sampleRate` (fallback 48000). `_resolvedSampleRate` is set from decoded audio.
 - **Always use `effectiveSampleRate`** in internal calculations — returns `_resolvedSampleRate ?? sampleRate`.
 - `PointerHandlerHost` uses `effectiveSampleRate`, not `sampleRate`.
 
@@ -224,7 +226,7 @@ Example: `editor.audioContext = new AudioContext({ sampleRate: 48000, latencyHin
 - **Three-tier tick hierarchy** — `major` (bars: always labeled, grid lines at 10%), `minor` (beats: labeled when ≥60px, grid lines at 6%), `minorMinor` (subdivisions: ruler ticks only, no grid lines). Types in `@waveform-playlist/core` as `TickType`.
 - **Snap absolute position, not delta** — `snapTickToGrid` must snap the clip's absolute target position to the grid, not the drag delta. Delta-snapping preserves off-grid offsets permanently. `_snapDeltaToSamples(deltaPx, anchorSample)` takes the anchor (startSample for move/left-trim, startSample+durationSamples for right-trim).
 - **`<daw-grid>` element** — Shadow DOM, chunked 1000px canvases (same pattern as `<daw-waveform>`). Positioned behind tracks via `z-index: 0`. Track rows go transparent via `:host([scale-mode="beats"]) .track-row { background: transparent }`. Grid top offset = ruler height (30px when `timescale` enabled).
-- **Vite pre-bundles Tone.js** — Even though dawcore has no Tone.js dependency, Vite's dep scanner finds it in the workspace `node_modules`. `optimizeDeps.exclude: ['tone']` in `dev/vite.config.ts` prevents loading.
+- **Vite pre-bundles Tone.js** — Even though dawcore has no Tone.js dependency, Vite's dep scanner finds it in the workspace `node_modules`. `optimizeDeps.exclude: ['tone']` in `examples/dawcore-native/vite.config.ts` prevents loading.
 - **Clip pixel positions from tick space, not samples** — In beats mode, use `clip.startTick / ticksPerPixel` directly when `startTick` is available. Fall back to `startSample → seconds → ticks → ticks/ticksPerPixel` for clips without `startTick`. Never use `startSample / _renderSpp` — the sample round-trip introduces 1-2px quantization error and drifts when BPM changes. Same applies to trim visual feedback `deltaPx`. Temporal mode still uses `startSample / samplesPerPixel`.
 - **Validated beats-mode properties** — `bpm`, `ppqn`, `ticksPerPixel` use `@property({ noAccessor: true })` with custom getters/setters that reject zero, negative, NaN, and Infinity (same pattern as `samplesPerPixel`). Without this, division-by-zero cascades through `_renderSpp`, `_totalWidth`, snap pipeline, and `computeMusicalTicks`. `computeMusicalTicks` and `snapTickToGrid` also have internal guards returning empty/passthrough for zero inputs.
 - **`_renderSpp` uses `Math.ceil`** — The derived value can be non-integer at non-standard BPM. `WaveformData.resample()` uses integer scale math, so rounding up prevents fractional scale issues.
@@ -235,5 +237,5 @@ Example: `editor.audioContext = new AudioContext({ sampleRate: 48000, latencyHin
 - **Callback interface, not TempoMap dependency** — `secondsToTicks`/`ticksToSeconds` optional function properties on `<daw-editor>`. Keeps dawcore decoupled from the transport package. Consumers with a different playout engine provide their own conversion functions. When callbacks are absent, falls back to single-BPM math.
 - **Per-segment waveform rendering** — In beats mode with callbacks, clips are iterated in fine tick steps (~80 ticks). Each step is converted to audio time via callbacks, then peaks are extracted for that sample range into the corresponding pixel range. Uses base-scale (128) peaks directly — no BPM-dependent intermediate resampling.
 - **Beat-map clip positioning** — Use `beatBpm` uniformly from tick 0 (no "gap BPM"). Shift the clip's `startTick` forward so beat 1 in the audio aligns with the next bar boundary. Formula: `clipStartTick = firstDownbeatTick - naturalFirstBeatTick` where `naturalFirstBeatTick = round(beats[0].time * ppqn * beatBpm / 60)`. Gives the metronome a natural tempo throughout.
-- **Single transport — no standalone Transport in demos** — Demo pages that use `<daw-editor>` must use `editor.transport` (via `await editor._ensureEngine()`), not create their own `new Transport()`. Two transports cause metronome/seek desync. The transport is available immediately after `_ensureEngine()` — no need to wait for tracks.
+- **Single transport — no standalone Transport in demos** — Demo pages that use `<daw-editor>` must use `adapter.transport` (for `NativePlayoutAdapter`), not create their own `new Transport()`. Two transports cause metronome/seek desync. The transport is available immediately after the adapter is created — no need to wait for tracks.
 - **`editor.meterEntries` for multi-meter grids** — Set `editor.meterEntries` (from `detectMeterChanges`) so the grid renders correct bar widths. Without this, the grid uses the editor's `timeSignature` (single meter) while the Transport's MeterMap has the real meters — grid and metronome disagree.

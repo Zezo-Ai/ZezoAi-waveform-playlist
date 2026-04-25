@@ -6,6 +6,10 @@ import type { ClipTrack } from '@waveform-playlist/core';
  * (Tone.js, openDAW, HTMLAudioElement, etc.)
  */
 export interface PlayoutAdapter {
+  readonly audioContext: AudioContext;
+  readonly ppqn: number;
+  /** Set the adapter's tick resolution. Optional — adapters with fixed PPQN ignore this. */
+  setPpqn?(ppqn: number): void;
   init(): Promise<void>;
   setTracks(tracks: ClipTrack[]): void;
   /** Incrementally add a single track without rebuilding the entire playout. */
@@ -34,6 +38,14 @@ export interface PlayoutAdapter {
   ticksToSeconds?(tick: number): number;
   /** Convert seconds to ticks using the adapter's tempo map. */
   secondsToTicks?(seconds: number): number;
+  /** Register a worklet module URL on this adapter's AudioContext.
+   *  Abstracts native vs standardized-audio-context differences. */
+  addWorkletModule?(url: string): Promise<void>;
+  /** Create an AudioWorkletNode on this adapter's context.
+   *  Required for standardized-audio-context (Tone.js) compatibility. */
+  createAudioWorkletNode?(name: string, options?: AudioWorkletNodeOptions): AudioWorkletNode;
+  /** Create a MediaStreamSource on this adapter's context. */
+  createMediaStreamSource?(stream: MediaStream): MediaStreamAudioSourceNode;
   dispose(): void;
 }
 
@@ -87,7 +99,7 @@ export interface PlaylistEngineOptions {
   undoLimit?: number;
   /** Initial tempo in BPM (default 120). */
   bpm?: number;
-  /** Pulses per quarter note (default 960). */
+  /** Pulses per quarter note for headless mode (no adapter). When adapter is provided, adapter.ppqn is used instead. */
   ppqn?: number;
 }
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>dawcore — recording dev</title>
+  <title>dawcore + Tone.js — recording</title>
   <style>
     body {
       font-family: system-ui, sans-serif;
@@ -20,6 +20,8 @@
       --daw-playhead-color: #d08070;
       --daw-background: #1a1a2e;
       --daw-track-background: #16213e;
+      --daw-ruler-color: #c49a6c;
+      --daw-ruler-background: #0f0f1a;
       margin-bottom: 12px;
     }
     daw-transport {
@@ -57,9 +59,9 @@
   </style>
 </head>
 <body>
-  <h1>dawcore — recording dev</h1>
+  <h1>dawcore + Tone.js — recording</h1>
 
-  <script type="module" src="/src/index.ts"></script>
+  <script type="module">import '@dawcore/components';</script>
 
   <div id="mic-controls">
     <button id="mic-btn">Enable Mic</button>
@@ -82,8 +84,10 @@
   <div id="log"></div>
 
   <script type="module">
+    import { createToneAdapter } from '@waveform-playlist/playout';
     const editor = document.getElementById('editor');
-    editor.audioContext = new AudioContext({ sampleRate: 48000, latencyHint: 0 });
+    const adapter = createToneAdapter();
+    editor.adapter = adapter;
     const log = document.getElementById('log');
     const micBtn = document.getElementById('mic-btn');
     const micStatus = document.getElementById('mic-status');
@@ -165,8 +169,8 @@
     });
 
     // Device switch
-    micSelect.addEventListener('change', () => {
-      if (micSelect.value) selectDevice(micSelect.value);
+    micSelect.addEventListener('change', async () => {
+      if (micSelect.value) await selectDevice(micSelect.value);
     });
 
     // Hot-plug detection
@@ -176,20 +180,19 @@
       await enumerateDevices();
       if (micSelect.value !== prevValue && micSelect.options.length > 0) {
         addLog('Device changed \u2014 switching to ' + micSelect.options[0].textContent);
-        selectDevice(micSelect.options[0].value);
+        await selectDevice(micSelect.options[0].value);
       }
     });
 
     // Auto-create track + overdub recording
-    // Override record button click to handle auto-track creation
     recordBtn.addEventListener('click', async (e) => {
       // Let the button handle stop if already recording
       if (editor.isRecording) return;
 
-      e.stopImmediatePropagation(); // prevent default button handler
+      e.stopImmediatePropagation();
 
       if (!editor.recordingStream) {
-        addLog('No mic access — click "Request Mic" first');
+        addLog('No mic access — click "Enable Mic" first');
         return;
       }
 
@@ -202,7 +205,6 @@
         editor.appendChild(track);
         addLog('Auto-created track: ' + name);
 
-        // Wait for track to connect, then select it
         const trackId = await new Promise((resolve) => {
           editor.addEventListener('daw-track-connected', (ev) => {
             resolve(ev.detail.trackId);
@@ -211,13 +213,12 @@
         editor._setSelectedTrackId(trackId);
       }
 
-      // Read actual channel count from stream, matching openDAW's approach
       const streamChannels = editor.recordingStream.getAudioTracks()[0]?.getSettings()?.channelCount;
       await editor.startRecording(editor.recordingStream, {
         overdub: true,
         ...(streamChannels && { channelCount: streamChannels }),
       });
-    }, { capture: true }); // capture phase to run before the button's own handler
+    }, { capture: true });
 
     // Recording events
     editor.addEventListener('daw-recording-start', (e) => {
