@@ -58,13 +58,9 @@ pnpm publish --filter './packages/*' --no-git-checks
 npm install @waveform-playlist/browser
 ```
 
-**Version Bumping:** All 12 `package.json` files (root + 11 packages) must be bumped in sync:
+**Version Bumping:** Each package follows its own semver independently based on its actual changes. Bump only the packages that changed — don't sync versions across unrelated packages.
 
-```bash
-sed -i '' 's/"version": "OLD"/"version": "NEW"/g' package.json packages/*/package.json
-```
-
-**Independent Versioning:** `@dawcore/components` and `@dawcore/transport` have their own version schemes (0.x.x), separate from the main `@waveform-playlist/*` packages. Don't include them in the `sed` version bump command.
+**Independent Versioning:** `@dawcore/components` and `@dawcore/transport` have their own version schemes (0.x.x), separate from the main `@waveform-playlist/*` packages.
 
 **First-time scoped packages:** New `@waveform-playlist/*` packages need `--access public` on first npm publish:
 
