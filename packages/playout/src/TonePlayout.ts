@@ -1,5 +1,6 @@
 import {
   Volume,
+  Gain,
   ToneAudioNode,
   getDestination,
   start,
@@ -29,6 +30,7 @@ export interface TonePlayoutOptions {
 export class TonePlayout {
   private tracks: Map<string, PlayableTrack> = new Map();
   private masterVolume: Volume;
+  private _masterTap: Gain;
   private isInitialized = false;
   private soloedTracks: Set<string> = new Set();
   private manualMuteState: Map<string, boolean> = new Map();
@@ -42,15 +44,21 @@ export class TonePlayout {
 
   constructor(options: TonePlayoutOptions = {}) {
     this.masterVolume = new Volume(gainToDb(options.masterGain ?? 1));
+    // Pass-through tap node for consumer connections (analyzers, recorders).
+    // Shares the same standardized-audio-context as masterVolume.
+    this._masterTap = new Gain(1);
 
-    // Setup effects chain if provided, otherwise connect directly to destination
+    // Serial chain: masterVolume → tap → destination.
+    // When effects are present: masterVolume → effects → tap → destination.
+    // Consumers connect analyzers, effects, recorders to the tap node.
     if (options.effects) {
-      const cleanup = options.effects(this.masterVolume, getDestination(), false);
+      const cleanup = options.effects(this.masterVolume, this._masterTap, false);
       if (cleanup) {
         this.effectsCleanup = cleanup;
       }
+      this._masterTap.connect(getDestination());
     } else {
-      this.masterVolume.toDestination();
+      this.masterVolume.chain(this._masterTap, getDestination());
     }
 
     if (options.tracks) {
@@ -320,6 +328,13 @@ export class TonePlayout {
     this.masterVolume.volume.value = gainToDb(gain);
   }
 
+  /** The master output tap node. In the signal chain: masterVolume → tap → destination.
+   *  Connect analyzers/effects/recorders here — parallel or serial.
+   *  The tap's native GainNode is on the same standardized-audio-context as adapter.audioContext. */
+  get masterOutputNode(): GainNode {
+    return this._masterTap.input;
+  }
+
   setSolo(trackId: string, soloed: boolean): void {
     const track = this.tracks.get(trackId);
     if (track) {
@@ -451,9 +466,15 @@ export class TonePlayout {
     }
 
     try {
+      this._masterTap.dispose();
+    } catch (err) {
+      console.warn('[waveform-playlist] Error disposing master tap: ' + String(err));
+    }
+
+    try {
       this.masterVolume.dispose();
     } catch (err) {
-      console.warn('[waveform-playlist] Error disposing master volume:', err);
+      console.warn('[waveform-playlist] Error disposing master volume: ' + String(err));
     }
   }
 

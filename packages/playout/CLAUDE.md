@@ -22,6 +22,12 @@
 
 `TonePlayoutAdapter` implements `createAudioWorkletNode` and `createMediaStreamSource` for dawcore recording compatibility. These use `getGlobalContext()` (Tone.js Context wrapper) which works with standardized-audio-context. `addWorkletModule` is NOT needed — `rawContext.audioWorklet.addModule()` works identically for both native and standardized contexts.
 
+## Master Output Tap
+
+`TonePlayout` creates a Tone.js `Gain` tap node in the signal chain: `masterVolume → [effects] → tap → destination`. Exposed as `masterOutputNode` (native GainNode via `_masterTap.input`). Consumers connect analyzers/effects/recorders to the tap — parallel (`.connect()` without disconnecting) or serial (`.disconnect(destination)` then rewire).
+
+**Eager playout creation:** `createToneAdapter()` calls `getGlobalContext()` BEFORE `new TonePlayout()` so the playout's nodes share the same standardized-audio-context as `adapter.audioContext`. Without this, `Volume` is created on Tone's default context (replaced later by `setContext`), causing cross-context connect errors.
+
 ## Transport.schedule() Architecture
 
 **Approach:** Uses `Transport.schedule()` + native `AudioBufferSourceNode` instead of `Player.sync()`. This eliminates three Tone.js private-internal workarounds that the `Player.sync()` approach required:
@@ -83,6 +89,8 @@ AudioBufferSourceNode (native, one-shot, created per play/loop)
 ## Tone.js Type Gotchas
 
 **Gain generic mismatch:** `Volume.input` is `Gain<"decibels">` but plain `Gain` import defaults to `Gain<"gain">`. Accessing native input requires double cast: `(this.volumeNode.input as unknown as Gain).input`.
+
+**`Gain.input` is already `GainNode`** — Unlike `Volume.input`, plain `Gain.input` is typed as `GainNode` directly. No cast needed (e.g., `_masterTap.input` returns `GainNode`).
 
 ## Global AudioContext Pattern
 
@@ -159,7 +167,7 @@ AudioBufferSourceNode (native, one-shot, pitch-shifted via playbackRate)
 
 **`addTrackToPlayout()` helper:** Extracted from `buildPlayout`'s per-track loop. Shared by `buildPlayout`, `adapter.addTrack()`, and `adapter.updateTrack()`. Handles audio clips, MIDI clips, and SoundFont routing.
 
-**`adapter.addTrack(track)`:** Adds a single track to the existing playout. Throws if called before `setTracks()` (no playout exists yet).
+**`adapter.addTrack(track)`:** Adds a single track to the existing playout. Playout is created eagerly, so `addTrack` works before `setTracks()`. Warns and returns if called after `dispose()`.
 
 **`adapter.updateTrack(trackId, track)`:** For audio tracks, uses `ToneTrack.replaceClips()` which diffs clips and only reschedules changed ones. Falls back to remove+re-add for MIDI tracks.
 

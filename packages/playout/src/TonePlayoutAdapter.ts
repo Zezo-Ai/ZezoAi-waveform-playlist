@@ -24,9 +24,19 @@ export interface ToneAdapterOptions {
 }
 
 export function createToneAdapter(options?: ToneAdapterOptions): PlayoutAdapter {
-  let playout: TonePlayout | null = null;
+  // Ensure the global shared context exists BEFORE creating the playout.
+  // Without this, TonePlayout's Volume is created on Tone's default context,
+  // which is replaced by getGlobalContext() later — causing cross-context errors.
+  getGlobalContext();
+
+  let _playoutGeneration = 1;
+  let playout: TonePlayout | null = new TonePlayout({ effects: options?.effects });
+  playout.setOnPlaybackComplete(() => {
+    if (_playoutGeneration === 1) {
+      _isPlaying = false;
+    }
+  });
   let _isPlaying = false;
-  let _playoutGeneration = 0;
   let _loopEnabled = false;
   let _loopStart = 0;
   let _loopEnd = 0;
@@ -126,8 +136,8 @@ export function createToneAdapter(options?: ToneAdapterOptions): PlayoutAdapter 
     }
   }
 
-  // Creates the initial TonePlayout. Called only on the first setTracks().
-  // Subsequent setTracks calls use the incremental path (no dispose/rebuild).
+  // Recreates TonePlayout after dispose. The initial playout is created eagerly
+  // above. setTracks() uses the incremental path when playout exists.
   function buildPlayout(tracks: ClipTrack[]): void {
     if (playout) {
       try {
@@ -267,10 +277,11 @@ export function createToneAdapter(options?: ToneAdapterOptions): PlayoutAdapter 
 
     addTrack(track: ClipTrack): void {
       if (!playout) {
-        throw new Error(
-          '[waveform-playlist] adapter.addTrack() called but no playout exists. ' +
-            'Call setTracks() first to initialize the playout.'
+        console.warn(
+          '[waveform-playlist] adapter.addTrack() called but playout is not available ' +
+            '(adapter may have been disposed).'
         );
+        return;
       }
       addTrackToPlayout(playout, track);
       playout.applyInitialSoloState();
@@ -395,6 +406,16 @@ export function createToneAdapter(options?: ToneAdapterOptions): PlayoutAdapter 
 
     createMediaStreamSource(stream: MediaStream): MediaStreamAudioSourceNode {
       return getGlobalContext().createMediaStreamSource(stream);
+    },
+
+    get masterOutputNode(): AudioNode {
+      if (!playout) {
+        throw new Error(
+          '[waveform-playlist] adapter.masterOutputNode accessed after dispose. ' +
+            'Disconnect your analyzer before disposing the adapter.'
+        );
+      }
+      return playout.masterOutputNode;
     },
 
     dispose(): void {
