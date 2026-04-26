@@ -214,6 +214,7 @@ pnpm example:dawcore-tone    # Tone.js backend — localhost:5174
 - [`record.html`](examples/dawcore-native/record.html) — Recording with overdub
 - [`metronome.html`](examples/dawcore-native/metronome.html) — Metronome with mixed meters, tempo presets, and looping sequences
 - [`automation.html`](examples/dawcore-native/automation.html) — Tempo automation with step, linear, and curve presets
+- [`analyser.html`](examples/dawcore-native/analyser.html) — Spectrum analyser connected to master output
 
 **dawcore-tone** example pages:
 
@@ -221,6 +222,7 @@ pnpm example:dawcore-tone    # Tone.js backend — localhost:5174
 - [`multiclip.html`](examples/dawcore-tone/multiclip.html) — Multi-clip editing with Tone.js
 - [`beats-grid.html`](examples/dawcore-tone/beats-grid.html) — Beats & bars grid with Tone.js
 - [`record.html`](examples/dawcore-tone/record.html) — Mic recording with overdub
+- [`analyser.html`](examples/dawcore-tone/analyser.html) — Spectrum analyser connected to master output
 
 ## Browser Support
 
