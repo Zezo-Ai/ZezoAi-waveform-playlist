@@ -225,6 +225,7 @@ pnpm example:dawcore-tone    # Tone.js backend — localhost:5174
 
 - [`basic.html`](examples/dawcore-tone/basic.html) — Basic playback with Tone.js adapter
 - [`multiclip.html`](examples/dawcore-tone/multiclip.html) — Multi-clip editing with Tone.js
+- [`programmatic.html`](examples/dawcore-tone/programmatic.html) — Imperative `editor.addTrack` / `addClip` / `updateClip` / `removeClip` plus declarative DOM mutation, with the Tone.js adapter
 - [`beats-grid.html`](examples/dawcore-tone/beats-grid.html) — Beats & bars grid with Tone.js
 - [`record.html`](examples/dawcore-tone/record.html) — Mic recording with overdub
 - [`analyser.html`](examples/dawcore-tone/analyser.html) — Spectrum analyser connected to master output
