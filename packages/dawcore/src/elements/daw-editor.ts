@@ -1824,38 +1824,43 @@ export class DawEditorElement extends LitElement {
     if (!playhead || !this._engine) return;
     const engine = this._engine;
     const ctx = this.audioContext;
+    // Audible position = engine time - hardware DAC latency - scheduler lookahead.
+    // - outputLatency: present on native AudioContext (~3ms Chrome, ~15ms Safari).
+    // - engine.lookAhead: proxies adapter.lookAhead (0.1s on Tone-backed adapters,
+    //   0 on native). Transport.seconds is the scheduling position, which runs
+    //   lookAhead ahead of what the listener hears. Without this subtraction the
+    //   playhead leads audio by ~100ms with the Tone adapter; native is a no-op.
+    const audibleTime = (): number => {
+      const outputLatency = 'outputLatency' in ctx ? (ctx as AudioContext).outputLatency : 0;
+      const t = engine.getCurrentTime() - outputLatency - engine.lookAhead;
+      return Number.isFinite(t) ? Math.max(0, t) : 0;
+    };
     if (this.scaleMode === 'beats') {
       const secondsToTicksFn = (s: number) => this._secondsToTicks(s);
-      playhead.startBeatsAnimationWithMap(
-        () => {
-          const latency = 'outputLatency' in ctx ? (ctx as AudioContext).outputLatency : 0;
-          return Math.max(0, engine.getCurrentTime() - latency);
-        },
-        secondsToTicksFn,
-        this.ticksPerPixel
-      );
+      playhead.startBeatsAnimationWithMap(audibleTime, secondsToTicksFn, this.ticksPerPixel);
     } else {
-      playhead.startAnimation(
-        () => {
-          const latency = 'outputLatency' in ctx ? (ctx as AudioContext).outputLatency : 0;
-          return Math.max(0, engine.getCurrentTime() - latency);
-        },
-        this.effectiveSampleRate,
-        this.samplesPerPixel
-      );
+      playhead.startAnimation(audibleTime, this.effectiveSampleRate, this.samplesPerPixel);
     }
   }
   _stopPlayhead() {
     const playhead = this._getPlayhead();
     if (!playhead) return;
+    // Resting playhead must use audible time so it lines up with where audio
+    // actually stopped. Storage stays raw (`_currentTime`) so the next play()
+    // resumes correctly — only the visual position is shifted.
+    const ctx = this.audioContext;
+    const outputLatency = 'outputLatency' in ctx ? (ctx as AudioContext).outputLatency : 0;
+    const lookAhead = this._engine?.lookAhead ?? 0;
+    const t = this._currentTime - outputLatency - lookAhead;
+    const visualTime = Number.isFinite(t) ? Math.max(0, t) : 0;
     if (this.scaleMode === 'beats') {
       playhead.stopBeatsAnimationWithMap(
-        this._currentTime,
+        visualTime,
         (s: number) => this._secondsToTicks(s),
         this.ticksPerPixel
       );
     } else {
-      playhead.stopAnimation(this._currentTime, this.effectiveSampleRate, this.samplesPerPixel);
+      playhead.stopAnimation(visualTime, this.effectiveSampleRate, this.samplesPerPixel);
     }
   }
   private _getPlayhead(): DawPlayheadElement | null {
