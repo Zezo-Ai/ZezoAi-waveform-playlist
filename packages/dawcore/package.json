@@ -1,6 +1,6 @@
 {
   "name": "@dawcore/components",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "description": "Web Components for multi-track audio editing — framework-agnostic",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -22,7 +22,9 @@
   },
   "author": "Naomi Aro",
   "license": "MIT",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "dependencies": {
     "lit": "^3.0.0",
     "waveform-data": "^4.5.2"
