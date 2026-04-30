@@ -183,6 +183,7 @@ npm install @waveform-playlist/playout tone  # Tone.js (effects, MIDI synths)
 
 **Features:**
 - Declarative `<daw-track>` and `<daw-clip>` elements with auto-loading
+- Imperative API for programmatic mutation — `editor.addTrack/removeTrack/updateTrack/addClip/removeClip/updateClip` and `editor.ready()` for engine bootstrap before any track loads
 - Adapter-pluggable — choose Native Web Audio or Tone.js backend
 - Clip move, trim, and split with collision detection
 - Undo/redo with transaction-based grouping
@@ -192,6 +193,7 @@ npm install @waveform-playlist/playout tone  # Tone.js (effects, MIDI synths)
 - Metronome with mixed meters and tempo changes
 - Tempo automation — linear ramps and Möbius-Ease curves with exact integration
 - Pre-computed peaks for fast initial render
+- `indefinite-playback` attribute fills the viewport when no audio is loaded — ruler renders before any track
 
 **Packages:**
 
@@ -211,6 +213,9 @@ pnpm example:dawcore-tone    # Tone.js backend — localhost:5174
 
 - [`basic.html`](examples/dawcore-native/basic.html) — Basic playback with timescale and file drop
 - [`multiclip.html`](examples/dawcore-native/multiclip.html) — Multi-clip editing with move, trim, and split
+- [`programmatic.html`](examples/dawcore-native/programmatic.html) — Imperative `editor.addTrack` / `addClip` / `updateClip` / `removeClip` plus declarative DOM mutation, side-by-side
+- [`beats-grid.html`](examples/dawcore-native/beats-grid.html) — Beats & bars grid mode with snap-to-grid
+- [`beat-map-grid.html`](examples/dawcore-native/beat-map-grid.html) — Variable tempo from beat maps with metronome
 - [`record.html`](examples/dawcore-native/record.html) — Recording with overdub
 - [`metronome.html`](examples/dawcore-native/metronome.html) — Metronome with mixed meters, tempo presets, and looping sequences
 - [`automation.html`](examples/dawcore-native/automation.html) — Tempo automation with step, linear, and curve presets
@@ -223,6 +228,8 @@ pnpm example:dawcore-tone    # Tone.js backend — localhost:5174
 - [`beats-grid.html`](examples/dawcore-tone/beats-grid.html) — Beats & bars grid with Tone.js
 - [`record.html`](examples/dawcore-tone/record.html) — Mic recording with overdub
 - [`analyser.html`](examples/dawcore-tone/analyser.html) — Spectrum analyser connected to master output
+
+**Spec & roadmap:** [`docs/specs/web-components-migration.md`](docs/specs/web-components-migration.md) — full element catalogue, attribute/property/event tables, programmatic API contracts, theming tokens, and migration phases.
 
 ## Browser Support
 
