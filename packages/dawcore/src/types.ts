@@ -1,4 +1,6 @@
-import type { FadeType } from '@waveform-playlist/core';
+import type { FadeType, MidiNoteData } from '@waveform-playlist/core';
+
+export type TrackRenderMode = 'waveform' | 'piano-roll';
 
 export interface TrackDescriptor {
   name: string;
@@ -7,6 +9,7 @@ export interface TrackDescriptor {
   pan: number;
   muted: boolean;
   soloed: boolean;
+  renderMode: TrackRenderMode;
   clips: ClipDescriptor[];
 }
 
@@ -24,6 +27,9 @@ interface BaseClipDescriptor {
   fadeIn: number;
   fadeOut: number;
   fadeType: FadeType;
+  midiNotes: MidiNoteData[] | null;
+  midiChannel: number | null;
+  midiProgram: number | null;
 }
 
 /**
@@ -68,17 +74,33 @@ export interface TrackConfig {
   pan?: number;
   muted?: boolean;
   soloed?: boolean;
+  renderMode?: TrackRenderMode;
   clips?: ClipConfig[];
+  /**
+   * Convenience: creates a single piano-roll `<daw-clip>` child with these
+   * notes and sets `render-mode="piano-roll"` on the track. Equivalent to
+   * passing `{ renderMode: 'piano-roll', clips: [{ midiNotes, midiChannel, midiProgram }] }`.
+   * An explicit `renderMode` takes precedence over the inferred `'piano-roll'`.
+   *
+   * Creation-only — ignored by `updateTrack`. To modify notes after the
+   * track is built, use `editor.updateClip(trackId, clipId, { midiNotes })` or
+   * mutate the `<daw-clip>` element's `midiNotes` property directly.
+   */
+  midi?: {
+    notes: MidiNoteData[];
+    channel?: number;
+    program?: number;
+  };
 }
 
 /**
  * Public input shape for clips passed via `TrackConfig.clips` or
- * `editor.addClip(trackId, config)`. `src` is required — every clip needs
- * an audio source to load. Other fields default to the matching
- * `<daw-clip>` attribute defaults.
+ * `editor.addClip(trackId, config)`. `src` is optional to support MIDI clips
+ * with no audio source. Other fields default to the matching `<daw-clip>`
+ * attribute defaults.
  */
 export interface ClipConfig {
-  src: string;
+  src?: string;
   peaksSrc?: string;
   start?: number;
   duration?: number;
@@ -88,4 +110,7 @@ export interface ClipConfig {
   fadeIn?: number;
   fadeOut?: number;
   fadeType?: FadeType;
+  midiNotes?: MidiNoteData[];
+  midiChannel?: number;
+  midiProgram?: number;
 }

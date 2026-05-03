@@ -4,6 +4,7 @@ import type {
   AudioClip,
   ClipTrack,
   FadeType,
+  MidiNoteData,
   Peaks,
   PeakData,
   SnapTo,
@@ -251,6 +252,19 @@ export class DawEditorElement extends LitElement {
     );
     return result.get(clipId) ?? null;
   }
+
+  /**
+   * Returns true if the clip is a MIDI clip (has midiNotes).
+   * Used by ClipPointerHandler to make trim handles inert for MIDI clips.
+   * Returns false for unknown track/clip IDs (defensive).
+   */
+  isMidiClip(trackId: string, clipId: string): boolean {
+    const track = this._engineTracks.get(trackId);
+    if (!track) return false;
+    const clip = track.clips.find((c) => c.id === clipId);
+    return clip?.midiNotes != null;
+  }
+
   private _pointer = new PointerHandler(this);
   private _viewport = (() => {
     const v = new ViewportController(this);
@@ -660,6 +674,9 @@ export class DawEditorElement extends LitElement {
       fadeIn: clipEl.fadeIn,
       fadeOut: clipEl.fadeOut,
       fadeType: clipEl.fadeType as FadeType,
+      midiNotes: clipEl.midiNotes,
+      midiChannel: clipEl.midiChannel,
+      midiProgram: clipEl.midiProgram,
     };
     this._loadAndAppendClip(trackId, clipDesc);
   };
@@ -701,7 +718,7 @@ export class DawEditorElement extends LitElement {
     }
   }
   private async _loadAndAppendClip(trackId: string, clipDesc: DomClipDescriptor) {
-    if (!clipDesc.src) return; // empty/no-src clips can't be loaded
+    if (!clipDesc.src) return; // Late-append of MIDI clips is not yet supported by _loadAndAppendClip — only _loadTrack handles the no-src MIDI branch on initial load.
     // Late-append always comes via _onClipConnected, which only fires for
     // <daw-clip> elements — so clipId is always known. We use it for the
     // error dispatch so the consumer's addClip Promise rejects with a usable
@@ -873,6 +890,81 @@ export class DawEditorElement extends LitElement {
     }
     return clip;
   }
+  /**
+   * Filter MIDI notes to only those with finite, in-range fields. Logs a
+   * warning for each dropped note. Used by _buildMidiClip and the
+   * _applyClipUpdate MIDI branch to prevent NaN propagation through the
+   * timeline.
+   */
+  private _validMidiNotes(notes: MidiNoteData[]): MidiNoteData[] {
+    return notes.filter((n) => {
+      const ok =
+        Number.isFinite(n.time) &&
+        n.time >= 0 &&
+        Number.isFinite(n.duration) &&
+        n.duration > 0 &&
+        Number.isInteger(n.midi) &&
+        n.midi >= 0 &&
+        n.midi <= 127 &&
+        Number.isFinite(n.velocity) &&
+        n.velocity >= 0 &&
+        n.velocity <= 1;
+      if (!ok) {
+        console.warn('[dawcore] dropping malformed MIDI note: ' + JSON.stringify(n));
+      }
+      return ok;
+    });
+  }
+  /**
+   * A clip descriptor is treated as MIDI when it has no audio src.
+   * Includes placeholder MIDI clips (no notes, no duration yet — registered
+   * with a 1s default span; notes upgrade via _applyClipUpdate). Warns when
+   * a clip ambiguously has both src and midiNotes — the audio path runs
+   * and notes would be silently ignored.
+   */
+  private _isMidiDescriptor(clipDesc: ClipDescriptor): boolean {
+    if (clipDesc.src) {
+      if (clipDesc.midiNotes != null) {
+        console.warn(
+          '[dawcore] clip "' +
+            (clipDesc.name || (isDomClip(clipDesc) ? clipDesc.clipId : '?')) +
+            '" has both src and midiNotes — treating as audio (notes will be ignored)'
+        );
+      }
+      return false;
+    }
+    return true;
+  }
+  /**
+   * Build an engine clip from a MIDI clip descriptor. Always returns a clip
+   * — empty notes / no declared duration get a 1-second placeholder span so
+   * the clip is reachable via `engine.updateTrack` once notes arrive.
+   */
+  private _buildMidiClip(clipDesc: ClipDescriptor): AudioClip {
+    const sr = this.effectiveSampleRate;
+    const notes = this._validMidiNotes(clipDesc.midiNotes ?? []);
+    const noteSpanSeconds = notes.length
+      ? notes.reduce((max, n) => Math.max(max, n.time + n.duration), 0)
+      : 0;
+    const sourceDurationSamples = Math.ceil(Math.max(noteSpanSeconds, clipDesc.duration, 1) * sr);
+    const requestedDurationSamples =
+      clipDesc.duration > 0 ? Math.round(clipDesc.duration * sr) : sourceDurationSamples;
+
+    const clip = createClip({
+      startSample: Math.round(clipDesc.start * sr),
+      durationSamples: requestedDurationSamples,
+      offsetSamples: Math.round(clipDesc.offset * sr),
+      sampleRate: sr,
+      sourceDurationSamples,
+      gain: clipDesc.gain,
+      name: clipDesc.name,
+      midiNotes: notes,
+      midiChannel: clipDesc.midiChannel ?? undefined,
+      midiProgram: clipDesc.midiProgram ?? undefined,
+    });
+    if (isDomClip(clipDesc)) clip.id = clipDesc.clipId;
+    return clip;
+  }
   /** Remove a single clip from all per-clip caches. Used by error rollbacks. */
   private _purgeClipCaches(clipId: string) {
     const nextBuffers = new Map(this._clipBuffers);
@@ -914,6 +1006,47 @@ export class DawEditorElement extends LitElement {
     }
     const oldClip = t.clips[idx];
     const sr = oldClip.sampleRate ?? this.effectiveSampleRate;
+
+    // MIDI clips: rebuild the clip when notes/channel/program change. Detect
+    // MIDI by either current or previous state being MIDI. oldClip.midiNotes
+    // is an array (possibly empty []) for any clip registered via _buildMidiClip
+    // — including placeholders. For audio clips it is undefined.
+    // Use loose != null consistently: treats both null and undefined as "not MIDI"
+    // for both clipEl.midiNotes (DawClipElement defaults to null) and oldClip.midiNotes.
+    const isMidiNow = clipEl.midiNotes != null;
+    const wasMidi = oldClip.midiNotes != null;
+    if (isMidiNow || wasMidi) {
+      const notes = this._validMidiNotes(clipEl.midiNotes ?? []);
+      const noteSpanSeconds = notes.length
+        ? notes.reduce((max, n) => Math.max(max, n.time + n.duration), 0)
+        : 0;
+      const sourceDurationSamples = Math.ceil(Math.max(noteSpanSeconds, clipEl.duration, 1) * sr);
+      const requestedDurationSamples =
+        clipEl.duration > 0 ? Math.round(clipEl.duration * sr) : sourceDurationSamples;
+
+      const updatedClip: AudioClip = {
+        ...oldClip,
+        audioBuffer: undefined,
+        startSample: Math.round(clipEl.start * sr),
+        offsetSamples: Math.round(clipEl.offset * sr),
+        durationSamples: requestedDurationSamples,
+        sourceDurationSamples,
+        gain: clipEl.gain,
+        name: clipEl.name || oldClip.name,
+        midiNotes: notes,
+        midiChannel: clipEl.midiChannel ?? undefined,
+        midiProgram: clipEl.midiProgram ?? undefined,
+      };
+      const updatedClips = [...t.clips];
+      updatedClips[idx] = updatedClip;
+      const updatedTrack: ClipTrack = { ...t, clips: updatedClips };
+      this._engineTracks = new Map(this._engineTracks).set(trackId, updatedTrack);
+      // Drop any audio caches in case this clip was previously loaded as audio.
+      this._purgeClipCaches(clipId);
+      this._commitTrackChange(trackId, updatedTrack);
+      return;
+    }
+
     const newStartSample = Math.round(clipEl.start * sr);
     const newDurationSamples =
       clipEl.duration > 0 ? Math.round(clipEl.duration * sr) : oldClip.durationSamples;
@@ -1000,6 +1133,9 @@ export class DawEditorElement extends LitElement {
         fadeIn: 0,
         fadeOut: 0,
         fadeType: 'linear',
+        midiNotes: null,
+        midiChannel: null,
+        midiProgram: null,
       });
     } else {
       for (const clipEl of clipEls) {
@@ -1016,6 +1152,9 @@ export class DawEditorElement extends LitElement {
           fadeIn: clipEl.fadeIn,
           fadeOut: clipEl.fadeOut,
           fadeType: clipEl.fadeType as FadeType,
+          midiNotes: clipEl.midiNotes,
+          midiChannel: clipEl.midiChannel,
+          midiProgram: clipEl.midiProgram,
         });
       }
     }
@@ -1026,6 +1165,7 @@ export class DawEditorElement extends LitElement {
       pan: trackEl.pan,
       muted: trackEl.muted,
       soloed: trackEl.soloed,
+      renderMode: trackEl.renderMode,
       clips,
     };
   }
@@ -1034,7 +1174,14 @@ export class DawEditorElement extends LitElement {
     try {
       const clips = [];
       for (const clipDesc of descriptor.clips) {
-        if (!clipDesc.src) continue;
+        if (this._isMidiDescriptor(clipDesc)) {
+          // MIDI clip path: no fetch, no peaks, register the clip directly.
+          // Always registers (even with no notes / no duration) so late note
+          // arrivals via daw-clip-update — handled in _applyClipUpdate
+          // — can find the clip in _engineTracks.
+          clips.push(this._buildMidiClip(clipDesc));
+          continue;
+        }
         // Per-clip try/catch: a single bad clip dispatches daw-clip-error and
         // skips to the next clip rather than aborting the whole track. Without
         // this, clip N's failure leaks earlier clips' cache writes from this
@@ -1295,8 +1442,14 @@ export class DawEditorElement extends LitElement {
           nextTracks.set(track.id, track);
         }
         this._engineTracks = nextTracks;
-        // Regenerate peaks for new or trimmed clips
-        syncPeaksForChangedClips(this, engineState.tracks);
+        // Regenerate peaks for new or trimmed clips.
+        // Piano-roll tracks have no AudioBuffer — skip them to avoid noisy
+        // "no AudioBuffer" warnings on every tracksVersion bump.
+        const audioTracks = engineState.tracks.filter((t) => {
+          const desc = this._tracks.get(t.id);
+          return desc?.renderMode !== 'piano-roll';
+        });
+        syncPeaksForChangedClips(this, audioTracks);
       }
     });
     engine.on('pause', () => {
@@ -1414,7 +1567,19 @@ export class DawEditorElement extends LitElement {
     if (config.muted) trackEl.setAttribute('muted', '');
     if (config.soloed) trackEl.setAttribute('soloed', '');
 
-    for (const clipConfig of config.clips ?? []) {
+    // render-mode: explicit > inferred from midi shorthand > default 'waveform'
+    const renderMode = config.renderMode ?? (config.midi ? 'piano-roll' : undefined);
+    if (renderMode !== undefined) trackEl.setAttribute('render-mode', renderMode);
+
+    const clipConfigs: ClipConfig[] = [...(config.clips ?? [])];
+    if (config.midi) {
+      clipConfigs.push({
+        midiNotes: config.midi.notes,
+        midiChannel: config.midi.channel,
+        midiProgram: config.midi.program,
+      });
+    }
+    for (const clipConfig of clipConfigs) {
       trackEl.appendChild(this._buildClipElement(clipConfig));
     }
 
@@ -1464,6 +1629,7 @@ export class DawEditorElement extends LitElement {
         if (partial.soloed) trackEl.setAttribute('soloed', '');
         else trackEl.removeAttribute('soloed');
       }
+      if (partial.renderMode !== undefined) trackEl.setAttribute('render-mode', partial.renderMode);
       return;
     }
     // No DOM element — apply directly to descriptor + engine.
@@ -1476,6 +1642,7 @@ export class DawEditorElement extends LitElement {
       ...(partial.pan !== undefined && { pan: partial.pan }),
       ...(partial.muted !== undefined && { muted: partial.muted }),
       ...(partial.soloed !== undefined && { soloed: partial.soloed }),
+      ...(partial.renderMode !== undefined && { renderMode: partial.renderMode }),
     };
     this._tracks = new Map(this._tracks).set(trackId, newDesc);
     if (this._engine) {
@@ -1615,6 +1782,11 @@ export class DawEditorElement extends LitElement {
     if (config.fadeIn !== undefined) clipEl.fadeIn = config.fadeIn;
     if (config.fadeOut !== undefined) clipEl.fadeOut = config.fadeOut;
     if (config.fadeType !== undefined) clipEl.setAttribute('fade-type', config.fadeType);
+    if (config.midiNotes !== undefined) clipEl.midiNotes = config.midiNotes;
+    if (config.midiChannel !== undefined)
+      clipEl.setAttribute('midi-channel', String(config.midiChannel));
+    if (config.midiProgram !== undefined)
+      clipEl.setAttribute('midi-program', String(config.midiProgram));
     return clipEl;
   }
   // --- Playback ---
@@ -2088,21 +2260,35 @@ export class DawEditorElement extends LitElement {
                           <span>${clip.name || t.descriptor?.name || ''}</span>
                         </div>`
                       : ''}
-                    ${channels.map(
-                      (chPeaks, chIdx) =>
-                        html` <daw-waveform
-                          style="position:absolute;left:0;top:${hdrH + chIdx * chH}px;"
-                          .peaks=${chPeaks}
+                    ${t.descriptor?.renderMode === 'piano-roll'
+                      ? html`<daw-piano-roll
+                          style="position:absolute;left:0;top:${hdrH}px;"
+                          .midiNotes=${clip.midiNotes ?? []}
                           .length=${peakData?.length ?? width}
-                          .waveHeight=${chH}
-                          .barWidth=${this.barWidth}
-                          .barGap=${this.barGap}
+                          .waveHeight=${chH * channels.length}
+                          .samplesPerPixel=${this._renderSpp}
+                          .sampleRate=${this.effectiveSampleRate}
+                          .clipOffsetSeconds=${(clip.offsetSamples ?? 0) / this.effectiveSampleRate}
                           .visibleStart=${this._viewport.visibleStart}
                           .visibleEnd=${this._viewport.visibleEnd}
                           .originX=${clipLeft}
-                          .segments=${clipSegments}
-                        ></daw-waveform>`
-                    )}
+                          ?selected=${t.trackId === this._selectedTrackId}
+                        ></daw-piano-roll>`
+                      : channels.map(
+                          (chPeaks, chIdx) =>
+                            html` <daw-waveform
+                              style="position:absolute;left:0;top:${hdrH + chIdx * chH}px;"
+                              .peaks=${chPeaks}
+                              .length=${peakData?.length ?? width}
+                              .waveHeight=${chH}
+                              .barWidth=${this.barWidth}
+                              .barGap=${this.barGap}
+                              .visibleStart=${this._viewport.visibleStart}
+                              .visibleEnd=${this._viewport.visibleEnd}
+                              .originX=${clipLeft}
+                              .segments=${clipSegments}
+                            ></daw-waveform>`
+                        )}
                     ${this.interactiveClips
                       ? html` <div
                             class="clip-boundary"
