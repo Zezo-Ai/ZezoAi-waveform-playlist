@@ -47,12 +47,19 @@ export function useRecording(
   const audioTrackRef = useRef<MediaStreamTrack | null>(null);
   const onTrackEndedRef = useRef<(() => void) | null>(null);
   const stopRecordingRef = useRef<(() => Promise<AudioBuffer | null>) | null>(null);
+  // Resolved when the worklet posts the final done message after a stop command.
+  const stopAckResolveRef = useRef<(() => void) | null>(null);
+  // True from the start of stopRecording until it resolves. Distinct from
+  // isPausedRef (user explicitly paused) — both freeze the duration tick,
+  // but conflating them risks pauseRecording becoming a no-op while we're
+  // stopping, or vice versa.
+  const isStoppingRef = useRef<boolean>(false);
 
   // Shared duration update loop — starts a rAF loop that updates duration
   // from performance.now(). Used by both startRecording and resumeRecording.
   const startDurationLoop = useCallback(() => {
     const tick = () => {
-      if (isRecordingRef.current && !isPausedRef.current) {
+      if (isRecordingRef.current && !isPausedRef.current && !isStoppingRef.current) {
         const elapsed = (performance.now() - startTimeRef.current) / 1000;
         setDuration(elapsed);
         animationFrameRef.current = requestAnimationFrame(tick);
@@ -143,37 +150,52 @@ export function useRecording(
 
       // Listen for audio data from worklet
       workletNode.port.onmessage = (event: MessageEvent) => {
-        const { channels } = event.data as { channels: Float32Array[] };
+        const { channels, done } = event.data as {
+          channels: Float32Array[];
+          done?: boolean;
+        };
 
-        if (!channels || channels.length === 0) {
-          console.warn('[waveform-playlist] Recording worklet sent empty or missing channels data');
-          return;
-        }
-
-        // Accumulate per-channel samples
-        for (let ch = 0; ch < channels.length; ch++) {
-          if (!recordedChunksRef.current[ch]) {
-            console.warn(
-              `[waveform-playlist] Unexpected channel ${ch} from worklet (expected ${recordedChunksRef.current.length})`
-            );
-            recordedChunksRef.current[ch] = [];
-          }
-          recordedChunksRef.current[ch].push(channels[ch]);
-        }
-        // Capture sample offset before incrementing — used by peak alignment
-        const samplesProcessedBefore = totalSamplesRef.current;
-        totalSamplesRef.current += channels[0].length;
-        setPeaks((prevPeaks) => {
-          // Ensure we have an entry per channel
-          const updated: (Int8Array | Int16Array)[] = [];
+        // Empty messages can arrive from the final stop ack when nothing was buffered.
+        // Handle channels first if present, then resolve the stop barrier.
+        if (channels && channels.length > 0 && channels[0] && channels[0].length > 0) {
           for (let ch = 0; ch < channels.length; ch++) {
-            const prev = prevPeaks[ch] ?? emptyPeaks(bits);
-            updated.push(
-              appendPeaks(prev, channels[ch], samplesPerPixel, samplesProcessedBefore, bits)
-            );
+            if (!recordedChunksRef.current[ch]) {
+              console.warn(
+                `[waveform-playlist] Unexpected channel ${ch} from worklet (expected ${recordedChunksRef.current.length})`
+              );
+              recordedChunksRef.current[ch] = [];
+            }
+            recordedChunksRef.current[ch].push(channels[ch]);
           }
-          return updated;
-        });
+          // Capture sample offset before incrementing — used by peak alignment
+          const samplesProcessedBefore = totalSamplesRef.current;
+          totalSamplesRef.current += channels[0].length;
+
+          // Skip live-preview peak updates while stop is in flight. The
+          // queue may have many flushes pending; updating peaks for each
+          // would let the live-preview waveform grow visibly past where
+          // the user stopped, only to be replaced moments later by the
+          // final clip (which is shorter due to latency compensation).
+          // Chunks are already pushed above so no audio is lost.
+          if (stopAckResolveRef.current === null) {
+            setPeaks((prevPeaks) => {
+              // Ensure we have an entry per channel
+              const updated: (Int8Array | Int16Array)[] = [];
+              for (let ch = 0; ch < channels.length; ch++) {
+                const prev = prevPeaks[ch] ?? emptyPeaks(bits);
+                updated.push(
+                  appendPeaks(prev, channels[ch], samplesPerPixel, samplesProcessedBefore, bits)
+                );
+              }
+              return updated;
+            });
+          }
+        }
+
+        if (done) {
+          stopAckResolveRef.current?.();
+          stopAckResolveRef.current = null;
+        }
 
         // Note: VU meter levels come from useMicrophoneLevel (meter-processor worklet)
         // We don't update level/peakLevel here to avoid conflicting state updates
@@ -217,6 +239,17 @@ export function useRecording(
     }
 
     try {
+      // Freeze the duration tick immediately so the live-preview width
+      // (durationSamples = duration * sampleRate) doesn't keep growing
+      // during the worklet stop handshake / queue drain. isStoppingRef
+      // stops the rAF tick from rescheduling; cancelling animationFrameRef
+      // kills any frame already queued.
+      isStoppingRef.current = true;
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+
       // Remove mic-unplug listener
       if (audioTrackRef.current && onTrackEndedRef.current) {
         audioTrackRef.current.removeEventListener('ended', onTrackEndedRef.current);
@@ -224,25 +257,59 @@ export function useRecording(
         onTrackEndedRef.current = null;
       }
 
-      // Stop the worklet
-      if (workletNodeRef.current) {
-        workletNodeRef.current.port.postMessage({ command: 'stop' });
+      // Stop the worklet and wait for its final flush message before reading chunks.
+      // Without the await, the partial buffer at the end of recording arrives after
+      // the AudioBuffer is built and is silently dropped.
+      // Snapshot the worklet node once — the drain loop yields the event loop
+      // for up to 250ms, during which an unmount-cleanup could null the ref.
+      const node = workletNodeRef.current;
+      if (node) {
+        const stopAck = new Promise<void>((resolve) => {
+          stopAckResolveRef.current = resolve;
+        });
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        // Safety timeout (1s) — purely a circuit breaker for a truly failed
+        // worklet (crashed, context closed). The drain loop below catches
+        // any straggler flush messages that were queued before the timeout
+        // fired, so chunks are complete even when this fires.
+        const timeout = new Promise<void>((resolve) => {
+          timeoutId = setTimeout(resolve, 1000);
+        });
+
+        node.port.postMessage({ command: 'stop' });
+        await Promise.race([stopAck, timeout]);
+        clearTimeout(timeoutId);
+        stopAckResolveRef.current = null;
+
+        // Drain the event-loop queue. During recording the worklet posts a
+        // flush every ~16ms; if main was slower than that, messages back up.
+        // Yield repeatedly until totalSamplesRef stabilizes for several
+        // consecutive ticks — at that point the queue is empty.
+        let lastSamples = -1;
+        let stable = 0;
+        for (let i = 0; i < 50; i++) {
+          if (totalSamplesRef.current === lastSamples) {
+            if (++stable >= 3) break;
+          } else {
+            stable = 0;
+            lastSamples = totalSamplesRef.current;
+          }
+          await new Promise<void>((r) => setTimeout(r, 5));
+        }
+
+        // Null the handler so any late delivery from this worklet doesn't
+        // contaminate a subsequent recording session's chunks.
+        node.port.onmessage = null;
 
         // Disconnect worklet from source
         if (mediaStreamSourceRef.current) {
           try {
-            mediaStreamSourceRef.current.disconnect(workletNodeRef.current);
+            mediaStreamSourceRef.current.disconnect(node);
           } catch (err) {
             console.warn('[waveform-playlist] Source disconnect during stop:', String(err));
           }
         }
-        workletNodeRef.current.disconnect();
-      }
-
-      // Cancel animation frame
-      if (animationFrameRef.current !== null) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
+        node.disconnect();
       }
 
       // Create final AudioBuffer from accumulated per-channel chunks
@@ -256,11 +323,6 @@ export function useRecording(
       // return null instead of creating a 0-length AudioBuffer which throws
       if (totalSamples === 0) {
         console.warn('[waveform-playlist] Recording stopped with 0 samples captured — discarding');
-        isRecordingRef.current = false;
-        isPausedRef.current = false;
-        setIsRecording(false);
-        setIsPaused(false);
-        setLevel(0);
         return null;
       }
 
@@ -268,11 +330,6 @@ export function useRecording(
 
       setAudioBuffer(buffer);
       setDuration(buffer.duration);
-      isRecordingRef.current = false;
-      isPausedRef.current = false;
-      setIsRecording(false);
-      setIsPaused(false);
-      setLevel(0);
       // Keep peakLevel to show the peak reached during recording
 
       return buffer;
@@ -280,6 +337,15 @@ export function useRecording(
       console.warn('[waveform-playlist] Failed to stop recording:', String(err));
       setError(err instanceof Error ? err : new Error('Failed to stop recording'));
       return null;
+    } finally {
+      // Always clear recording flags, even on failure — otherwise the UI gets
+      // stuck in "recording" state if AudioBuffer creation throws.
+      isRecordingRef.current = false;
+      isPausedRef.current = false;
+      isStoppingRef.current = false;
+      setIsRecording(false);
+      setIsPaused(false);
+      setLevel(0);
     }
   }, [channelCount]);
   stopRecordingRef.current = stopRecording;
@@ -287,6 +353,7 @@ export function useRecording(
   // Pause recording
   const pauseRecording = useCallback(() => {
     if (isRecording && !isPaused) {
+      workletNodeRef.current?.port.postMessage({ command: 'pause' });
       if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
@@ -299,6 +366,7 @@ export function useRecording(
   // Resume recording
   const resumeRecording = useCallback(() => {
     if (isRecording && isPaused) {
+      workletNodeRef.current?.port.postMessage({ command: 'resume' });
       isPausedRef.current = false;
       setIsPaused(false);
       startTimeRef.current = performance.now() - duration * 1000;

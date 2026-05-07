@@ -67,6 +67,13 @@
 - **Track height must include recording session channels** — `numChannels` for track height is derived from finalized clip peaks. During live recording with no clips yet, it falls back to 1. Check `_recordingController.getSession(trackId)?.channelCount` for the correct channel count during recording.
 - **Live preview position must match finalized clip** — Preview skips latency peaks (slice `latencyPixels * 2` from front) but keeps `left = startSample / spp` (no latency pixel offset on position). Both preview and finalized clip sit at `startSample` — the audio data is what shifts, not the container position.
 - **Worklet pause/resume** — `recording-processor` accepts `pause` (flushes partial buffer, stops accumulating) and `resume` (restarts). Controller exposes `pauseRecording()`/`resumeRecording()`, editor delegates. Pause button sends both worklet pause and Transport pause.
+- **`RecordingController.stopRecording` returns `Promise<void>`** — awaits the worklet's `done: true` ack before reading chunks (same handshake as `useRecording`). Fire-and-forget callers (`daw-stop-button`) work unchanged.
+
+## Recording Stop Handshake Test Patterns
+
+- Auto-acknowledge `{ command: 'stop' }` synchronously in the `port.postMessage` mock for tests that don't need to verify the await — keeps the test body sync-feeling.
+- To verify the `await Promise.race(...)` is real (not coincidental from a sync ack), defer the done message via `queueMicrotask`. Drop the await and the test fails — `session.chunks` stays empty, controller bails with "No audio data captured", `_addRecordedClip` is never called.
+- `concatenateAudioData` is mocked to return `Float32Array(0)`. Assert on chunk content via `vi.mocked(concatenateAudioData).mock.calls[0][0]` (its INPUT — the per-channel chunk array), not on `createAudioBuffer`'s output.
 - **Peak generation must pass clip offset/duration** — `generatePeaks(buf, spp, mono, offsetSamples, durationSamples)` extracts peaks for only the clip's visible portion. Without offset/duration, clips sharing an AudioBuffer get full-buffer peaks and overlap visually.
 - **`clip-headers` boolean attribute** — Defaults to false (no headers). Enable with `<daw-editor clip-headers>`. CSS in `clipStyles` from `theme.ts`. Header height (20px) subtracted from waveform area, divided equally among channels.
 - **PeakPipeline baseScale** — Worker generates WaveformData at `baseScale` (default 128, matching AudioWorklet quantum). `extractPeaks` resamples to any coarser zoom level from cache. All zoom levels >= baseScale work without regeneration. Configurable: `new PeakPipeline(baseScale, bits)`.
@@ -274,3 +281,19 @@ Custom properties on `<daw-editor>` or any ancestor, inherited through Shadow DO
 - **Demo:** `examples/dawcore-tone/midi.html` — programmatic C major scale, no SoundFont, exercises `editor.addTrack({ midi })` end to end.
 - **Read-only classification queries belong on `ClipPointerHost`, not `ClipEngineContract`** — `ClipEngineContract` is a narrow stateless mutation contract (`moveClip`, `trimClip`, etc.). Whether a clip is MIDI is a read-only classification that requires traversing track state. Add such methods (e.g. `isMidiClip(trackId, clipId)`) to the host interface and implement them on `<daw-editor>`. The host is dawcore-internal; only `<daw-editor>` implements it, so requiring the new method (not optional) is safe and prevents silent-pass-through bugs.
 - **MIDI clip late-append is unsupported** — `_loadAndAppendClip` (the late-append path triggered by `daw-clip-connected` after the parent track is loaded) only handles audio clips (early-return on `!src`). Late-appended `<daw-clip>` elements with `midiNotes` set silently do nothing. Workarounds: include the MIDI clip in the initial `<daw-track>` markup, or use `editor.addTrack({ midi })` (which goes through `_loadTrack`'s MIDI branch on initial load).
+
+## Stop Button Must Await `stopRecording` Before `editor.stop()`
+
+`daw-stop-button` chains: `target.stopRecording().then(() => target.stop())`. Calling them in parallel breaks the worklet's terminal `done` round-trip — `engine.stop()` can pause the audio thread mid-handshake, so the worklet's done message never gets delivered through. Symptom: stop-timeout warning that's hard to attribute.
+
+## `<daw-keyboard-shortcuts>` Must Be Inside `<daw-editor>`
+
+Resolves its parent via `closest('daw-editor')`. Placing it as a sibling (e.g. inside `<daw-transport>`) silently fails — runtime warns "Preset shortcuts will be inactive; only customShortcuts will fire." Easy to miss because transport buttons in `<daw-transport>` work via id-based lookup, suggesting both should.
+
+## Pause/Resume Event Bus for Multi-Source State Sync
+
+`RecordingController` dispatches `daw-recording-pause` / `daw-recording-resume` so any UI element can sync its visual state when *anything* triggers a pause toggle (button click, spacebar shortcut, programmatic call). `daw-pause-button` listens to these for its `data-paused` attribute. Add to this pattern when introducing new pause-aware UI.
+
+## `editor.togglePauseRecording()` Is the Unified Pause Toggle
+
+Audacity-style: pauses both worklet capture and (only when running) the playback Transport. Tracks `_wasPlayingDuringRecording` so resume restarts Transport only for overdub sessions. Both `togglePlayPause()` (spacebar) and `daw-pause-button` delegate to this — never duplicate the toggle logic in new UI; route everything through it.

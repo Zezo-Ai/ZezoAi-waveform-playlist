@@ -19,6 +19,10 @@
 interface RecordingProcessorMessage {
   channels: Float32Array[];
   channelCount: number;
+  /** Set on the final message after a `stop` command — main thread awaits this
+   * before reading accumulated chunks, otherwise the partial buffer flushed at
+   * stop time arrives after the AudioBuffer is built and is lost. */
+  done?: boolean;
 }
 
 class RecordingProcessor extends AudioWorkletProcessor {
@@ -69,10 +73,15 @@ class RecordingProcessor extends AudioWorkletProcessor {
       } else if (command === 'stop') {
         this.isRecording = false;
 
-        // Send any remaining buffered samples
-        if (this.samplesCollected > 0) {
-          this.flushBuffers();
-        }
+        // Always send a terminal message with done:true so the main thread
+        // can await the partial-buffer flush before reading accumulated chunks.
+        this.flushBuffers(true);
+
+        // After the final flush the underlying buffers are detached. Drop
+        // them and zero bufferSize so a stray resume can't write into
+        // detached memory (writes would silently no-op in V8).
+        this.buffers = [];
+        this.bufferSize = 0;
       }
     };
   }
@@ -129,19 +138,32 @@ class RecordingProcessor extends AudioWorkletProcessor {
     return true; // Keep processor alive
   }
 
-  private flushBuffers(): void {
-    // Send all channel buffers to main thread
+  private flushBuffers(final = false): void {
+    // Transfer underlying buffers (no slice / no structured-clone copy).
+    // Detaches this.buffers[i]; non-final flushes reallocate replacements.
     const channels: Float32Array[] = [];
+    const transfer: ArrayBuffer[] = [];
     for (let i = 0; i < this.channelCount; i++) {
-      channels.push(this.buffers[i].slice(0, this.samplesCollected));
+      const buf = this.buffers[i];
+      channels.push(buf.subarray(0, this.samplesCollected));
+      // Float32Array.buffer is ArrayBufferLike (ArrayBuffer | SharedArrayBuffer)
+      // in modern lib types. AudioWorklet inputs are always ArrayBuffer-backed.
+      transfer.push(buf.buffer as ArrayBuffer);
     }
 
-    this.port.postMessage({
+    const message: RecordingProcessorMessage = {
       channels,
       channelCount: this.channelCount,
-    } as RecordingProcessorMessage);
+    };
+    if (final) message.done = true;
 
-    // Reset buffer
+    this.port.postMessage(message, transfer);
+
+    if (!final) {
+      for (let i = 0; i < this.channelCount; i++) {
+        this.buffers[i] = new Float32Array(this.bufferSize);
+      }
+    }
     this.samplesCollected = 0;
   }
 }

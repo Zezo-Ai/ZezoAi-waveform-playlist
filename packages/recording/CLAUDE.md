@@ -122,3 +122,25 @@ The clip's `offsetSamples` skips this combined latency period. `durationSamples`
 ## Device Hot-Plug Detection
 
 **Pattern:** `useMicrophoneAccess` listens for `navigator.mediaDevices.devicechange` to re-enumerate devices on plug/unplug. `useIntegratedRecording` auto-falls back to the first available device if the selected device disappears from the list.
+
+## Pause/Resume Must Message the Worklet
+
+`useRecording.pauseRecording()` / `resumeRecording()` must `port.postMessage({ command: 'pause' | 'resume' })` to the worklet. Flipping React state and cancelling the duration rAF is not enough — the worklet keeps capturing. Silent bug; only visible in the resulting AudioBuffer length.
+
+## Stop Must Await Done Acknowledgment
+
+`stopRecording()` awaits the worklet's `done: true` message before building the AudioBuffer (`stopAckResolveRef` + `Promise.race` against a 250ms safety timeout). Without the await, the partial buffer at stop time arrives after the synchronous chunk read and is silently dropped — last ~16ms of every recording lost.
+
+## Hook Test Setup
+
+- `vitest.config.ts` sets `environment: 'jsdom'`. Tests use `@testing-library/react` `renderHook` + `act`.
+- Mock `getGlobalContext` (Tone playout) via getter form (`getGlobalContext: () => mockContext`) so `beforeEach` can mutate the underlying mock — `vi.mock` factories run at module-load time and capture *bindings*, not values.
+- Mock `concatenateAudioData` with a real concatenation (not `Float32Array(0)`) so `createAudioBuffer.length` reflects pushed chunks. Without this, late-sample assertions can't distinguish "ack fired" from "ack fired AND samples reached the buffer."
+
+## Drain Event-Loop Queue After Stop Ack
+
+After `await Promise.race([stopAck, timeout])` resolves, drain the event-loop queue before reading chunks. Yield in 5ms ticks until `totalSamples` stops growing for 3 consecutive ticks. Without this, pending flush messages in the queue (built up during recording under main-thread load) get dropped when the session is deleted. The stopAck and the queue drain serve different purposes — neither alone guarantees chunk completeness.
+
+## Freeze Duration rAF at Top of `stopRecording`
+
+The live preview's *width* in the React example is `duration * sampleRate` — driven by a rAF tick separate from the peaks. If the tick keeps running through the stop handshake/drain, the preview container keeps growing while peaks are skipped → empty peaks rendered into an ever-widening container. At the top of `stopRecording`: `isPausedRef.current = true` + `cancelAnimationFrame(animationFrameRef.current)`. The tick checks `isPausedRef` and returns without rescheduling.

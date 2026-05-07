@@ -6,6 +6,8 @@ import type {
   DawRecordingStartDetail,
   DawRecordingCompleteDetail,
   DawRecordingErrorDetail,
+  DawRecordingPauseDetail,
+  DawRecordingResumeDetail,
 } from '../events';
 
 export interface RecordingOptions {
@@ -36,6 +38,12 @@ export interface RecordingSession {
   /** Stored so it can be removed on stop/cleanup — not just when stream ends. */
   readonly _onTrackEnded: (() => void) | null;
   readonly _audioTrack: MediaStreamTrack | null;
+  /** Set during stopRecording, cleared by the done message from the worklet. */
+  stopAckResolve: (() => void) | null;
+  /** True from the start of stopRecording until the session is deleted.
+   * Guards pauseRecording / resumeRecording so a mid-drain pause toggle
+   * can't dispatch events for a session that's already terminating. */
+  stopping: boolean;
 }
 
 /** Readonly view of a recording session for external consumers. */
@@ -88,6 +96,9 @@ export class RecordingController implements ReactiveController {
   private _host: RecordingHost & HTMLElement;
   private _sessions = new Map<string, RecordingSession>();
   private _workletLoadedCtx: AudioContext | null = null;
+  /** Tracks worklet pause state explicitly so external consumers (editor,
+   * pause button, spacebar) can share one source of truth. */
+  private _isPaused = false;
 
   constructor(host: RecordingHost & HTMLElement) {
     this._host = host;
@@ -105,6 +116,10 @@ export class RecordingController implements ReactiveController {
 
   get isRecording(): boolean {
     return this._sessions.size > 0;
+  }
+
+  get isPaused(): boolean {
+    return this._isPaused && this._sessions.size > 0;
   }
 
   getSession(trackId: string): ReadonlyRecordingSession | undefined {
@@ -212,6 +227,8 @@ export class RecordingController implements ReactiveController {
         wasOverdub: options.overdub ?? false,
         _onTrackEnded: onTrackEnded,
         _audioTrack: audioTrack,
+        stopAckResolve: null,
+        stopping: false,
       };
       this._sessions.set(trackId, session);
 
@@ -259,32 +276,99 @@ export class RecordingController implements ReactiveController {
     const id = trackId ?? [...this._sessions.keys()][0];
     if (!id) return;
     const session = this._sessions.get(id);
-    if (!session) return;
+    // Skip if the session is already on its way out — would otherwise
+    // dispatch a pause event for a session about to be deleted.
+    if (!session || session.stopping) return;
     session.workletNode.port.postMessage({ command: 'pause' });
+    this._isPaused = true;
+    this._host.dispatchEvent(
+      new CustomEvent<DawRecordingPauseDetail>('daw-recording-pause', {
+        bubbles: true,
+        composed: true,
+        detail: { trackId: id },
+      })
+    );
   }
 
   resumeRecording(trackId?: string): void {
     const id = trackId ?? [...this._sessions.keys()][0];
     if (!id) return;
     const session = this._sessions.get(id);
-    if (!session) return;
+    if (!session || session.stopping) return;
     session.workletNode.port.postMessage({ command: 'resume' });
+    this._isPaused = false;
+    this._host.dispatchEvent(
+      new CustomEvent<DawRecordingResumeDetail>('daw-recording-resume', {
+        bubbles: true,
+        composed: true,
+        detail: { trackId: id },
+      })
+    );
   }
 
-  stopRecording(trackId?: string): void {
+  async stopRecording(trackId?: string): Promise<void> {
     const id = trackId ?? [...this._sessions.keys()][0];
     if (!id) return;
 
     const session = this._sessions.get(id);
     if (!session) return;
 
+    // Capture whether we were paused — pause already flushed the partial
+    // buffer, so there's nothing to wait for from the worklet on stop.
+    const wasPaused = this._isPaused;
+    this._isPaused = false;
+    // Block any further pause/resume calls on this session — they could
+    // race with the drain loop and dispatch events for a session that's
+    // about to be deleted.
+    session.stopping = true;
+
     // Stop playback only if this was an overdub session
     if (session.wasOverdub && typeof this._host.stop === 'function') {
       this._host.stop();
     }
 
-    // Send stop BEFORE disconnect so worklet can flush remaining buffered samples
-    session.workletNode.port.postMessage({ command: 'stop' });
+    // Send stop. If the recording was already paused, pause's flushBuffers()
+    // already drained the partial buffer — no need to await the terminal
+    // message (and the worklet's audio thread may have throttled back while
+    // paused, making the round-trip slow / unreliable).
+    if (wasPaused) {
+      session.workletNode.port.postMessage({ command: 'stop' });
+    } else {
+      // Active recording: await the worklet's terminal flush so the partial
+      // buffer at stop time isn't silently dropped.
+      const stopAck = new Promise<void>((resolve) => {
+        session.stopAckResolve = resolve;
+      });
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      // Safety timeout (1s). Prevents infinite hang on a real failure
+      // (worklet crashed, context closed). The drain loop below catches any
+      // straggler flush messages that were queued before the timeout fired,
+      // so this is purely a circuit breaker — not a data-correctness budget.
+      const timeout = new Promise<void>((resolve) => {
+        timeoutId = setTimeout(resolve, 1000);
+      });
+      session.workletNode.port.postMessage({ command: 'stop' });
+      await Promise.race([stopAck, timeout]);
+      clearTimeout(timeoutId);
+      session.stopAckResolve = null;
+
+      // Drain the event-loop queue. During recording the worklet posts a
+      // flush every ~16ms; if main was slower than that, messages back up.
+      // Yield repeatedly until session.totalSamples stabilizes (no new
+      // messages processed) for several consecutive ticks — at that point
+      // the queue is empty and chunks are complete.
+      let lastSamples = -1;
+      let stable = 0;
+      for (let i = 0; i < 50; i++) {
+        if (session.totalSamples === lastSamples) {
+          if (++stable >= 3) break;
+        } else {
+          stable = 0;
+          lastSamples = session.totalSamples;
+        }
+        await new Promise<void>((r) => setTimeout(r, 5));
+      }
+    }
     session.source.disconnect();
     session.workletNode.disconnect();
 
@@ -371,19 +455,52 @@ export class RecordingController implements ReactiveController {
     const session = this._sessions.get(trackId);
     if (!session) return;
 
-    const { channels } = data as { channels: Float32Array[] };
-    if (!channels || channels.length === 0 || !channels[0]) return;
+    const { channels, done } = data as { channels: Float32Array[]; done?: boolean };
 
+    // Resolve the stop barrier in a finally block so a throw in peak generation
+    // (e.g. samplesPerPixel=0 transient, host shadowRoot churn) doesn't strand
+    // the await in stopRecording for the full 250ms timeout.
+    try {
+      const hasSamples = !!(
+        channels &&
+        channels.length > 0 &&
+        channels[0] &&
+        channels[0].length > 0
+      );
+      if (!hasSamples) return;
+      this._processWorkletSamples(trackId, session, channels);
+    } finally {
+      if (done && session.stopAckResolve) {
+        const resolve = session.stopAckResolve;
+        session.stopAckResolve = null;
+        resolve();
+      }
+    }
+  }
+
+  private _processWorkletSamples(
+    trackId: string,
+    session: RecordingSession,
+    channels: Float32Array[]
+  ) {
     // Capture pre-increment value for appendPeaks
     const samplesProcessedBefore = session.totalSamples;
 
-    // Accumulate chunks per channel
+    // Accumulate chunks per channel — always do this, even during stop,
+    // so the AudioBuffer captures every sample.
     for (let ch = 0; ch < session.channelCount; ch++) {
       if (channels[ch]) {
         session.chunks[ch].push(channels[ch]);
       }
     }
     session.totalSamples += channels[0].length;
+
+    // If stop is already in flight, skip peak generation and live-preview
+    // waveform updates. The recording is ending; the AudioBuffer's final
+    // peaks will be regenerated by the consumer. Skipping this drains the
+    // backlog of queued flush messages faster, getting us to the terminal
+    // `done` message sooner.
+    if (session.stopAckResolve !== null) return;
 
     // Generate peaks per channel and update live preview waveforms
     for (let ch = 0; ch < session.channelCount; ch++) {

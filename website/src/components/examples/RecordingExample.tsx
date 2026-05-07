@@ -177,6 +177,7 @@ const RecordingControlsInner: React.FC<RecordingControlsInnerProps> = ({
   // Integrated recording hook
   const {
     isRecording,
+    isPaused,
     duration,
     level,
     peakLevel,
@@ -188,6 +189,8 @@ const RecordingControlsInner: React.FC<RecordingControlsInnerProps> = ({
     stream,
     startRecording,
     stopRecording,
+    pauseRecording,
+    resumeRecording,
     requestMicAccess,
     changeDevice,
     error,
@@ -245,13 +248,19 @@ const RecordingControlsInner: React.FC<RecordingControlsInnerProps> = ({
     }
   }, [selectionStart, selectionEnd, isLoopEnabled, play, currentTimeRef]);
 
-  // Stop both playback and recording
+  // Stop both playback and recording. When recording, use pause() instead
+  // of stop() to keep the playhead where the user clicked stop. Engine.stop()
+  // rewinds to the last play-start position, which during a paused/resumed
+  // recording is the most recent resume point — jumping backwards on stop
+  // is jarring when you've just finished recording.
   const handleStop = useCallback(() => {
     if (isRecording) {
       stopRecording();
+      pause();
+    } else {
+      stop();
     }
-    stop();
-  }, [isRecording, stopRecording, stop]);
+  }, [isRecording, stopRecording, stop, pause]);
 
   const handleRecordClick = (e: React.MouseEvent) => {
     if (isRecording) return;
@@ -294,14 +303,57 @@ const RecordingControlsInner: React.FC<RecordingControlsInnerProps> = ({
     startRecordingWithPlayback();
   }, [isRecording, hasPermission, selectedTrackId, onAddTrack, startRecordingWithPlayback]);
 
+  // Track whether playback was running when recording was paused, so resume
+  // restarts both the worklet capture and the Transport for overdub.
+  const wasPlayingDuringRecordingRef = useRef(false);
+
+  // Reset on the recording falling edge so a paused-then-stopped session
+  // doesn't leak its overdub flag into the next pause cycle.
+  useEffect(() => {
+    if (!isRecording) {
+      wasPlayingDuringRecordingRef.current = false;
+    }
+  }, [isRecording]);
+
+  const handlePauseToggle = useCallback(() => {
+    if (isRecording) {
+      if (isPaused) {
+        resumeRecording();
+        if (wasPlayingDuringRecordingRef.current) {
+          wasPlayingDuringRecordingRef.current = false;
+          play(currentTimeRef.current).catch((err) => {
+            console.warn('[waveform-playlist] Resume playback failed:', String(err));
+          });
+        }
+      } else {
+        pauseRecording();
+        if (isPlaying) {
+          wasPlayingDuringRecordingRef.current = true;
+          pause();
+        }
+      }
+    } else if (isPlaying) {
+      pause();
+    }
+  }, [
+    isRecording,
+    isPaused,
+    isPlaying,
+    pauseRecording,
+    resumeRecording,
+    pause,
+    play,
+    currentTimeRef,
+  ]);
+
   // Toggle play/pause
   const handleTogglePlayPause = useCallback(() => {
-    if (isPlaying) {
-      pause();
+    if (isPlaying || isRecording) {
+      handlePauseToggle();
     } else {
       handlePlay();
     }
-  }, [isPlaying, pause, handlePlay]);
+  }, [isPlaying, isRecording, handlePauseToggle, handlePlay]);
 
   // All keyboard shortcuts — no presets, fully recording-aware
   const allShortcuts = useMemo(() => [
@@ -440,7 +492,10 @@ const RecordingControlsInner: React.FC<RecordingControlsInnerProps> = ({
             onClick={handleRecordClick}
             disabled={!hasPermission}
           />
-          <TransportPauseButton onClick={pause} disabled={!isPlaying} />
+          <TransportPauseButton
+            onClick={handlePauseToggle}
+            disabled={!isPlaying && !isRecording}
+          />
           <TransportStopButton onClick={handleStop} disabled={!isPlaying && !isRecording} />
         </ToolbarSection>
 

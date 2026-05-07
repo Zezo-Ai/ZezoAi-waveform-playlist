@@ -1823,7 +1823,9 @@ export class DawEditorElement extends LitElement {
   }
   /** Toggle between play and pause. */
   togglePlayPause() {
-    if (this._isPlaying) {
+    if (this.isRecording) {
+      this.togglePauseRecording();
+    } else if (this._isPlaying) {
       this.pause();
     } else {
       this.play();
@@ -1907,14 +1909,51 @@ export class DawEditorElement extends LitElement {
   get isRecording(): boolean {
     return this._recordingController.isRecording;
   }
+  get isRecordingPaused(): boolean {
+    return this._recordingController.isPaused;
+  }
   pauseRecording(): void {
     this._recordingController.pauseRecording();
   }
   resumeRecording(): void {
     this._recordingController.resumeRecording();
+    // Programmatic resume bypasses togglePauseRecording — clear the
+    // ref so the next pause cycle doesn't restart Transport based on
+    // stale state from an earlier toggle.
+    this._wasPlayingDuringRecording = false;
   }
-  stopRecording(): void {
-    this._recordingController.stopRecording();
+  /**
+   * Audacity-style pause toggle for active recordings: pauses both the
+   * worklet capture and (if running) the playback Transport. On resume,
+   * Transport restarts only if it was running before — non-overdub
+   * recordings stay silent on resume.
+   */
+  togglePauseRecording(): void {
+    if (!this.isRecording) return;
+    if (this.isRecordingPaused) {
+      // Snapshot the flag before resumeRecording — that method clears
+      // the ref defensively (so external callers don't leak it into the
+      // next cycle), so reading after the call is too late.
+      const wasPlaying = this._wasPlayingDuringRecording;
+      this.resumeRecording();
+      if (wasPlaying) {
+        // play() is async on the editor; fire and forget — caller doesn't await.
+        void this.play(this.currentTime);
+      }
+    } else {
+      this.pauseRecording();
+      if (this._isPlaying) {
+        this._wasPlayingDuringRecording = true;
+        this.pause();
+      }
+    }
+  }
+  /** Set in togglePauseRecording when Transport is paused alongside the
+   * worklet, so resume can restart it. Cleared on resume and on stop. */
+  private _wasPlayingDuringRecording = false;
+  stopRecording(): Promise<void> {
+    this._wasPlayingDuringRecording = false;
+    return this._recordingController.stopRecording();
   }
   _addRecordedClip(
     trackId: string,

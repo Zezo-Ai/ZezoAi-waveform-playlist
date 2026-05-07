@@ -78,7 +78,18 @@ describe('RecordingController', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockWorkletNode = {
-      port: { postMessage: vi.fn(), onmessage: null },
+      port: {
+        // Auto-acknowledge the stop command — the controller awaits the worklet's
+        // done message before reading chunks, mirroring the real handshake.
+        postMessage: vi.fn((msg: { command?: string }) => {
+          if (msg?.command === 'stop' && mockWorkletNode.port.onmessage) {
+            mockWorkletNode.port.onmessage({
+              data: { channels: [], channelCount: 1, done: true },
+            } as MessageEvent);
+          }
+        }),
+        onmessage: null,
+      },
       disconnect: vi.fn(),
       addEventListener: vi.fn(),
     };
@@ -144,7 +155,7 @@ describe('RecordingController', () => {
     const controller = new RecordingController(host);
 
     await controller.startRecording(createMockStream(), { trackId: 'track-1' });
-    controller.stopRecording();
+    await controller.stopRecording();
     host._selectedTrackId = 'track-2';
     await controller.startRecording(createMockStream(), { trackId: 'track-2' });
 
@@ -174,7 +185,7 @@ describe('RecordingController', () => {
       return true; // not prevented
     });
 
-    controller.stopRecording();
+    await controller.stopRecording();
 
     expect(mockSource.disconnect).toHaveBeenCalled();
     expect(mockWorkletNode.disconnect).toHaveBeenCalled();
@@ -197,7 +208,7 @@ describe('RecordingController', () => {
       return false;
     });
 
-    controller.stopRecording();
+    await controller.stopRecording();
 
     // Clip creation would involve calling host methods — verify they weren't called
     expect(controller.getSession('track-1')).toBeUndefined();
@@ -215,7 +226,7 @@ describe('RecordingController', () => {
       return origDispatch(e);
     });
 
-    controller.stopRecording();
+    await controller.stopRecording();
 
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('No audio data'));
     expect(controller.isRecording).toBe(false);
@@ -319,7 +330,7 @@ describe('RecordingController', () => {
     const origDispatch = host.dispatchEvent.bind(host);
     host.dispatchEvent = vi.fn((e: Event) => origDispatch(e));
 
-    controller.stopRecording();
+    await controller.stopRecording();
 
     expect(host._addRecordedClip).toHaveBeenCalledWith(
       'track-1',
@@ -340,7 +351,7 @@ describe('RecordingController', () => {
       e.preventDefault();
     });
 
-    controller.stopRecording();
+    await controller.stopRecording();
 
     expect(host._addRecordedClip).not.toHaveBeenCalled();
   });
@@ -449,7 +460,7 @@ describe('RecordingController', () => {
 
     // Stop recording (deletes session), then trigger the handler — should not throw
     simulateWorkletData('track-1', 512);
-    controller.stopRecording();
+    await controller.stopRecording();
 
     // Late message arrives after session is gone
     expect(() => {
@@ -482,7 +493,7 @@ describe('RecordingController', () => {
     const origDispatch = host.dispatchEvent.bind(host);
     host.dispatchEvent = vi.fn((e: Event) => origDispatch(e));
 
-    controller.stopRecording();
+    await controller.stopRecording();
 
     // offsetSamples = floor(0.01 * 48000) = 480
     // durationSamples = 48000 - 480 = 47520
@@ -518,7 +529,7 @@ describe('RecordingController', () => {
     });
 
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    controller.stopRecording();
+    await controller.stopRecording();
 
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('too short'));
     expect(controller.isRecording).toBe(false);
@@ -541,7 +552,7 @@ describe('RecordingController', () => {
       return origDispatch(e);
     });
 
-    controller.stopRecording();
+    await controller.stopRecording();
 
     const completeEvent = events.find((e) => e.type === 'daw-recording-complete');
     expect(completeEvent).toBeTruthy();
@@ -561,7 +572,7 @@ describe('RecordingController', () => {
     const origDispatch = host.dispatchEvent.bind(host);
     host.dispatchEvent = vi.fn((e: Event) => origDispatch(e));
 
-    controller.stopRecording();
+    await controller.stopRecording();
 
     expect(host._addRecordedClip).toHaveBeenCalledWith(
       'track-1',
@@ -570,5 +581,240 @@ describe('RecordingController', () => {
       48000, // full duration — no offset
       0 // zero latency
     );
+  });
+
+  // --- stop handshake tests ---
+
+  it('stopRecording awaits the done ack — late samples reach the AudioBuffer', async () => {
+    // Defer the done message to a microtask so it arrives strictly AFTER
+    // postMessage returns. If stopRecording forgets to await Promise.race,
+    // session.totalSamples stays 0 and the controller bails with
+    // "No audio data captured" — no _addRecordedClip call.
+    mockWorkletNode.port.postMessage = vi.fn((msg: { command?: string }) => {
+      if (msg?.command === 'stop' && mockWorkletNode.port.onmessage) {
+        queueMicrotask(() => {
+          mockWorkletNode.port.onmessage({
+            data: {
+              channels: [new Float32Array(1024).fill(0.5)],
+              channelCount: 1,
+              done: true,
+            },
+          } as MessageEvent);
+        });
+      }
+    });
+
+    const controller = new RecordingController(host);
+    await controller.startRecording(createMockStream(), { trackId: 'track-1' });
+    // No prior data — only the deferred final message has samples.
+
+    host.dispatchEvent = vi.fn(() => true);
+    await controller.stopRecording();
+
+    // _addRecordedClip is only called when the late chunk made it into session.chunks
+    expect(host._addRecordedClip).toHaveBeenCalled();
+  });
+
+  it('stopRecording proceeds via timeout if the worklet never acks', async () => {
+    // Replace auto-ack with a mock that never sends done — exercises the
+    // 1000ms safety timeout. Test takes ~1s but verifies the assertion:
+    // stop must not hang forever, and pre-stop chunks still produce a clip.
+    mockWorkletNode.port.postMessage = vi.fn();
+
+    const controller = new RecordingController(host);
+    await controller.startRecording(createMockStream(), { trackId: 'track-1' });
+    simulateWorkletData('track-1', 512);
+
+    host.dispatchEvent = vi.fn(() => true);
+    const start = Date.now();
+    await controller.stopRecording();
+    const elapsed = Date.now() - start;
+
+    // Should resolve via the 1000ms safety timeout, not hang
+    expect(elapsed).toBeLessThan(1500);
+    expect(elapsed).toBeGreaterThanOrEqual(900);
+    // Pre-stop samples still produce a clip
+    expect(host._addRecordedClip).toHaveBeenCalled();
+  });
+
+  it('handles channels + done in a single terminal message', async () => {
+    // Receiver has separate "hasSamples" and "done" branches; verify a
+    // message carrying both still resolves the barrier (stop completes within
+    // the timeout window) AND appends samples (concatenateAudioData receives
+    // both pre-stop and terminal chunks).
+    const { concatenateAudioData } = await import('@waveform-playlist/core');
+    vi.mocked(concatenateAudioData).mockClear();
+
+    mockWorkletNode.port.postMessage = vi.fn((msg: { command?: string }) => {
+      if (msg?.command === 'stop' && mockWorkletNode.port.onmessage) {
+        queueMicrotask(() => {
+          mockWorkletNode.port.onmessage({
+            data: {
+              channels: [new Float32Array(256).fill(0.25)],
+              channelCount: 1,
+              done: true,
+            },
+          } as MessageEvent);
+        });
+      }
+    });
+
+    const controller = new RecordingController(host);
+    await controller.startRecording(createMockStream(), { trackId: 'track-1' });
+    simulateWorkletData('track-1', 1024); // pre-stop chunk
+
+    host.dispatchEvent = vi.fn(() => true);
+    const start = Date.now();
+    await controller.stopRecording();
+    expect(Date.now() - start).toBeLessThan(200); // resolved via ack, not timeout
+
+    // concatenateAudioData receives chunkArr per channel — inspect chunk lengths
+    expect(concatenateAudioData).toHaveBeenCalled();
+    const chunkArr = vi.mocked(concatenateAudioData).mock.calls[0][0];
+    const totalLen = chunkArr.reduce((sum: number, c: Float32Array) => sum + c.length, 0);
+    expect(totalLen).toBe(1280);
+  });
+
+  it('stopRecording from paused state skips the await', async () => {
+    // postMessage that does NOT auto-ack proves we don't wait for the
+    // terminal flush — pause already drained the partial buffer.
+    mockWorkletNode.port.postMessage = vi.fn();
+
+    const controller = new RecordingController(host);
+    await controller.startRecording(createMockStream(), { trackId: 'track-1' });
+    simulateWorkletData('track-1', 1024);
+
+    controller.pauseRecording(); // flips controller._isPaused = true
+    expect(controller.isPaused).toBe(true);
+
+    host.dispatchEvent = vi.fn(() => true);
+    const start = Date.now();
+    await controller.stopRecording();
+    const elapsed = Date.now() - start;
+
+    // Should resolve immediately, not wait for the safety timeout
+    expect(elapsed).toBeLessThan(50);
+    expect(host._addRecordedClip).toHaveBeenCalled();
+  });
+
+  it('drain loop captures straggler messages that arrive after stopAck', async () => {
+    // After ack-done, fire two more flush messages over a few microtasks.
+    // The drain loop must process them before reading session.chunks.
+    const { concatenateAudioData } = await import('@waveform-playlist/core');
+    vi.mocked(concatenateAudioData).mockClear();
+
+    let stopHandled = false;
+    mockWorkletNode.port.postMessage = vi.fn((msg: { command?: string }) => {
+      if (msg?.command === 'stop' && !stopHandled && mockWorkletNode.port.onmessage) {
+        stopHandled = true;
+        // Done arrives synchronously (resolves stopAck)
+        mockWorkletNode.port.onmessage({
+          data: { channels: [], channelCount: 1, done: true },
+        } as MessageEvent);
+        // Two stragglers queued for the drain loop to pick up
+        setTimeout(() => {
+          if (mockWorkletNode.port.onmessage) {
+            mockWorkletNode.port.onmessage({
+              data: { channels: [new Float32Array(256).fill(0.5)], channelCount: 1 },
+            } as MessageEvent);
+          }
+        }, 6);
+        setTimeout(() => {
+          if (mockWorkletNode.port.onmessage) {
+            mockWorkletNode.port.onmessage({
+              data: { channels: [new Float32Array(256).fill(0.7)], channelCount: 1 },
+            } as MessageEvent);
+          }
+        }, 12);
+      }
+    });
+
+    const controller = new RecordingController(host);
+    await controller.startRecording(createMockStream(), { trackId: 'track-1' });
+    simulateWorkletData('track-1', 1024); // pre-stop chunk
+
+    host.dispatchEvent = vi.fn(() => true);
+    await controller.stopRecording();
+
+    // 1024 (pre-stop) + 256 (straggler 1) + 256 (straggler 2) = 1536
+    expect(concatenateAudioData).toHaveBeenCalled();
+    const chunkArr = vi.mocked(concatenateAudioData).mock.calls[0][0];
+    const totalLen = chunkArr.reduce((sum: number, c: Float32Array) => sum + c.length, 0);
+    expect(totalLen).toBe(1536);
+  });
+
+  it('skips peak gen and DOM updates while stop is in flight', async () => {
+    const { appendPeaks } = await import('@waveform-playlist/core');
+    vi.mocked(appendPeaks).mockClear();
+
+    // Defer the done so stopRecording is mid-await when our extra message arrives
+    mockWorkletNode.port.postMessage = vi.fn((msg: { command?: string }) => {
+      if (msg?.command === 'stop' && mockWorkletNode.port.onmessage) {
+        // Send an in-flight flush message FIRST (while stopAckResolve is set)
+        queueMicrotask(() => {
+          mockWorkletNode.port.onmessage!({
+            data: { channels: [new Float32Array(256).fill(0.5)], channelCount: 1 },
+          } as MessageEvent);
+        });
+        // Then send done
+        queueMicrotask(() => {
+          mockWorkletNode.port.onmessage!({
+            data: { channels: [], channelCount: 1, done: true },
+          } as MessageEvent);
+        });
+      }
+    });
+
+    const controller = new RecordingController(host);
+    await controller.startRecording(createMockStream(), { trackId: 'track-1' });
+    simulateWorkletData('track-1', 1024); // pre-stop — should produce peaks
+    const preStopAppendCount = vi.mocked(appendPeaks).mock.calls.length;
+    expect(preStopAppendCount).toBeGreaterThan(0);
+
+    host.dispatchEvent = vi.fn(() => true);
+    await controller.stopRecording();
+
+    // The in-flight flush during stop must NOT have called appendPeaks again,
+    // even though its samples ARE in the AudioBuffer (drain loop captures
+    // chunks). The pre-stop count should equal the post-stop count.
+    expect(vi.mocked(appendPeaks).mock.calls.length).toBe(preStopAppendCount);
+    expect(host._addRecordedClip).toHaveBeenCalled();
+  });
+
+  it('stopping flag blocks pauseRecording / resumeRecording', async () => {
+    // Defer the done so stopRecording stays mid-flight when we attempt
+    // pause/resume. Verifies session.stopping prevents state corruption
+    // (would otherwise dispatch events for a session about to be deleted).
+    mockWorkletNode.port.postMessage = vi.fn((msg: { command?: string }) => {
+      if (msg?.command === 'stop' && mockWorkletNode.port.onmessage) {
+        setTimeout(() => {
+          mockWorkletNode.port.onmessage!({
+            data: { channels: [], channelCount: 1, done: true },
+          } as MessageEvent);
+        }, 20);
+      }
+    });
+
+    const controller = new RecordingController(host);
+    await controller.startRecording(createMockStream(), { trackId: 'track-1' });
+    simulateWorkletData('track-1', 512);
+
+    const events: string[] = [];
+    host.dispatchEvent = vi.fn((e: Event) => {
+      events.push(e.type);
+      return true;
+    });
+
+    // Begin stop; while it's in flight, attempt pause + resume
+    const stopPromise = controller.stopRecording();
+    controller.pauseRecording('track-1');
+    controller.resumeRecording('track-1');
+
+    await stopPromise;
+
+    // Neither daw-recording-pause nor daw-recording-resume should fire
+    // for the stopping session.
+    expect(events).not.toContain('daw-recording-pause');
+    expect(events).not.toContain('daw-recording-resume');
   });
 });
