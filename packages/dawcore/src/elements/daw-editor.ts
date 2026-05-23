@@ -9,6 +9,8 @@ import type {
   PeakData,
   SnapTo,
   MeterEntry,
+  SpectrogramConfig,
+  ColorMapValue,
 } from '@waveform-playlist/core';
 import type {
   TrackDescriptor,
@@ -37,6 +39,7 @@ import { ViewportController } from '../controllers/viewport-controller';
 import { AudioResumeController } from '../controllers/audio-resume-controller';
 import { RecordingController } from '../controllers/recording-controller';
 import type { RecordingOptions } from '../controllers/recording-controller';
+import { SpectrogramController } from '../controllers/spectrogram-controller';
 import { PointerHandler } from '../interactions/pointer-handler';
 import { ClipPointerHandler } from '../interactions/clip-pointer-handler';
 import type {
@@ -109,6 +112,107 @@ export class DawEditorElement extends LitElement {
    * floor already provides this; this attribute controls the temporal mode.
    */
   @property({ type: Boolean, attribute: 'indefinite-playback' }) indefinitePlayback = false;
+  /**
+   * Default spectrogram FFT/render config inherited by tracks with
+   * `render-mode="spectrogram"` that do not set their own. Wired into the
+   * orchestrator by `SpectrogramController` in Task 14.
+   */
+  @property({ attribute: false, noAccessor: true })
+  get spectrogramConfig(): SpectrogramConfig | null {
+    return this._spectrogramConfig;
+  }
+  set spectrogramConfig(value: SpectrogramConfig | null) {
+    const old = this._spectrogramConfig;
+    this._spectrogramConfig = value;
+    this._spectrogramController?.setEditorConfig(value);
+    this.requestUpdate('spectrogramConfig', old);
+  }
+  private _spectrogramConfig: SpectrogramConfig | null = null;
+
+  /**
+   * Default color map for spectrogram tracks. Tracks may override via
+   * their own per-track property in a future iteration. Separate from
+   * `spectrogramConfig` because `ColorMapValue` is not part of the
+   * `SpectrogramConfig` shape.
+   */
+  @property({ attribute: false, noAccessor: true })
+  get spectrogramColorMap(): ColorMapValue | null {
+    return this._spectrogramColorMap;
+  }
+  set spectrogramColorMap(value: ColorMapValue | null) {
+    const old = this._spectrogramColorMap;
+    this._spectrogramColorMap = value;
+    this._spectrogramController?.setEditorColorMap(value);
+    this.requestUpdate('spectrogramColorMap', old);
+  }
+  private _spectrogramColorMap: ColorMapValue | null = null;
+
+  private _ensureSpectrogramController(): SpectrogramController {
+    if (!this._spectrogramController) {
+      this._spectrogramController = new SpectrogramController(
+        this,
+        () =>
+          new Worker(new URL('@dawcore/spectrogram/worker/spectrogram.worker', import.meta.url), {
+            type: 'module',
+          })
+      );
+      if (this._spectrogramConfig) {
+        this._spectrogramController.setEditorConfig(this._spectrogramConfig);
+      }
+      if (this._spectrogramColorMap) {
+        this._spectrogramController.setEditorColorMap(this._spectrogramColorMap);
+      }
+    }
+    return this._spectrogramController;
+  }
+
+  /** Called by <daw-spectrogram> after transferControlToOffscreen. */
+  _spectrogramRegisterCanvas(reg: {
+    canvasId: string;
+    canvas: OffscreenCanvas;
+    clipId: string;
+    trackId: string;
+    channelIndex: number;
+    chunkIndex: number;
+    globalPixelOffset: number;
+    widthPx: number;
+    heightPx: number;
+  }): void {
+    this._ensureSpectrogramController().registerCanvas(reg);
+  }
+
+  /** Called by <daw-spectrogram> on chunk unmount / element disconnect. */
+  _spectrogramUnregisterCanvas(canvasId: string): void {
+    this._spectrogramController?.unregisterCanvas(canvasId);
+  }
+
+  /**
+   * Push a clip's decoded audio into the spectrogram controller. No-op
+   * unless the track is in spectrogram render-mode and the controller
+   * already exists (it bootstraps from canvas registration).
+   */
+  private _maybeRegisterSpectrogramClipAudio(trackId: string, clip: AudioClip): void {
+    const descriptor = this._tracks.get(trackId);
+    if (descriptor?.renderMode !== 'spectrogram') return;
+    // Read the buffer off the clip itself — `_clipBuffers` is mutated in-place
+    // by `cleanupOrphanedClipData` during concurrent track loading and may
+    // briefly miss this clip even though the clip object still holds the
+    // buffer reference.
+    const buffer = clip.audioBuffer ?? this._clipBuffers.get(clip.id);
+    if (!buffer) return;
+    const channelData: Float32Array[] = [];
+    for (let i = 0; i < buffer.numberOfChannels; i++) {
+      channelData.push(buffer.getChannelData(i));
+    }
+    this._ensureSpectrogramController().registerClipAudio({
+      clipId: clip.id,
+      trackId,
+      channelData,
+      sampleRate: buffer.sampleRate,
+      durationSamples: clip.durationSamples,
+      offsetSamples: clip.offsetSamples,
+    });
+  }
   @property({ type: String, attribute: 'scale-mode' })
   scaleMode: 'temporal' | 'beats' = 'temporal';
   @property({ type: Number, attribute: 'ticks-per-pixel', noAccessor: true })
@@ -224,6 +328,7 @@ export class DawEditorElement extends LitElement {
   @property({ attribute: 'eager-resume' })
   eagerResume?: string;
   private _recordingController = new RecordingController(this);
+  private _spectrogramController: SpectrogramController | null = null;
   private _clipPointer = new ClipPointerHandler(this);
   get _clipHandler() {
     return this.interactiveClips ? this._clipPointer : null;
@@ -476,6 +581,8 @@ export class DawEditorElement extends LitElement {
     this._clipOffsets.clear();
     this._peakPipeline.terminate();
     this._minSamplesPerPixel = 0;
+    this._spectrogramController?.dispose();
+    this._spectrogramController = null;
     try {
       this._disposeEngine();
     } catch (err) {
@@ -520,6 +627,27 @@ export class DawEditorElement extends LitElement {
       }
     }
   }
+
+  protected updated(_changed: Map<string, unknown>): void {
+    // Forward viewport + zoom into the spectrogram controller on every update
+    // so scroll, resize, and zoom all trigger orchestrator.setViewport.
+    if (this._spectrogramController) {
+      const vs = this._viewport.visibleStart;
+      const ve = this._viewport.visibleEnd;
+      if (Number.isFinite(vs) && Number.isFinite(ve)) {
+        const span = ve - vs;
+        const bufferPad = span * 0.25;
+        this._spectrogramController.setViewport({
+          visibleStartPx: vs,
+          visibleEndPx: ve,
+          bufferStartPx: Math.max(0, vs - bufferPad),
+          bufferEndPx: ve + bufferPad,
+          samplesPerPixel: this._renderSpp,
+        });
+      }
+    }
+  }
+
   // --- Track Events ---
   private _onTrackConnected = (e: CustomEvent) => {
     const trackId = e.detail?.trackId;
@@ -543,6 +671,7 @@ export class DawEditorElement extends LitElement {
         this._clipBuffers.delete(clip.id);
         this._clipOffsets.delete(clip.id);
         nextPeaks.delete(clip.id);
+        this._spectrogramController?.unregisterClipAudio(clip.id);
       }
       this._peaksData = nextPeaks;
     }
@@ -559,6 +688,7 @@ export class DawEditorElement extends LitElement {
     }
     // Recompute zoom floor from remaining cached WaveformData scales
     this._minSamplesPerPixel = this._peakPipeline.getMaxCachedScale(this._clipBuffers);
+    this._disposeSpectrogramControllerIfEmpty();
     if (nextEngine.size === 0) {
       this._currentTime = 0;
       this._stopPlayhead();
@@ -584,7 +714,41 @@ export class DawEditorElement extends LitElement {
     if (oldDescriptor?.src !== descriptor.src) {
       this._loadTrack(trackId, descriptor);
     }
+    // Track switched into spectrogram mode — push existing clip audio into the controller.
+    if (descriptor.renderMode === 'spectrogram' && oldDescriptor?.renderMode !== 'spectrogram') {
+      const engineTrack = this._engineTracks.get(trackId);
+      if (engineTrack) {
+        for (const clip of engineTrack.clips) {
+          this._maybeRegisterSpectrogramClipAudio(trackId, clip);
+        }
+      }
+    }
+    // Track switched OUT of spectrogram mode — drop clip audio.
+    if (descriptor.renderMode !== 'spectrogram' && oldDescriptor?.renderMode === 'spectrogram') {
+      const engineTrack = this._engineTracks.get(trackId);
+      if (engineTrack && this._spectrogramController) {
+        for (const clip of engineTrack.clips) {
+          this._spectrogramController.unregisterClipAudio(clip.id);
+        }
+      }
+      this._disposeSpectrogramControllerIfEmpty();
+    }
+    if (descriptor.spectrogramConfig !== oldDescriptor?.spectrogramConfig) {
+      this._spectrogramController?.setTrackConfig(trackId, descriptor.spectrogramConfig ?? null);
+    }
   };
+
+  /** Drop the controller when no spectrogram tracks remain. */
+  private _disposeSpectrogramControllerIfEmpty(): void {
+    if (!this._spectrogramController) return;
+    const stillNeeded = Array.from(this._tracks.values()).some(
+      (d) => d.renderMode === 'spectrogram'
+    );
+    if (!stillNeeded) {
+      this._spectrogramController.dispose();
+      this._spectrogramController = null;
+    }
+  }
   private static _CONTROL_PROPS = new Set(['volume', 'pan', 'muted', 'soloed']);
   private _onTrackControl = (e: CustomEvent) => {
     const { trackId, prop, value } = e.detail ?? {};
@@ -756,6 +920,7 @@ export class DawEditorElement extends LitElement {
         });
       }
       this._commitTrackChange(trackId, updatedTrack);
+      this._maybeRegisterSpectrogramClipAudio(trackId, clip);
 
       this.dispatchEvent(
         new CustomEvent<DawClipIdDetail>('daw-clip-ready', {
@@ -974,6 +1139,7 @@ export class DawEditorElement extends LitElement {
     nextPeaks.delete(clipId);
     this._peaksData = nextPeaks;
     this._clipOffsets.delete(clipId);
+    this._spectrogramController?.unregisterClipAudio(clipId);
   }
   /**
    * Recompute duration and forward an updated track to the engine. Single
@@ -1321,6 +1487,11 @@ export class DawEditorElement extends LitElement {
       track.id = trackId;
       this._engineTracks = new Map(this._engineTracks).set(trackId, track);
       this._recomputeDuration();
+      // Now that descriptor is recorded and clips have ids, push audio into
+      // the spectrogram controller (no-op unless renderMode === 'spectrogram').
+      for (const c of clips) {
+        this._maybeRegisterSpectrogramClipAudio(trackId, c);
+      }
       const engine = await this._ensureEngine();
       engine.setTracks([...this._engineTracks.values()]);
       this.dispatchEvent(
@@ -2313,21 +2484,42 @@ export class DawEditorElement extends LitElement {
                           .originX=${clipLeft}
                           ?selected=${t.trackId === this._selectedTrackId}
                         ></daw-piano-roll>`
-                      : channels.map(
-                          (chPeaks, chIdx) =>
-                            html` <daw-waveform
-                              style="position:absolute;left:0;top:${hdrH + chIdx * chH}px;"
-                              .peaks=${chPeaks}
-                              .length=${peakData?.length ?? width}
-                              .waveHeight=${chH}
-                              .barWidth=${this.barWidth}
-                              .barGap=${this.barGap}
-                              .visibleStart=${this._viewport.visibleStart}
-                              .visibleEnd=${this._viewport.visibleEnd}
-                              .originX=${clipLeft}
-                              .segments=${clipSegments}
-                            ></daw-waveform>`
-                        )}
+                      : t.descriptor?.renderMode === 'spectrogram'
+                        ? channels.map(
+                            (_chPeaks, chIdx) =>
+                              html`<daw-spectrogram
+                                style="position:absolute;left:0;top:${hdrH +
+                                chIdx * chH}px;height:${chH}px;width:${peakData?.length ??
+                                width}px;"
+                                .clipId=${clip.id}
+                                .trackId=${t.trackId}
+                                .channelIndex=${chIdx}
+                                .length=${peakData?.length ?? width}
+                                .waveHeight=${chH}
+                                .samplesPerPixel=${this._renderSpp}
+                                .sampleRate=${this.effectiveSampleRate}
+                                .clipOffsetSeconds=${(clip.offsetSamples ?? 0) /
+                                this.effectiveSampleRate}
+                                .visibleStart=${this._viewport.visibleStart}
+                                .visibleEnd=${this._viewport.visibleEnd}
+                                .originX=${clipLeft}
+                              ></daw-spectrogram>`
+                          )
+                        : channels.map(
+                            (chPeaks, chIdx) =>
+                              html` <daw-waveform
+                                style="position:absolute;left:0;top:${hdrH + chIdx * chH}px;"
+                                .peaks=${chPeaks}
+                                .length=${peakData?.length ?? width}
+                                .waveHeight=${chH}
+                                .barWidth=${this.barWidth}
+                                .barGap=${this.barGap}
+                                .visibleStart=${this._viewport.visibleStart}
+                                .visibleEnd=${this._viewport.visibleEnd}
+                                .originX=${clipLeft}
+                                .segments=${clipSegments}
+                              ></daw-waveform>`
+                          )}
                     ${this.interactiveClips
                       ? html` <div
                             class="clip-boundary"
