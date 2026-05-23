@@ -50,6 +50,10 @@ Stale FFT requests are cancelled via `abortGeneration(generation)` to the pool. 
 
 Per-render-group sample range only, padded by `fftSize` on both sides. Avoids OOM on long clips — never computes a full-clip FFT.
 
+## tsup ESM-Only Entries Emit `.d.mts`, Not `.d.ts`
+
+The third tsup block (orchestrator subpath) is `format: ['esm']`. tsup emits `dist/orchestrator/index.d.mts` for the types, NOT `.d.ts`. The `package.json` `exports./orchestrator.types` field must match that exact path. Easy to ship wrong — `.d.ts` looks more idiomatic but resolves to nothing for ESM-only entries, breaking TypeScript subpath imports.
+
 ## Tests
 
 145 tests across `__tests__/`: 6 computation (colorMaps, fft, frequencyScales, windowFunctions, createSpectrogramWorker, createSpectrogramWorkerPool) + 4 orchestrator (construction, clip-reg, canvas-reg, tier-render) + viewport-classify (6) + chunk-grouping (5) + color-lut-cache (4) = ~165 total at last count. Run with `cd packages/dawcore-spectrogram && npx vitest run`.

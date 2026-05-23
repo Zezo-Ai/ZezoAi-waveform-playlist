@@ -308,3 +308,11 @@ Audacity-style: pauses both worklet capture and (only when running) the playback
 - **`daw-spectrogram-ready` event** — fired (bubbles + composed) when the viewport tier completes for a track. Re-dispatched from the orchestrator's `viewport-ready` by the controller. Typed in `DawEventMap`.
 - **`_maybeRegisterSpectrogramClipAudio(trackId, clip)` reads `clip.audioBuffer`, NOT `_clipBuffers.get(clip.id)`** — `cleanupOrphanedClipData` mutates `_clipBuffers` in-place on every engine statechange, and during concurrent track loading it briefly clears entries before the engine knows about all tracks. The clip object itself holds a stable AudioBuffer reference.
 - **Worker URL** — `new URL('@dawcore/spectrogram/worker/spectrogram.worker', import.meta.url)` inside `_ensureSpectrogramController`. Bundler must support package-relative URL resolution (Vite does).
+
+## Elements Inside `<daw-editor>`'s Shadow DOM Use `getRootNode().host`, Not `closest()`
+
+`closest(selector)` does NOT cross shadow boundaries. Elements rendered inside `<daw-editor>`'s shadow root (e.g. `<daw-spectrogram>`, `<daw-waveform>`, `<daw-piano-roll>`) cannot find the editor via `this.closest('daw-editor')` — it returns `null`. Use `(this.getRootNode() as ShadowRoot).host`, optionally falling back to `host.closest('daw-editor')` for deeper shadow nesting. `<daw-spectrogram>._findHostEditor()` is the reference implementation. Light-DOM children of `<daw-editor>` (like `<daw-keyboard-shortcuts>`) CAN use `closest('daw-editor')` since they're not inside a shadow root.
+
+## Read `clip.audioBuffer` Directly in Helpers Called During Concurrent Track Loading
+
+`cleanupOrphanedClipData` (in `syncPeaksForChangedClips`, called from the engine `statechange` handler) MUTATES `_clipBuffers` in-place on every `tracksVersion` bump. During concurrent `_loadTrack` invocations, it can briefly clear `_clipBuffers` entries for tracks the engine hasn't seen yet — so a sibling track's helper reads `undefined` for its own clip even though `_clipBuffers.set` ran moments earlier. The clip object itself holds a stable AudioBuffer reference; prefer `clip.audioBuffer ?? this._clipBuffers.get(clip.id)`. `_maybeRegisterSpectrogramClipAudio` is the reference. The bug surfaces as "only the first track's helper sees its buffer; tracks 2..N read `undefined`."

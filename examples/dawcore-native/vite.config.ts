@@ -27,6 +27,12 @@ export default defineConfig({
         repoRoot,
         'packages/transport/src/index.ts',
       ),
+      // NOTE: `@dawcore/spectrogram` is deliberately NOT aliased to source. Its
+      // worker URL — `new URL('@dawcore/spectrogram/worker/spectrogram.worker',
+      // import.meta.url)` — needs node_modules resolution to find the built
+      // worker dist. Source aliasing would break it. Rebuild the package
+      // (`pnpm --filter @dawcore/spectrogram build`) after editing orchestrator/
+      // computation code.
     },
   },
   optimizeDeps: {

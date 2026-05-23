@@ -54,3 +54,7 @@ Framework-agnostic types, pure functions, and utilities shared across all packag
 ## WaveformData Constraints
 
 - **`WaveformData.resample({ scale })` only resamples to coarser (larger) scales** than the source. Attempting to resample finer throws. When caching `WaveformData`, validate `cached.scale <= requestedScale` before returning cache hits.
+
+## `SpectrogramConfig` Does Not Include `colorMap`
+
+`SpectrogramConfig` covers FFT/render parameters only (`fftSize`, `hopSize`, `windowFunction`, `frequencyScale`, `minFrequency`, `maxFrequency`, `gainDb`, `rangeDb`, `zeroPaddingFactor`, `alpha`). The color map is a separate `ColorMapValue` field on consumers — `SpectrogramProvider` props, `SpectrogramOrchestrator` options, `editor.spectrogramColorMap`. Do not pass `colorMap` inside `SpectrogramConfig` — it will fail typecheck.
