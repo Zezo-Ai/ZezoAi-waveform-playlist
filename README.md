@@ -106,11 +106,11 @@ function App() {
 
 | Package | Description |
 |---------|-------------|
-| `@waveform-playlist/midi` | MIDI file parsing, piano roll visualization, and SoundFont playback |
+| `@waveform-playlist/midi` | React `useMidiTracks` hook + piano roll visualization with SoundFont/PolySynth playback. Re-exports the parser from `@dawcore/midi`. |
 | `@waveform-playlist/annotations` | Time-synced text annotations with drag editing |
 | `@waveform-playlist/recording` | AudioWorklet recording with live waveform preview (requires [setup](https://naomiaro.github.io/waveform-playlist/docs/guides/recording#audioworklet-setup)) |
 | `@waveform-playlist/worklets` | Shared AudioWorklet processors for metering and recording (auto-installed with recording) |
-| `@waveform-playlist/spectrogram` | Spectrogram visualization with FFT worker |
+| `@waveform-playlist/spectrogram` | React `SpectrogramProvider` + UI (menu items, settings modal). Computation/worker/orchestrator are imported from `@dawcore/spectrogram`. |
 | `@waveform-playlist/media-element-playout` | HTMLMediaElement-based playout with pitch-preserving playback rate |
 
 ## Key Hooks
@@ -202,6 +202,7 @@ npm install @waveform-playlist/playout tone  # Tone.js (effects, MIDI synths)
 | `@dawcore/components` | Lit Web Components for multi-track editing |
 | `@dawcore/transport` | Native Web Audio transport — scheduling, looping, tempo automation, time signatures, metronome |
 | `@dawcore/spectrogram` | Framework-agnostic spectrogram orchestrator, FFT worker pool, and color maps — used by `render-mode="spectrogram"` |
+| `@dawcore/midi` | Framework-agnostic MIDI parser (`parseMidiFile`, `parseMidiUrl`) — used by `editor.loadMidi()` and re-exported by `@waveform-playlist/midi` |
 
 Run the examples locally:
 
@@ -233,6 +234,7 @@ pnpm example:dawcore-tone    # Tone.js backend — localhost:5174
 - [`analyser.html`](examples/dawcore-tone/analyser.html) — Spectrum analyser connected to master output
 - [`spectrogram.html`](examples/dawcore-tone/spectrogram.html) — Per-track FFT spectrograms with the Tone.js adapter
 - [`midi.html`](examples/dawcore-tone/midi.html) — Programmatic MIDI clips with piano-roll render mode and Tone.js PolySynth
+- [`midi-load.html`](examples/dawcore-tone/midi-load.html) — Load `.mid` files (URL or file picker) via `editor.loadMidi()` and play them through Tone.js PolySynth
 
 **Spec & roadmap:** [`docs/specs/web-components-migration.md`](docs/specs/web-components-migration.md) — full element catalogue, attribute/property/event tables, programmatic API contracts, theming tokens, and migration phases.
 

@@ -1036,7 +1036,9 @@ Used internally by `Channel`, `SpectrogramChannel`, and `TimeScale`. Returns `nu
 
 ---
 
-## Spectrogram (@waveform-playlist/spectrogram)
+## Spectrogram (`@waveform-playlist/spectrogram` + `@dawcore/spectrogram`)
+
+The computation, Web Worker, and orchestrator are framework-agnostic and live in `@dawcore/spectrogram`. `@waveform-playlist/spectrogram` is the React Provider + UI layer on top.
 
 Spectrogram is an **optional** package. Integrate via `SpectrogramProvider`:
 
@@ -1100,7 +1102,7 @@ interface TrackSpectrogramOverrides {
   colorMap?: ColorMapValue;
 }
 
-// From @waveform-playlist/spectrogram
+// From @dawcore/spectrogram
 interface SpectrogramWorkerApi {
   computeFFT(params: SpectrogramWorkerFFTParams, generation?: number): Promise<{ cacheKey: string }>;
   renderChunks(params: SpectrogramWorkerRenderChunksParams, generation?: number): Promise<void>;
@@ -1114,11 +1116,13 @@ interface SpectrogramWorkerApi {
 
 class SpectrogramAbortError extends Error {}  // instanceof check for aborted FFT computations
 
-// Key exports
-export { SpectrogramProvider, SpectrogramAbortError } from '@waveform-playlist/spectrogram';
-export { computeSpectrogram, computeSpectrogramMono, getColorMap, getFrequencyScale } from '@waveform-playlist/spectrogram';
-export { createSpectrogramWorker, createSpectrogramWorkerPool } from '@waveform-playlist/spectrogram';
-export { SpectrogramMenuItems, SpectrogramSettingsModal } from '@waveform-playlist/spectrogram';
+// Key exports — note the split:
+//   computation/worker/orchestrator → @dawcore/spectrogram (framework-agnostic, used by both layers)
+//   React Provider + UI components  → @waveform-playlist/spectrogram (no re-exports of @dawcore/spectrogram symbols)
+export { computeSpectrogram, computeSpectrogramMono, getColorMap, getFrequencyScale } from '@dawcore/spectrogram';
+export { createSpectrogramWorker, createSpectrogramWorkerPool, SpectrogramAbortError } from '@dawcore/spectrogram';
+export { SpectrogramOrchestrator } from '@dawcore/spectrogram/orchestrator';
+export { SpectrogramProvider, SpectrogramMenuItems, SpectrogramSettingsModal } from '@waveform-playlist/spectrogram';
 
 // Integration context (from @waveform-playlist/browser)
 export { useSpectrogramIntegration, SpectrogramIntegrationProvider } from '@waveform-playlist/browser';
