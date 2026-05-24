@@ -6,17 +6,10 @@ import {
   type ViewportState,
 } from '@dawcore/spectrogram';
 import type { SpectrogramConfig, ColorMapValue } from '@waveform-playlist/core';
-
-const LIBRARY_DEFAULTS: SpectrogramConfig = {
-  fftSize: 2048,
-  windowFunction: 'hann',
-  frequencyScale: 'mel',
-  minFrequency: 0,
-  gainDb: 20,
-  rangeDb: 80,
-};
-
-const LIBRARY_DEFAULT_COLOR_MAP: ColorMapValue = 'viridis';
+import {
+  SPECTROGRAM_DEFAULTS as LIBRARY_DEFAULTS,
+  DEFAULT_SPECTROGRAM_COLOR_MAP as LIBRARY_DEFAULT_COLOR_MAP,
+} from '@waveform-playlist/core';
 
 export interface SpectrogramControllerHost extends ReactiveControllerHost {
   dispatchEvent(event: Event): boolean;
@@ -124,10 +117,25 @@ export class SpectrogramController implements ReactiveController {
         colorMap: this.mergedColorMap(),
       });
       this.orchestrator.addEventListener('viewport-ready', (e: Event) => {
-        const detail = (e as CustomEvent).detail as { trackId: string };
+        const detail = (e as CustomEvent<{ trackId: string; generation: number }>).detail;
         this.host.dispatchEvent(
           new CustomEvent('daw-spectrogram-ready', {
-            detail,
+            detail: { trackId: detail.trackId, generation: detail.generation },
+            bubbles: true,
+            composed: true,
+          })
+        );
+      });
+      this.orchestrator.addEventListener('viewport-error', (e: Event) => {
+        const detail = (e as CustomEvent<{ trackId: string; generation: number; error: Error }>)
+          .detail;
+        this.host.dispatchEvent(
+          new CustomEvent('daw-spectrogram-error', {
+            detail: {
+              trackId: detail.trackId,
+              generation: detail.generation,
+              error: detail.error,
+            },
             bubbles: true,
             composed: true,
           })

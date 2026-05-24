@@ -193,9 +193,10 @@ export class DawEditorElement extends LitElement implements MidiLoaderHost {
   }
 
   /**
-   * Push a clip's decoded audio into the spectrogram controller. No-op
-   * unless the track is in spectrogram render-mode and the controller
-   * already exists (it bootstraps from canvas registration).
+   * Forward a clip's AudioBuffer to the spectrogram controller if the parent
+   * track is in spectrogram render-mode. Eagerly creates the controller via
+   * `_ensureSpectrogramController` so the audio data is queued for the first
+   * render — even if no canvases have been registered yet.
    */
   private _maybeRegisterSpectrogramClipAudio(trackId: string, clip: AudioClip): void {
     const descriptor = this._tracks.get(trackId);
@@ -640,7 +641,10 @@ export class DawEditorElement extends LitElement implements MidiLoaderHost {
    * `_selectedTrackId`, etc.) — most of which don't affect the spectrogram
    * viewport. Skip the cross-controller call when nothing changed.
    *
-   * The orchestrator dedupes too, but this avoids the call entirely.
+   * The orchestrator dedupes identical viewports too, so removing this cache
+   * wouldn't change observable behavior — but it would push a fresh
+   * `setViewport` call (with object allocation) into every Lit reactive
+   * update for properties unrelated to the viewport.
    */
   private _lastSpectrogramViewport: {
     vs: number;
@@ -1846,6 +1850,13 @@ export class DawEditorElement extends LitElement implements MidiLoaderHost {
     // No DOM element — apply directly to descriptor + engine.
     const oldDesc = this._tracks.get(trackId);
     if (!oldDesc) return;
+    let normalizedRenderMode = partial.renderMode;
+    if (normalizedRenderMode === 'both') {
+      console.warn(
+        '[dawcore] render-mode="both" is not yet supported; falling back to \'spectrogram\''
+      );
+      normalizedRenderMode = 'spectrogram';
+    }
     const newDesc: TrackDescriptor = {
       ...oldDesc,
       ...(partial.name !== undefined && { name: partial.name }),
@@ -1853,7 +1864,7 @@ export class DawEditorElement extends LitElement implements MidiLoaderHost {
       ...(partial.pan !== undefined && { pan: partial.pan }),
       ...(partial.muted !== undefined && { muted: partial.muted }),
       ...(partial.soloed !== undefined && { soloed: partial.soloed }),
-      ...(partial.renderMode !== undefined && { renderMode: partial.renderMode }),
+      ...(normalizedRenderMode !== undefined && { renderMode: normalizedRenderMode }),
     };
     this._tracks = new Map(this._tracks).set(trackId, newDesc);
     if (this._engine) {
