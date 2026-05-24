@@ -1,5 +1,5 @@
 ---
-sidebar_position: 14
+sidebar_position: 15
 title: VU Meters
 description: Real-time audio level monitoring with built-in and custom VU meter components
 ---

@@ -1,5 +1,5 @@
 ---
-sidebar_position: 11
+sidebar_position: 12
 description: "Display bar and beat markers, configure BPM and time signatures, and snap clips to a musical grid"
 ---
 

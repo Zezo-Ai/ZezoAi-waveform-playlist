@@ -1,5 +1,5 @@
 ---
-sidebar_position: 12
+sidebar_position: 13
 description: "Advanced: manually configure DragDropProvider with custom sensors, modifiers, and drag handlers for clip interactions"
 ---
 

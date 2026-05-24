@@ -1,5 +1,5 @@
 ---
-sidebar_position: 13
+sidebar_position: 14
 description: "Single-track playback with HTMLAudioElement, pitch-preserving speed control, and pre-computed peaks"
 ---
 
