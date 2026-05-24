@@ -52,6 +52,12 @@ import type {
   LoadFilesResult,
 } from '../events';
 import { loadFiles as loadFilesImpl } from '../interactions/file-loader';
+import {
+  loadMidiImpl,
+  type MidiLoaderHost,
+  type MidiLoadOptions,
+  type MidiLoadResult,
+} from '../interactions/midi-loader';
 import { addRecordedClip } from '../interactions/recording-clip';
 import { splitAtPlayhead as performSplitAtPlayhead } from '../interactions/split-handler';
 import { syncPeaksForChangedClips } from '../interactions/clip-peak-sync';
@@ -71,7 +77,7 @@ const NO_ADAPTER_ERROR =
   '  editor.adapter = createToneAdapter();';
 
 @customElement('daw-editor')
-export class DawEditorElement extends LitElement {
+export class DawEditorElement extends LitElement implements MidiLoaderHost {
   @property({ type: Number, attribute: 'samples-per-pixel', noAccessor: true })
   get samplesPerPixel(): number {
     return this._samplesPerPixel;
@@ -1696,6 +1702,22 @@ export class DawEditorElement extends LitElement {
   };
   async loadFiles(files: FileList | File[]): Promise<LoadFilesResult> {
     return loadFilesImpl(this, files);
+  }
+  /**
+   * Imperatively load a `.mid` file (URL or File) and create N `<daw-track>`
+   * elements — one per note-bearing MIDI track. On any per-track failure,
+   * every `<daw-track>` appended during the call is removed (both successful
+   * and failed) so the editor returns to its pre-call state.
+   *
+   * `options.signal` is forwarded to `fetch()` only for URL sources; aborting
+   * after parsing does not cancel in-flight `addTrack` calls.
+   *
+   * Requires the optional `@dawcore/midi` peer dep — throws with an install
+   * hint (and `console.warn`s the original error) when the dynamic import
+   * fails for any reason.
+   */
+  async loadMidi(source: string | File, options?: MidiLoadOptions): Promise<MidiLoadResult> {
+    return loadMidiImpl(this, source, options);
   }
   // --- Programmatic Track API ---
   /**

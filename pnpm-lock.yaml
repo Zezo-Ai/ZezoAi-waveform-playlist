@@ -182,6 +182,9 @@ importers:
         specifier: ^4.5.2
         version: 4.5.2
     devDependencies:
+      '@dawcore/midi':
+        specifier: workspace:*
+        version: link:../dawcore-midi
       '@dawcore/transport':
         specifier: workspace:*
         version: link:../transport
@@ -209,6 +212,25 @@ importers:
       vitest:
         specifier: ^3.0.0
         version: 3.2.4(@types/node@20.19.25)(happy-dom@17.6.3)
+
+  packages/dawcore-midi:
+    dependencies:
+      '@tonejs/midi':
+        specifier: ^2.0.28
+        version: 2.0.28
+      '@waveform-playlist/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      tsup:
+        specifier: ^8.0.1
+        version: 8.5.1(typescript@5.6.3)
+      typescript:
+        specifier: ^5.3.3
+        version: 5.6.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.4(@types/node@20.19.25)(jsdom@28.1.0)
 
   packages/dawcore-spectrogram:
     dependencies:
@@ -281,6 +303,9 @@ importers:
 
   packages/midi:
     dependencies:
+      '@dawcore/midi':
+        specifier: workspace:*
+        version: link:../dawcore-midi
       '@tonejs/midi':
         specifier: ^2.0.28
         version: 2.0.28

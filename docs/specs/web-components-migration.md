@@ -145,8 +145,8 @@ Extract framework-agnostic logic, add Web Component wrappers.
 | `<daw-selection-start>` | setSelection() | Editable input showing selection start time. Updates selection on change. |
 | `<daw-selection-end>` | setSelection() | Editable input showing selection end time. Updates selection on change. |
 | `<daw-time-format>` | setTimeFormat() | Select for time display format (`hh:mm:ss.sss`, `hh:mm:ss`, `seconds`). Affects time display and selection inputs. |
-| `<daw-tempo>` | setBpm() | Editable BPM input. Reflects current tempo. Drives `BeatsAndBarsProvider` bpm, metronome, and musical time formats. |
-| `<daw-time-signature>` | setTimeSignature() | Editable time signature (e.g., `4/4`, `3/4`, `6/8`). Drives `BeatsAndBarsProvider` timeSignature, ruler subdivisions, and snap grid. |
+| `<daw-tempo>` | editor.bpm property | Editable BPM input. Reflects current tempo. Drives `BeatsAndBarsProvider` bpm, metronome, and musical time formats. |
+| `<daw-time-signature>` | editor.timeSignature property | Editable time signature (e.g., `4/4`, `3/4`, `6/8`). Drives `BeatsAndBarsProvider` timeSignature, ruler subdivisions, and snap grid. |
 | `<daw-snap-to>` | setSnapTo() | Select for snap granularity. Controls clip drag/trim snapping and `<daw-grid>` line density. See [Snap Subdivisions](#snap-subdivisions). |
 | `<daw-scale-mode>` | setScaleMode() | Select for ruler display mode (`beats`, `temporal`). Switches between bar:beat and minutes:seconds ruler. |
 | `<daw-zoom-in>` | zoomIn() | Zoom in button. Disabled when at maximum zoom. |
@@ -406,12 +406,12 @@ editor.removeClip(trackId: string, clipId: string): void
 editor.updateClip(trackId: string, clipId: string, partial: Partial<ClipConfig>): void
 editor.setTimeFormat(format: string): void             // 'hh:mm:ss.sss' | 'hh:mm:ss' | 'seconds'
 editor.setAutomaticScroll(enabled: boolean): void      // Toggle auto-scroll
-editor.setBpm(bpm: number): void                       // Set tempo
-editor.setTimeSignature(numerator: number, denominator: number): void
-editor.setSnapTo(snap: string): void                   // 'bar' | 'beat' | 'off'
-editor.setScaleMode(mode: string): void                // 'beats' | 'temporal'
-editor.setLoopEnabled(enabled: boolean): void          // Toggle loop playback
-editor.setLoopRegion(start: number, end: number): void // Set loop boundaries
+editor.bpm = 140                                       // Property setter
+editor.timeSignature = [3, 4]                          // Property setter ([numerator, denominator])
+editor.snapTo = 'beat'                                 // Property setter ('bar' | 'beat' | 'off')
+editor.scaleMode = 'beats'                             // Property setter ('beats' | 'temporal')
+editor.setLoopEnabled(enabled: boolean): void          // Toggle loop playback (planned)
+editor.setLoopRegion(start: number, end: number): void // Set loop boundaries (planned)
 // Effects (master chain)
 editor.addEffect(type: string, params?: Record<string, number>): string  // Returns effectId
 editor.removeEffect(effectId: string): void
@@ -1125,9 +1125,10 @@ MIDI files are loaded imperatively via `editor.loadMidi()` because a `.mid` file
 editor.loadMidi(source: string | File, options?: MidiLoadOptions): Promise<MidiLoadResult>
 
 interface MidiLoadOptions {
-  flatten?: boolean;       // Merge all MIDI tracks into one visual track (default: false)
-  name?: string;           // Override track naming
-  startTime?: number;      // Timeline position in seconds (default: 0)
+  /** Timeline position in seconds applied to every created clip (default: 0) */
+  startTime?: number;
+  /** AbortSignal forwarded to fetch() when source is a URL */
+  signal?: AbortSignal;
 }
 
 interface MidiLoadResult {
@@ -1135,6 +1136,7 @@ interface MidiLoadResult {
   bpm: number;                          // Tempo from MIDI header (or 120)
   timeSignature: [number, number];      // e.g., [4, 4]
   duration: number;                     // Total duration in seconds
+  name: string;                         // Song name from header (empty if absent)
 }
 ```
 
@@ -1143,22 +1145,26 @@ interface MidiLoadResult {
 const { trackIds, bpm, timeSignature } = await editor.loadMidi('/midi/song.mid');
 console.log('Created tracks:', trackIds);
 
-// Apply tempo from MIDI file
-editor.setBpm(bpm);
-editor.setTimeSignature(timeSignature[0], timeSignature[1]);
-
-// Flatten into one visual track
-await editor.loadMidi('/midi/song.mid', { flatten: true });
+// Apply tempo from MIDI file (caller decides — loadMidi never mutates editor state implicitly)
+editor.bpm = bpm;
+editor.timeSignature = timeSignature;
 
 // Position on timeline
 await editor.loadMidi('/midi/bridge.mid', { startTime: 30.0 });
 ```
 
-Created tracks get `render-mode="piano-roll"` by default. Each track's clips carry `midiNotes` data for the piano-roll renderer. Track names are derived from the MIDI file (instrument name, channel, or GM program name).
+Created tracks get `render-mode="piano-roll"` automatically. Each track's clip carries `midiNotes` data for the piano-roll renderer. Track names are derived from the MIDI file (instrument name, channel, or GM program name).
 
-For programmatic MIDI, set `clip.midiNotes` directly:
+**Cleanup-on-failure:** if any of the N track creations fails, `loadMidi` removes all successfully-created tracks before rejecting — the editor returns to its pre-call state. Documented limitation: an `AbortSignal` only cancels the fetch phase; aborts during the track-creation phase are a no-op (the in-flight `addTrack` calls run to completion).
+
+**Deferred to future versions:**
+- `flatten` option (needs a "hidden audio-only track" primitive in dawcore)
+- `name` override (ambiguous semantics with multi-track files)
+- Auto-applied tempo / time signature (currently caller does `editor.bpm = result.bpm`)
+
+For programmatic MIDI (no file), set `clip.midiNotes` directly:
 ```javascript
-const track = editor.addTrack({ name: 'Synth Lead' });
+const track = await editor.addTrack({ name: 'Synth Lead' });
 const clip = track.querySelector('daw-clip');
 clip.midiNotes = [
   { midi: 60, name: 'C4', time: 0, duration: 0.5, velocity: 0.8 },
@@ -1501,24 +1507,20 @@ Enable with the `file-drop` attribute on `<daw-editor>`:
 </daw-editor>
 ```
 
-Dropping audio files (`.mp3`, `.wav`, `.ogg`, `.flac`, etc.) creates one new track per file. Dropping a MIDI file (`.mid`, `.midi`) routes through the `loadMidi()` pipeline, creating N tracks with `render-mode="piano-roll"`.
+Dropping audio files (`.mp3`, `.wav`, `.ogg`, `.flac`, etc.) creates one new track per file.
 
-Mixed drops work — dropping 2 audio files and 1 MIDI file in a single drop creates tracks for all of them.
+**MIDI files in `loadFiles()` is planned, not yet implemented.** Today, drop a `.mid` via the file zone and it will fail at `AudioContext.decodeAudioData()`. Use `editor.loadMidi(file)` directly for MIDI input. See [MIDI Loading](#midi-loading).
 
 ### Programmatic File Loading
 
 For custom drop zones, file pickers, or other UIs:
 
 ```typescript
-editor.loadFiles(files: File[] | FileList, options?: LoadFilesOptions): Promise<LoadFilesResult>
-
-interface LoadFilesOptions {
-  midiOptions?: MidiLoadOptions;  // Passed through for .mid files (flatten, startTime, etc.)
-}
+editor.loadFiles(files: File[] | FileList): Promise<LoadFilesResult>
 
 interface LoadFilesResult {
-  trackIds: string[];             // All created track IDs (audio + MIDI)
-  midi?: MidiLoadResult;          // Present when MIDI files were in the drop (bpm, timeSignature, etc.)
+  loaded: string[];                                 // Successfully-loaded track IDs (audio only today)
+  failed: Array<{ file: File; error: unknown }>;    // Per-file failures
 }
 ```
 
@@ -1527,25 +1529,28 @@ interface LoadFilesResult {
 const input = document.createElement('input');
 input.type = 'file';
 input.multiple = true;
-input.accept = 'audio/*,.mid,.midi';
+input.accept = 'audio/*';
 input.onchange = async () => {
-  const { trackIds } = await editor.loadFiles(input.files);
-  console.log('Created tracks:', trackIds);
+  const { loaded, failed } = await editor.loadFiles(input.files);
+  console.log('Loaded:', loaded, 'Failed:', failed);
 };
 input.click();
 
-// Custom drop zone with MIDI options
-dropZone.addEventListener('drop', async (e) => {
-  e.preventDefault();
-  const { trackIds } = await editor.loadFiles(e.dataTransfer.files, {
-    midiOptions: { flatten: true },
-  });
-});
+// MIDI files require a separate call today
+const midiInput = document.createElement('input');
+midiInput.type = 'file';
+midiInput.accept = '.mid,.midi';
+midiInput.onchange = async () => {
+  const result = await editor.loadMidi(midiInput.files[0]);
+  console.log('Loaded MIDI tracks:', result.trackIds);
+};
 ```
+
+**Planned:** unify the two paths so a single `loadFiles()` call accepts mixed audio + MIDI input and routes by extension. Until that lands, callers branch on extension themselves.
 
 ### File Type Detection
 
-`loadFiles()` detects MIDI files by extension (`.mid`, `.midi`) and routes them through `loadMidi()`. All other files are treated as audio and passed to `AudioContext.decodeAudioData()` — no upfront MIME type filtering. Non-audio files (`.pdf`, `.txt`, etc.) will fail at decode and emit a `daw-files-load-error` event. This is intentional: the browser's decoder is the most reliable detector of valid audio.
+`loadFiles()` does no upfront MIME type filtering — every file is passed to `AudioContext.decodeAudioData()`. Non-audio files (`.pdf`, `.txt`, `.mid`, etc.) will fail at decode and emit a `daw-files-load-error` event. This is intentional for audio: the browser's decoder is the most reliable detector of valid audio. For MIDI files, route through `editor.loadMidi()` instead.
 
 ```typescript
 'daw-files-load-error'  // detail: {file: File, error: string}
