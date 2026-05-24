@@ -5,17 +5,24 @@ description: "Load MIDI files for piano roll visualization with SoundFont or syn
 
 # MIDI Playback
 
-Waveform Playlist supports MIDI file loading and playback through the optional `@waveform-playlist/midi` package. MIDI tracks render as piano roll visualizations and play back using SoundFont samples or Tone.js PolySynth synthesis.
+Waveform Playlist supports MIDI file loading and playback in two flavors:
 
-## Installation
+- **React** — the `@waveform-playlist/midi` package provides the `useMidiTracks` hook, which integrates with `WaveformPlaylistProvider`.
+- **Web Components** — `<daw-editor>` from `@dawcore/components` exposes an `editor.loadMidi(source, options)` method, backed by the optional `@dawcore/midi` peer dep.
+
+Both paths use the same framework-agnostic parser (`@dawcore/midi`) under the hood — the React package re-exports it. MIDI tracks render as piano roll visualizations and play back using SoundFont samples or Tone.js PolySynth synthesis.
+
+## React
+
+### Installation
 
 ```bash
 npm install @waveform-playlist/midi @tonejs/midi
 ```
 
-`@tonejs/midi` is a regular dependency and will be installed automatically. The package is separate from the core library so users who only need audio don't pay the bundle cost (~8-12 KB gzipped).
+`@tonejs/midi` and `@dawcore/midi` are regular dependencies and will be installed automatically. The package is separate from the core library so users who only need audio don't pay the bundle cost (~8-12 KB gzipped).
 
-## Basic Usage
+### Basic Usage
 
 Use the `useMidiTracks` hook to load `.mid` files:
 
@@ -43,7 +50,7 @@ function MidiPlayer() {
 
 A single `.mid` file typically produces multiple `ClipTrack` objects — one per MIDI channel (e.g., Piano, Bass, Drums). All tracks are returned at once after loading completes.
 
-## MidiTrackConfig Options
+### MidiTrackConfig Options
 
 ```typescript
 interface MidiTrackConfig {
@@ -96,7 +103,7 @@ const { tracks } = useMidiTracks(
 );
 ```
 
-## SoundFont Playback
+### SoundFont Playback
 
 For realistic instrument sounds, load a SoundFont file and pass the cache to the provider:
 
@@ -118,7 +125,7 @@ await cache.load('/soundfonts/piano.sf2');
 
 Without a `soundFontCache`, MIDI tracks fall back to Tone.js PolySynth synthesis. SoundFont playback uses the `midiProgram` field on each clip to select the correct instrument samples.
 
-## Mixing MIDI and Audio Tracks
+### Mixing MIDI and Audio Tracks
 
 MIDI and audio tracks can be played together. Both `useMidiTracks` and `useAudioTracks` return `ClipTrack[]`, so merge them into a single array:
 
@@ -148,19 +155,109 @@ function MixedPlayer() {
 }
 ```
 
-## Pure Parsing (No React)
+## Web Components
 
-The `parseMidiFile` function works without React — useful for Node.js scripts or non-React apps:
+For consumers of `<daw-editor>` (the dawcore Web Components layer), call `editor.loadMidi(source, options)`. This creates one `<daw-track>` element per note-bearing MIDI track, each with `render-mode="piano-roll"` set automatically.
+
+### Installation
+
+```bash
+npm install @dawcore/components @dawcore/midi
+```
+
+`@dawcore/midi` is declared as an optional peer dep on `@dawcore/components` — install it only if you want to use `editor.loadMidi`. The editor dynamic-imports it on first call.
+
+### Basic Usage
+
+```html
+<daw-editor id="editor"></daw-editor>
+
+<script type="module">
+  import '@dawcore/components';
+  import { createToneAdapter } from '@waveform-playlist/playout';
+
+  const editor = document.getElementById('editor');
+  editor.adapter = createToneAdapter({ ppqn: 960 });
+
+  const result = await editor.loadMidi('/music/song.mid');
+  console.log('Loaded', result.trackIds.length, 'tracks at', result.bpm, 'bpm');
+
+  // Apply tempo / time signature from the file (caller decides — loadMidi
+  // never mutates editor state implicitly)
+  editor.bpm = result.bpm;
+  editor.timeSignature = result.timeSignature;
+</script>
+```
+
+### API
 
 ```typescript
-import { parseMidiFile } from '@waveform-playlist/midi';
+editor.loadMidi(source: string | File, options?: MidiLoadOptions): Promise<MidiLoadResult>;
+
+interface MidiLoadOptions {
+  startTime?: number;       // Timeline position in seconds (default 0)
+  signal?: AbortSignal;     // Forwarded to fetch only — see "AbortSignal scope" below
+}
+
+interface MidiLoadResult {
+  readonly trackIds: readonly string[];
+  readonly bpm: number;
+  readonly timeSignature: readonly [number, number];
+  readonly duration: number;
+  readonly name: string;
+}
+```
+
+### File-Picker Loading
+
+`source` accepts either a URL string or a `File` object — same return shape:
+
+```html
+<input id="picker" type="file" accept=".mid,.midi" />
+<script type="module">
+  document.getElementById('picker').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (file) await editor.loadMidi(file);
+  });
+</script>
+```
+
+### Cleanup-on-Failure
+
+If any per-track creation fails, every `<daw-track>` appended during the call is removed — including elements that `addTrack` left in the DOM before its promise rejected. The editor returns to its pre-call state. Don't worry about orphan tracks on partial failure.
+
+### AbortSignal Scope
+
+`options.signal` is forwarded to `fetch()` for URL sources only. Aborting after parsing has finished does NOT cancel the in-flight `addTrack` calls (a documented v1 limitation). Cancellation typically surfaces as a `DOMException` named `AbortError` — distinguish it from a real failure:
+
+```javascript
+try {
+  await editor.loadMidi(url, { signal: controller.signal });
+} catch (err) {
+  if (err.name === 'AbortError') return; // user cancelled — not an error
+  console.error('loadMidi failed', err);
+}
+```
+
+### Install Hint
+
+If `@dawcore/midi` isn't installed, `loadMidi` rejects with a friendly install hint (and `console.warn`s the original module-resolution error so debugging isn't blocked when the failure is something other than "not installed" — broken exports map, 404 chunk, CSP block, etc.).
+
+## Pure Parsing (No React, No DOM)
+
+The `parseMidiFile` function works without React or web components — useful for Node.js scripts, build-time tooling, or non-React apps. It lives in `@dawcore/midi` (re-exported from `@waveform-playlist/midi`).
+
+```typescript
+import { parseMidiFile } from '@dawcore/midi';
+// or, equivalently from the React package re-export:
+// import { parseMidiFile } from '@waveform-playlist/midi';
 
 const response = await fetch('/music/song.mid');
 const buffer = await response.arrayBuffer();
 const parsed = parseMidiFile(buffer);
 
 console.log(parsed.name);           // Song name
-console.log(parsed.bpm);            // Tempo
+console.log(parsed.bpm);            // Tempo (first tempo only for multi-tempo files)
 console.log(parsed.tracks.length);  // Number of tracks
 
 for (const track of parsed.tracks) {
@@ -171,7 +268,7 @@ for (const track of parsed.tracks) {
 There's also `parseMidiUrl` for a fetch+parse convenience:
 
 ```typescript
-import { parseMidiUrl } from '@waveform-playlist/midi';
+import { parseMidiUrl } from '@dawcore/midi';
 
 const parsed = await parseMidiUrl('/music/song.mid');
 ```

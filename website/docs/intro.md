@@ -38,7 +38,8 @@ The library is organized into focused packages:
 
 | Package | Description |
 |---------|-------------|
-| `@waveform-playlist/midi` | MIDI file parsing, piano roll visualization, and SoundFont playback |
+| `@waveform-playlist/midi` | React `useMidiTracks` hook for MIDI file loading; piano roll visualization + SoundFont/PolySynth playback. Re-exports the parser from `@dawcore/midi`. |
+| `@dawcore/midi` | Framework-agnostic MIDI parser (`parseMidiFile`, `parseMidiUrl`). Used by `@dawcore/components` via `editor.loadMidi()` and re-exported by `@waveform-playlist/midi`. |
 | `@waveform-playlist/annotations` | Time-synced text annotations with drag editing |
 | `@waveform-playlist/recording` | AudioWorklet recording with live waveform preview |
 | `@waveform-playlist/worklets` | AudioWorklet processors for recording and VU metering (auto-installed with recording) |

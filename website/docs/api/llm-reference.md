@@ -539,9 +539,9 @@ Delegates to `engine.splitClip()` — engine handles clip creation, adapter sync
 
 ---
 
-## MIDI (`@waveform-playlist/midi`)
+## MIDI (`@waveform-playlist/midi` + `@dawcore/midi`)
 
-Load and parse MIDI files into `ClipTrack[]` with `midiNotes` for piano roll visualization and SoundFont/PolySynth playback.
+Load and parse MIDI files into `ClipTrack[]` with `midiNotes` for piano roll visualization and SoundFont/PolySynth playback. As of v13, the parser is framework-agnostic and lives in `@dawcore/midi`; `@waveform-playlist/midi` re-exports it and adds the React `useMidiTracks` hook on top.
 
 ### useMidiTracks
 
@@ -579,6 +579,8 @@ One `MidiTrackConfig` with `src` can produce multiple `ClipTrack` objects (one p
 
 ### parseMidiFile / parseMidiUrl
 
+Defined in `@dawcore/midi` and re-exported from `@waveform-playlist/midi` for React consumers (no source change needed).
+
 ```typescript
 function parseMidiFile(data: ArrayBuffer, options?: ParseMidiOptions): ParsedMidi;
 function parseMidiUrl(url: string, options?: ParseMidiOptions, signal?: AbortSignal): Promise<ParsedMidi>;
@@ -589,9 +591,9 @@ interface ParseMidiOptions {
 
 interface ParsedMidi {
   tracks: ParsedMidiTrack[];
-  duration: number;                // Total duration in seconds
+  duration: number;                // Total duration in seconds (0 if no note-bearing tracks)
   name: string;                    // Song name from MIDI header
-  bpm: number;                     // First tempo (default 120)
+  bpm: number;                     // First tempo (default 120). Multi-tempo files have N tempo events but this field reports only the first; note timings are tempo-adjusted by @tonejs/midi.
   timeSignature: [number, number]; // Default [4, 4]
 }
 
@@ -605,7 +607,30 @@ interface ParsedMidiTrack {
 }
 ```
 
-Pure functions — no React dependency. `parseMidiFile` takes an `ArrayBuffer`, `parseMidiUrl` fetches then parses. Notes are in seconds (tempo-adjusted by `@tonejs/midi`).
+Pure functions — no React, no DOM. `parseMidiFile` takes an `ArrayBuffer`, `parseMidiUrl` fetches then parses. Notes are in seconds (tempo-adjusted by `@tonejs/midi`).
+
+### editor.loadMidi (Web Components, from `@dawcore/components`)
+
+Imperative MIDI loading on `<daw-editor>`. Requires the optional `@dawcore/midi` peer dep — dynamic-imported on first call.
+
+```typescript
+loadMidi(source: string | File, options?: MidiLoadOptions): Promise<MidiLoadResult>;
+
+interface MidiLoadOptions {
+  startTime?: number;                          // Timeline position in seconds applied to every created clip (default 0). Throws RangeError on NaN/negative.
+  signal?: AbortSignal;                        // Forwarded to fetch() only. Aborts during the addTrack phase are a no-op.
+}
+
+interface MidiLoadResult {
+  readonly trackIds: readonly string[];        // IDs of created <daw-track> elements, in MIDI track order
+  readonly bpm: number;                        // Tempo from MIDI header (defaults 120)
+  readonly timeSignature: readonly [number, number]; // Defaults [4, 4]
+  readonly duration: number;                   // Max across tracks; 0 for empty files
+  readonly name: string;                       // Song name; empty string when not set
+}
+```
+
+Created tracks get `render-mode="piano-roll"` automatically. **Cleanup-on-failure:** any per-track rejection removes every `<daw-track>` appended during the call — both succeeded ones AND elements `addTrack` left in the DOM before rejecting. Editor returns to its pre-call state via `Promise.allSettled` + diff cleanup. If `@dawcore/midi` is not installed, rejects with a friendly install hint and `console.warn`s the original module-resolution error.
 
 ---
 

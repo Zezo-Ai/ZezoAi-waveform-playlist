@@ -29,7 +29,8 @@ waveform-playlist is a React component library for building browser-based audio 
 - `@waveform-playlist/worklets` — Shared AudioWorklet processors: `meter-processor` (sample-accurate peak/RMS metering) and `recording-processor` (multi-channel audio capture). Auto-installed with recording package.
 - `@waveform-playlist/webaudio-peaks` — Peak extraction from AudioBuffer
 - `@waveform-playlist/media-element-playout` — HTMLAudioElement playback with pitch-preserving speed control, optional Web Audio routing for fades and Tone.js effect bridging
-- `@waveform-playlist/midi` — MIDI file loading and parsing: .mid file fetch/parse via @tonejs/midi, `useMidiTracks` hook converts to ClipTrack[] with midiNotes for piano roll visualization and SoundFont/PolySynth playback
+- `@waveform-playlist/midi` — React layer for MIDI: `useMidiTracks` hook converts .mid files to ClipTrack[] with midiNotes for piano roll visualization and SoundFont/PolySynth playback. As of v13+ the parser is re-exported from `@dawcore/midi`; React API surface is unchanged.
+- `@dawcore/midi` — Framework-agnostic MIDI parser (`parseMidiFile`, `parseMidiUrl` — pure functions, no React). Used by `@dawcore/components` via dynamic import inside `editor.loadMidi()`, and re-exported by `@waveform-playlist/midi`.
 - `@waveform-playlist/spectrogram` — Optional spectrogram package (v13+): React `SpectrogramProvider` + UI (menu items, settings modal) integrating via `SpectrogramIntegrationContext`. Computation/worker/orchestrator are imported from `@dawcore/spectrogram`.
 - `@dawcore/spectrogram` — Framework-agnostic FFT computation, Web Worker, and `SpectrogramOrchestrator` class (viewport classification, 3-tier render, generation-based abort, contiguous chunk grouping, color LUT cache). Shared between the React Provider and the dawcore Lit element layer.
 
@@ -92,8 +93,14 @@ Both providers use React Context with 4 split contexts for performance.
 ### MIDI Hooks (from `@waveform-playlist/midi`)
 
 - `useMidiTracks(configs, options)` — Load .mid files into ClipTrack[] with midiNotes for piano roll rendering. `options: { sampleRate: number }`. One config can produce multiple tracks (one per MIDI channel). Supports pre-parsed notes via `midiNotes` prop.
-- `parseMidiFile(data, options?)` — Pure function: ArrayBuffer → ParsedMidi with tracks, notes, tempo, time signature. No React dependency.
-- `parseMidiUrl(url, options?, signal?)` — Fetch + parse convenience wrapper with AbortSignal support.
+- `parseMidiFile(data, options?)` — Pure function: ArrayBuffer → ParsedMidi with tracks, notes, tempo, time signature. No React dependency. Re-exported from `@dawcore/midi`.
+- `parseMidiUrl(url, options?, signal?)` — Fetch + parse convenience wrapper with AbortSignal support. Re-exported from `@dawcore/midi`.
+
+### MIDI Loading (from `@dawcore/components`, requires optional `@dawcore/midi` peer dep)
+
+- `editor.loadMidi(source, options?)` — Imperatively load a `.mid` file (URL string or File) and create N `<daw-track>` elements with `render-mode="piano-roll"` — one per note-bearing MIDI track. Returns `Promise<MidiLoadResult>` with `{ trackIds, bpm, timeSignature, duration, name }`. Cleanup-on-failure via `Promise.allSettled`: any per-track failure removes every track appended during the call. Dynamic-imports `@dawcore/midi` on first call; throws friendly install hint if missing.
+- `MidiLoadOptions` — `{ startTime?: number; signal?: AbortSignal }`. `signal` is forwarded to `fetch()` only; aborting after parse is a no-op.
+- `MidiLoadResult` — `{ readonly trackIds: readonly string[]; readonly bpm: number; readonly timeSignature: readonly [number, number]; readonly duration: number; readonly name: string }`.
 
 ### Beats & Bars (from `@waveform-playlist/ui-components`)
 
