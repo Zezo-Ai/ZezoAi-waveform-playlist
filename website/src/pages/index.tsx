@@ -139,7 +139,7 @@ function HomepageHeader() {
           </Link>
           <Link
             className={styles.secondaryButton}
-            to="/docs/getting-started/installation">
+            to="/docs/react/getting-started/installation">
             Get Started
           </Link>
         </div>
@@ -297,7 +297,7 @@ function CodeExample() {
             </p>
             <Link
               className={styles.primaryButton}
-              to="/docs/api/providers/waveform-playlist-provider">
+              to="/docs/react/api/providers/waveform-playlist-provider">
               View API Docs
             </Link>
           </div>

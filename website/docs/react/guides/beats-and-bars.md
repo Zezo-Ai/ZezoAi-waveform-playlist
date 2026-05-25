@@ -62,7 +62,7 @@ When `snap` is enabled, the provider reads from `BeatsAndBarsProvider` context:
 
 :::info Advanced: Manual DragDropProvider Setup
 
-For full control over drag sensors, modifiers, and handlers, you can bypass `ClipInteractionProvider` and configure `DragDropProvider` directly with `useClipDragHandlers`, `useDragSensors`, `ClipCollisionModifier`, and `SnapToGridModifier`. See the [LLM API Reference](/docs/api/llm-reference) for the complete hook and modifier signatures.
+For full control over drag sensors, modifiers, and handlers, you can bypass `ClipInteractionProvider` and configure `DragDropProvider` directly with `useClipDragHandlers`, `useDragSensors`, `ClipCollisionModifier`, and `SnapToGridModifier`. See the [LLM API Reference](/docs/framework-agnostic/llm-reference) for the complete hook and modifier signatures.
 
 :::
 
@@ -133,5 +133,5 @@ The `SmartScale` component (used internally by `Waveform`) checks for `BeatsAndB
 ## See Also
 
 - [Beats & Bars Example](/examples/beats-and-bars) — Interactive demo with BPM, time signature, and snap controls
-- [Loading Audio](/docs/guides/loading-audio) — Immediate mode for progressive loading
-- [Track Management](/docs/guides/track-management) — Drag and trim clips
+- [Loading Audio](/docs/react/guides/loading-audio) — Immediate mode for progressive loading
+- [Track Management](/docs/react/guides/track-management) — Drag and trim clips
