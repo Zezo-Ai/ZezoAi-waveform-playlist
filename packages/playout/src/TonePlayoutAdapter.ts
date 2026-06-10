@@ -23,7 +23,16 @@ export interface ToneAdapterOptions {
   ppqn?: number;
 }
 
-export function createToneAdapter(options?: ToneAdapterOptions): PlayoutAdapter {
+export interface ToneAdapter extends PlayoutAdapter {
+  /**
+   * Provide or swap the SoundFont after creation. Rebuilds only the MIDI
+   * tracks whose routing changes; audio tracks keep playing untouched.
+   * Pass undefined to revert MIDI tracks to PolySynth synthesis.
+   */
+  setSoundFontCache(cache: SoundFontCache | undefined): void;
+}
+
+export function createToneAdapter(options?: ToneAdapterOptions): ToneAdapter {
   // Ensure the global shared context exists BEFORE creating the playout.
   // Without this, TonePlayout's Volume is created on Tone's default context,
   // which is replaced by getGlobalContext() later — causing cross-context errors.
@@ -44,96 +53,121 @@ export function createToneAdapter(options?: ToneAdapterOptions): PlayoutAdapter 
   let _pendingInit: Promise<void> | null = null;
   const _ppqn = options?.ppqn ?? 192;
   let _bpm = 120;
+  let _soundFontCache = options?.soundFontCache;
+  // Snapshot of the adapter's tracks, kept fresh by setTracks/addTrack/
+  // updateTrack/removeTrack and the per-track control setters. Used by
+  // setSoundFontCache to rebuild MIDI tracks without an engine round-trip.
+  const _currentTracks = new Map<string, ClipTrack>();
+  // What each MIDI playout track was built with (null = PolySynth). The
+  // rebuild guard compares effective routing against this build record —
+  // not against the previous setSoundFontCache argument — because the same
+  // cache object can flip isLoaded after a late load().
+  const _midiTrackBuild = new Map<string, SoundFontCache | null>();
+
+  // A track with both audio and MIDI clips becomes TWO playout tracks:
+  // audio under track.id, MIDI under track.id + ':midi'.
+  function midiPlayoutTrackId(track: ClipTrack): string {
+    const hasAudio = track.clips.some((c) => c.audioBuffer && !c.midiNotes);
+    return hasAudio ? `${track.id}:midi` : track.id;
+  }
+
+  function addAudioTrackToPlayout(p: TonePlayout, track: ClipTrack): void {
+    const audioClips = track.clips.filter((c) => c.audioBuffer && !c.midiNotes);
+    if (audioClips.length === 0) return;
+
+    const startTime = Math.min(...audioClips.map(clipStartTime));
+    const endTime = Math.max(...audioClips.map(clipEndTime));
+
+    const trackObj: Track = {
+      id: track.id,
+      name: track.name,
+      gain: track.volume,
+      muted: track.muted,
+      soloed: track.soloed,
+      stereoPan: track.pan,
+      startTime,
+      endTime,
+    };
+
+    const clipInfos: ClipInfo[] = audioClips.map((clip) => ({
+      buffer: clip.audioBuffer!,
+      startTime: clipStartTime(clip) - startTime,
+      duration: clipDurationTime(clip),
+      offset: clipOffsetTime(clip),
+      fadeIn: clip.fadeIn,
+      fadeOut: clip.fadeOut,
+      gain: clip.gain,
+    }));
+
+    p.addTrack({
+      clips: clipInfos,
+      track: trackObj,
+      effects: track.effects,
+      channelCount: trackChannelCount(track),
+    });
+  }
+
+  function addMidiTrackToPlayout(p: TonePlayout, track: ClipTrack): void {
+    const midiClips = track.clips.filter((c) => c.midiNotes && c.midiNotes.length > 0);
+    if (midiClips.length === 0) return;
+
+    const startTime = Math.min(...midiClips.map(clipStartTime));
+    const endTime = Math.max(...midiClips.map(clipEndTime));
+
+    const trackId = midiPlayoutTrackId(track);
+
+    const trackObj: Track = {
+      id: trackId,
+      name: track.name,
+      gain: track.volume,
+      muted: track.muted,
+      soloed: track.soloed,
+      stereoPan: track.pan,
+      startTime,
+      endTime,
+    };
+
+    const midiClipInfos: MidiClipInfo[] = midiClips.map((clip) => ({
+      notes: clip.midiNotes!,
+      startTime: clipStartTime(clip) - startTime,
+      duration: clipDurationTime(clip),
+      offset: clipOffsetTime(clip),
+    }));
+
+    if (_soundFontCache?.isLoaded) {
+      const firstClip = midiClips[0];
+      const midiChannel = firstClip.midiChannel;
+      const isPercussion = midiChannel === 9;
+      const programNumber = firstClip.midiProgram ?? 0;
+
+      p.addSoundFontTrack({
+        clips: midiClipInfos,
+        track: trackObj,
+        soundFontCache: _soundFontCache,
+        programNumber,
+        isPercussion,
+        effects: track.effects,
+      });
+      _midiTrackBuild.set(trackId, _soundFontCache);
+    } else {
+      if (_soundFontCache) {
+        console.warn(
+          `[waveform-playlist] SoundFont not loaded for track "${track.name}" — falling back to PolySynth.`
+        );
+      }
+      p.addMidiTrack({
+        clips: midiClipInfos,
+        track: trackObj,
+        effects: track.effects,
+      });
+      _midiTrackBuild.set(trackId, null);
+    }
+  }
 
   // Add a single ClipTrack to the playout (shared by buildPlayout and addTrack)
   function addTrackToPlayout(p: TonePlayout, track: ClipTrack): void {
-    const audioClips = track.clips.filter((c) => c.audioBuffer && !c.midiNotes);
-    const midiClips = track.clips.filter((c) => c.midiNotes && c.midiNotes.length > 0);
-
-    if (audioClips.length > 0) {
-      const startTime = Math.min(...audioClips.map(clipStartTime));
-      const endTime = Math.max(...audioClips.map(clipEndTime));
-
-      const trackObj: Track = {
-        id: track.id,
-        name: track.name,
-        gain: track.volume,
-        muted: track.muted,
-        soloed: track.soloed,
-        stereoPan: track.pan,
-        startTime,
-        endTime,
-      };
-
-      const clipInfos: ClipInfo[] = audioClips.map((clip) => ({
-        buffer: clip.audioBuffer!,
-        startTime: clipStartTime(clip) - startTime,
-        duration: clipDurationTime(clip),
-        offset: clipOffsetTime(clip),
-        fadeIn: clip.fadeIn,
-        fadeOut: clip.fadeOut,
-        gain: clip.gain,
-      }));
-
-      p.addTrack({
-        clips: clipInfos,
-        track: trackObj,
-        effects: track.effects,
-        channelCount: trackChannelCount(track),
-      });
-    }
-
-    if (midiClips.length > 0) {
-      const startTime = Math.min(...midiClips.map(clipStartTime));
-      const endTime = Math.max(...midiClips.map(clipEndTime));
-
-      const trackId = audioClips.length > 0 ? `${track.id}:midi` : track.id;
-
-      const trackObj: Track = {
-        id: trackId,
-        name: track.name,
-        gain: track.volume,
-        muted: track.muted,
-        soloed: track.soloed,
-        stereoPan: track.pan,
-        startTime,
-        endTime,
-      };
-
-      const midiClipInfos: MidiClipInfo[] = midiClips.map((clip) => ({
-        notes: clip.midiNotes!,
-        startTime: clipStartTime(clip) - startTime,
-        duration: clipDurationTime(clip),
-        offset: clipOffsetTime(clip),
-      }));
-
-      if (options?.soundFontCache?.isLoaded) {
-        const firstClip = midiClips[0];
-        const midiChannel = firstClip.midiChannel;
-        const isPercussion = midiChannel === 9;
-        const programNumber = firstClip.midiProgram ?? 0;
-
-        p.addSoundFontTrack({
-          clips: midiClipInfos,
-          track: trackObj,
-          soundFontCache: options.soundFontCache,
-          programNumber,
-          isPercussion,
-          effects: track.effects,
-        });
-      } else {
-        if (options?.soundFontCache) {
-          console.warn(
-            `[waveform-playlist] SoundFont not loaded for track "${track.name}" — falling back to PolySynth.`
-          );
-        }
-        p.addMidiTrack({
-          clips: midiClipInfos,
-          track: trackObj,
-          effects: track.effects,
-        });
-      }
-    }
+    addAudioTrackToPlayout(p, track);
+    addMidiTrackToPlayout(p, track);
   }
 
   // Recreates TonePlayout after dispose. The initial playout is created eagerly
@@ -196,6 +230,12 @@ export function createToneAdapter(options?: ToneAdapterOptions): PlayoutAdapter 
     },
 
     setTracks(tracks: ClipTrack[]): void {
+      _currentTracks.clear();
+      _midiTrackBuild.clear();
+      for (const track of tracks) {
+        _currentTracks.set(track.id, track);
+      }
+
       if (!playout) {
         buildPlayout(tracks);
         return;
@@ -229,6 +269,8 @@ export function createToneAdapter(options?: ToneAdapterOptions): PlayoutAdapter 
     },
 
     updateTrack(trackId: string, track: ClipTrack): void {
+      _currentTracks.set(trackId, track);
+
       if (!playout) return;
 
       // Try clip-level update — preserves track audio graph (no glitch)
@@ -247,12 +289,15 @@ export function createToneAdapter(options?: ToneAdapterOptions): PlayoutAdapter 
 
         const audioUpdated = playout.replaceTrackClips(trackId, clipInfos, startTime);
 
-        // Also update companion MIDI track if present
+        // Also update companion MIDI track if present. Re-add only the MIDI
+        // half — the audio track was updated in-place by replaceTrackClips
+        // above, and TonePlayout.addTrack has no idempotency guard (a second
+        // add leaks the old ToneTrack and duplicates its Transport events).
         const midiClips = track.clips.filter((c) => c.midiNotes && c.midiNotes.length > 0);
         if (midiClips.length > 0) {
           const midiTrackId = trackId + ':midi';
           playout.removeTrack(midiTrackId);
-          addTrackToPlayout(playout, track);
+          addMidiTrackToPlayout(playout, track);
           if (_isPlaying) {
             playout.resumeTrackMidPlayback(midiTrackId);
           }
@@ -267,6 +312,11 @@ export function createToneAdapter(options?: ToneAdapterOptions): PlayoutAdapter 
       // Fallback: full track remove+re-add (MIDI-only or no audio clips)
       playout.removeTrack(trackId);
       playout.removeTrack(trackId + ':midi');
+      // Drop both build-record keys — a shape change (mixed ↔ MIDI-only)
+      // flips the MIDI playout id between trackId and trackId + ':midi',
+      // and the re-add below only records the current one.
+      _midiTrackBuild.delete(trackId);
+      _midiTrackBuild.delete(trackId + ':midi');
       addTrackToPlayout(playout, track);
       playout.applyInitialSoloState();
       if (_isPlaying) {
@@ -276,6 +326,8 @@ export function createToneAdapter(options?: ToneAdapterOptions): PlayoutAdapter 
     },
 
     addTrack(track: ClipTrack): void {
+      _currentTracks.set(track.id, track);
+
       if (!playout) {
         console.warn(
           '[waveform-playlist] adapter.addTrack() called but playout is not available ' +
@@ -288,8 +340,13 @@ export function createToneAdapter(options?: ToneAdapterOptions): PlayoutAdapter 
     },
 
     removeTrack(trackId: string): void {
+      _currentTracks.delete(trackId);
+      _midiTrackBuild.delete(trackId);
+      _midiTrackBuild.delete(trackId + ':midi');
+
       if (!playout) return;
       playout.removeTrack(trackId);
+      playout.removeTrack(trackId + ':midi');
       playout.applyInitialSoloState();
     },
 
@@ -335,18 +392,26 @@ export function createToneAdapter(options?: ToneAdapterOptions): PlayoutAdapter 
     },
 
     setTrackVolume(trackId: string, volume: number): void {
+      const existing = _currentTracks.get(trackId);
+      if (existing) _currentTracks.set(trackId, { ...existing, volume });
       playout?.getTrack(trackId)?.setVolume(volume);
     },
 
     setTrackMute(trackId: string, muted: boolean): void {
+      const existing = _currentTracks.get(trackId);
+      if (existing) _currentTracks.set(trackId, { ...existing, muted });
       playout?.setMute(trackId, muted);
     },
 
     setTrackSolo(trackId: string, soloed: boolean): void {
+      const existing = _currentTracks.get(trackId);
+      if (existing) _currentTracks.set(trackId, { ...existing, soloed });
       playout?.setSolo(trackId, soloed);
     },
 
     setTrackPan(trackId: string, pan: number): void {
+      const existing = _currentTracks.get(trackId);
+      if (existing) _currentTracks.set(trackId, { ...existing, pan });
       playout?.getTrack(trackId)?.setPan(pan);
     },
 
@@ -425,6 +490,49 @@ export function createToneAdapter(options?: ToneAdapterOptions): PlayoutAdapter 
       return playout.masterOutputNode;
     },
 
+    setSoundFontCache(cache: SoundFontCache | undefined): void {
+      _soundFontCache = cache;
+      if (cache && !cache.isLoaded) {
+        console.warn(
+          '[waveform-playlist] setSoundFontCache called with a SoundFontCache that is not ' +
+            'loaded — MIDI tracks remain on PolySynth. Await cache.load() and call again.'
+        );
+      }
+      if (!playout) return;
+
+      const effective = cache?.isLoaded ? cache : null;
+      let changed = false;
+
+      for (const track of _currentTracks.values()) {
+        const hasMidi = track.clips.some((c) => c.midiNotes && c.midiNotes.length > 0);
+        if (!hasMidi) continue;
+
+        const midiTrackId = midiPlayoutTrackId(track);
+        if (_midiTrackBuild.get(midiTrackId) === effective) continue;
+
+        // Isolate per-track failures — a Tone.js graph error on one track
+        // must not leave the remaining tracks stuck on their old routing
+        // or escape into the caller (in React that unmounts the playlist
+        // via the error boundary).
+        try {
+          playout.removeTrack(midiTrackId);
+          addMidiTrackToPlayout(playout, track);
+          if (_isPlaying) {
+            playout.resumeTrackMidPlayback(midiTrackId);
+          }
+          changed = true;
+        } catch (err) {
+          console.warn(
+            `[waveform-playlist] SoundFont swap failed for track "${track.name}": ` + String(err)
+          );
+        }
+      }
+
+      if (changed) {
+        playout.applyInitialSoloState();
+      }
+    },
+
     dispose(): void {
       try {
         playout?.dispose();
@@ -433,6 +541,8 @@ export function createToneAdapter(options?: ToneAdapterOptions): PlayoutAdapter 
       }
       playout = null;
       _isPlaying = false;
+      _currentTracks.clear();
+      _midiTrackBuild.clear();
     },
   };
 }

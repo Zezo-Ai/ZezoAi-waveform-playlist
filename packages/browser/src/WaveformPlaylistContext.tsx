@@ -17,7 +17,7 @@ import {
   type TrackEffectsFunction,
   type SoundFontCache,
 } from '@waveform-playlist/playout';
-import { PlaylistEngine, type EngineState } from '@waveform-playlist/engine';
+import { PlaylistEngine, type EngineState, type PlayoutAdapter } from '@waveform-playlist/engine';
 import {
   type ClipTrack,
   type Fade,
@@ -31,6 +31,7 @@ import {
 } from '@waveform-playlist/ui-components';
 import { getContext } from 'tone';
 import { extractPeaksFromWaveformDataFull } from './waveformDataLoader';
+import { syncSoundFontCacheToAdapter } from './soundFontSync';
 import type WaveformData from 'waveform-data';
 import type { PeakData } from '@waveform-playlist/core';
 import type { AnnotationData } from '@waveform-playlist/core';
@@ -373,6 +374,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   // React subscribes to engine statechange and mirrors into useState/refs.
   // Playback timing (currentTime, isPlaying) remains in React for animation loop.
   const engineRef = useRef<PlaylistEngine | null>(null);
+  const adapterRef = useRef<PlayoutAdapter | null>(null);
   const audioInitializedRef = useRef<boolean>(false);
   const isPlayingRef = useRef<boolean>(false);
   isPlayingRef.current = isPlaying;
@@ -704,6 +706,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       if (engineRef.current) {
         engineRef.current.dispose();
         engineRef.current = null;
+        adapterRef.current = null;
       }
       prevTracksRef.current = tracks;
       return;
@@ -783,6 +786,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
         // Reset init flag — new adapter needs Tone.start() on first play
         audioInitializedRef.current = false;
         const adapter = createToneAdapter({ effects, soundFontCache: soundFontCacheRef.current });
+        adapterRef.current = adapter;
         const engine = new PlaylistEngine({
           adapter,
           samplesPerPixel: samplesPerPixelRef.current,
@@ -880,6 +884,7 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
       stopAnimationFrameLoop();
       if (engineRef.current) {
         engineRef.current.dispose();
+        adapterRef.current = null;
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -891,6 +896,9 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     // isPlaying is intentionally excluded — read from isPlayingRef inside the
     // effect body. Including it causes a full engine+playout rebuild on every
     // play/pause/stop, destroying and recreating all audio Players.
+    // soundFontCache is deliberately excluded — late cache changes are forwarded
+    // to the live adapter by the sync effect below; only adapter creation reads it
+    // (via soundFontCacheRef).
     onReady,
     effects,
     stopAnimationFrameLoop,
@@ -908,9 +916,18 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     loopEndRef,
     isLoopEnabledRef,
     stableZoomLevels,
-    soundFontCache,
     deferEngineRebuild,
   ]);
+
+  // Forward late-arriving / swapped SoundFontCache to the live adapter so
+  // MIDI tracks upgrade from PolySynth without an engine rebuild. On mount
+  // this may run against a just-created adapter (the loadAudio effect is
+  // declared earlier, runs first, and assigns adapterRef synchronously) or
+  // against null (empty tracks). Both are safe: the helper no-ops on null,
+  // and the adapter skips MIDI tracks whose routing is unchanged.
+  useEffect(() => {
+    syncSoundFontCacheToAdapter(adapterRef.current, soundFontCache);
+  }, [soundFontCache]);
 
   // Regenerate peaks when zoom, mono, or waveformDataCache changes (without reloading audio)
   // Peak sources in priority order:
