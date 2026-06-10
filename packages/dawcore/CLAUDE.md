@@ -29,6 +29,7 @@
 
 - **`pnpm example:dawcore-native` resolves peer packages from source** — `examples/dawcore-native/vite.config.ts` has `resolve.alias` for core, engine, transport, and `@dawcore/components` pointing to `src/index.ts`. Changes are picked up immediately without rebuilding.
 - **Incremental track removal** — `engine.removeTrack(trackId)` uses `adapter.removeTrack()` when available (disposes single track, preserves playback). Falls back to `adapter.setTracks()` (full rebuild, stops Transport).
+- **Beat-map fixtures (gitignored)** — `website/static/media/audio/beat-demos/` has two RHCP MP3s + matching Beat This! `.beats` files in `beats/`. Served at `/media/audio/beat-demos/...`. Drive `beat-map-grid.html` in Playwright via the `#audio-input` / `#beats-input` file inputs (no drag-drop needed); assert through `editor.adapter.transport` and `editor.engine.getState()`.
 
 ## Element Types
 
@@ -282,6 +283,7 @@ Custom properties on `<daw-editor>` or any ancestor, inherited through Shadow DO
 - **Callback interface, not TempoMap dependency** — `secondsToTicks`/`ticksToSeconds` optional function properties on `<daw-editor>`. Keeps dawcore decoupled from the transport package. Consumers with a different playout engine provide their own conversion functions. When callbacks are absent, falls back to single-BPM math.
 - **Per-segment waveform rendering** — In beats mode with callbacks, clips are iterated in fine tick steps (~80 ticks). Each step is converted to audio time via callbacks, then peaks are extracted for that sample range into the corresponding pixel range. Uses base-scale (128) peaks directly — no BPM-dependent intermediate resampling.
 - **Beat-map clip positioning** — Use `beatBpm` uniformly from tick 0 (no "gap BPM"). Shift the clip's `startTick` forward so beat 1 in the audio aligns with the next bar boundary. Formula: `clipStartTick = firstDownbeatTick - naturalFirstBeatTick` where `naturalFirstBeatTick = round(beats[0].time * ppqn * beatBpm / 60)`. Gives the metronome a natural tempo throughout.
+- **Assign `editor.bpm` BEFORE installing a tempo curve** — the setter forwards `editor.bpm` → `engine.setTempo` → `adapter.setTempo(bpm, tick 0)`, overwriting the curve's tick-0 entry and shifting every audio beat off the grid by a constant offset (issue #407). It also triggers `engine._recomputeStartSamples()`. Diagnostic: constant per-beat offset = pre-roll tempo wrong (check `transport.getTempo(0)`); growing offset = per-beat entries wrong.
 - **Single transport — no standalone Transport in demos** — Demo pages that use `<daw-editor>` must use `adapter.transport` (for `NativePlayoutAdapter`), not create their own `new Transport()`. Two transports cause metronome/seek desync. The transport is available immediately after the adapter is created — no need to wait for tracks.
 - **`editor.meterEntries` for multi-meter grids** — Set `editor.meterEntries` (from `detectMeterChanges`) so the grid renders correct bar widths. Without this, the grid uses the editor's `timeSignature` (single meter) while the Transport's MeterMap has the real meters — grid and metronome disagree.
 
