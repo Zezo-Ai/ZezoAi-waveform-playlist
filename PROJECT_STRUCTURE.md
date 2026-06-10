@@ -578,25 +578,26 @@ audiowaveform -i audio.mp3 -o peaks-stereo.dat -z 256 --split-channels
 
 #### `@dawcore/components`
 
-- **Purpose:** Framework-agnostic Web Components (Lit) for multi-track audio editing. Wraps `PlaylistEngine` + `createToneAdapter()` in custom elements.
+- **Purpose:** Framework-agnostic Web Components (Lit) for multi-track audio editing. Wraps `PlaylistEngine` + a consumer-provided `PlayoutAdapter` (`NativePlayoutAdapter` from `@dawcore/transport` or `createToneAdapter()` from `@waveform-playlist/playout`).
 - **Architecture:** Data elements (`<daw-track>`, `<daw-clip>`) use light DOM; visual elements (`<daw-waveform>`, `<daw-playhead>`, `<daw-ruler>`) use Shadow DOM with chunked canvas rendering. `<daw-editor>` orchestrates everything.
+- **Layout (frozen panes):** `.scroll-area` owns both scroll axes; the ruler band and controls column live in clipped viewports kept in sync via `translate3d` transforms by `ScrollSyncController` (also forwards wheel events — vertical over controls, horizontal scrub over the ruler). Track rows and `daw-track-controls` share identical border-box geometry from one per-track `trackHeight`, so the two columns align exactly.
 - **Build:** tsup — `pnpm typecheck && tsup`. `sideEffects: true` (element imports register custom elements globally).
 - **Testing:** vitest with happy-dom. Run with `cd packages/dawcore && npx vitest run`.
-- **Dev page:** `pnpm dev:page` starts Vite at `http://localhost:5173/dev/index.html`. Resolves workspace packages from source via Vite aliases.
+- **Dev pages:** `pnpm example:dawcore-native` (Vite, `examples/dawcore-native/`) and `pnpm example:dawcore-tone` (`examples/dawcore-tone/`). Resolve workspace packages from source via Vite aliases.
 - **Key Elements:**
   - `<daw-editor>` — Core orchestrator. Builds engine lazily on first track load. Attributes: `interactive-clips`, `clip-headers`, `clip-header-height`. Methods: `undo()`, `redo()`, `togglePlayPause()`, `seekTo()`. Getters: `canUndo`, `canRedo`.
   - `<daw-track>`, `<daw-clip>` — Declarative data elements (light DOM)
   - `<daw-waveform>` — Chunked canvas rendering with dirty pixel tracking
   - `<daw-playhead>`, `<daw-ruler>`, `<daw-selection>` — Visual overlays
   - `<daw-transport>`, `<daw-play-button>`, `<daw-pause-button>`, `<daw-stop-button>`, `<daw-record-button>` — Transport controls (find target via `for` attribute)
-  - `<daw-track-controls>` — Mute/solo/volume/pan per track
+  - `<daw-track-controls>` — Mute/solo/volume/pan per track. Height-responsive via CSS container queries: on short rows the Pan slider drops first, then Vol (name + M/S always visible). Requires an explicit height (the editor sets one per track row).
   - `<daw-keyboard-shortcuts>` — Render-less element. Boolean attribute presets: `playback`, `splitting`, `undo`. JS properties for remapping (`playbackShortcuts`, `splittingShortcuts`, `undoShortcuts`) and custom shortcuts (`customShortcuts`). Listener on `document`. Uses `handleKeyboardEvent` from `@waveform-playlist/core`.
 - **Clip Interactions:**
   - `ClipPointerHandler` (`interactions/clip-pointer-handler.ts`) — Move (header drag) and trim (boundary drag) with engine delegation
   - `splitAtPlayhead` (`interactions/split-handler.ts`) — Split clip at current playhead position (S key)
   - `clip-peak-sync.ts` — Regenerates peaks after split/trim via `_syncPeaksForChangedClips`
   - Move uses incremental deltas with `skipAdapter` (60fps); trim accumulates delta and calls engine once on drop
-- **Dependencies:** Lit, `@waveform-playlist/core`, `@waveform-playlist/engine`, `@waveform-playlist/playout`
+- **Dependencies:** Lit, `@dawcore/spectrogram`, `waveform-data`; peers: `@waveform-playlist/core`, `@waveform-playlist/engine` (required), `@dawcore/transport`, `@dawcore/midi`, `@waveform-playlist/worklets` (optional — adapter, MIDI loading, recording)
 - **Location:** `packages/dawcore/`
 
 ## Data Flow Architecture

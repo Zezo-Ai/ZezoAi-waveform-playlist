@@ -189,6 +189,7 @@ npm install @waveform-playlist/playout tone  # Tone.js (effects, MIDI synths)
 - Undo/redo with transaction-based grouping
 - Keyboard shortcuts (Space=play/pause, S=split, Cmd/Ctrl+Z=undo)
 - File drop for adding tracks
+- Frozen-panes layout — height-constrained editors scroll vertically with a pinned ruler and row-locked track controls; controls adapt to short rows
 - Recording with overdub and latency compensation
 - Metronome with mixed meters and tempo changes
 - Tempo automation — linear ramps and Möbius-Ease curves with exact integration
