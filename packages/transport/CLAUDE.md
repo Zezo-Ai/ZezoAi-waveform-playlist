@@ -42,6 +42,8 @@ Drives the scheduler via `requestAnimationFrame` exclusively — never `setTimeo
 
 `TempoInterpolation` type: `'step'` (instant, default), `'linear'` (exact logarithmic integral, exponential inverse), `{ type: 'curve', slope }` (Möbius-Ease, slope 0-1 exclusive, subdivided trapezoidal + binary search inverse). `setTempo(bpm, atTick, { interpolation })` third param is optional for backwards compat. First entry is always `'step'` (no previous to ramp from). `_recomputeCache` accounts for interpolation type per segment.
 
+**Multi-entry guard (#407):** `Transport.setTempo(bpm)` with a defaulted `atTick` warns and refuses when the TempoMap has more than one entry — a defaulted call is the single-BPM convenience path and must not clobber a consumer-installed tempo curve's tick-0 entry. Pass an explicit `atTick: 0 as Tick` to genuinely modify a multi-entry map. `TempoMap.entryCount` (always >= 1) backs the check. `setTempo` returns `boolean` (applied/refused); `NativePlayoutAdapter.setTempo` propagates it so `PlaylistEngine` only commits `_bpm` on acceptance — never widen these back to `void`.
+
 ## Timeline Layer
 
 ### Dual Coordinate System
@@ -195,11 +197,11 @@ Tests that drive the Timer via `requestAnimationFrame` stubs must snapshot the c
 
 Set `editor.audioContext = new AudioContext({ sampleRate: 48000 })` before tracks load. The editor uses `NativePlayoutAdapter` internally — no Tone.js dependency.
 
-### dawcore dev pages
+### dawcore example pages (`examples/dawcore-native/`)
 
-All dev pages use the native transport. `multiclip.html` passes a custom AudioContext; `index.html` and `record.html` use the editor's default.
+All example pages use the native transport. `multiclip.html` passes a custom AudioContext; `index.html` and `record.html` use the editor's default.
 
-**Gotcha:** Dev pages call `Transport` methods directly (not via the adapter). When Transport APIs change (e.g., `setLoop` switching from seconds to ticks), dev pages break silently. Always grep `packages/dawcore/dev/` for changed method names.
+**Gotcha:** Example pages call `Transport` methods directly (not via the adapter). When Transport APIs change behavior OR signature (e.g., `setLoop` switching to ticks, the #407 defaulted-`setTempo` guard), they break silently. Always grep `examples/dawcore-native/` for the changed method names — `metronome.html`'s tempo slider needed an explicit tick-0 arg when the guard landed.
 
 ### React (WaveformPlaylistContext)
 
