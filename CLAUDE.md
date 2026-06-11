@@ -53,6 +53,8 @@ pnpm publish --filter @waveform-playlist/NEW-PACKAGE --no-git-checks --access pu
 
 **Verifying fresh publishes:** `npm view` caches 404s — a just-published new package can look missing for minutes. Verify with `curl -s https://registry.npmjs.org/@scope%2fname` instead.
 
+**Build before publishing:** No package defines prepublish hooks — always run `pnpm --filter <pkg> build` before `pnpm publish`, or the tarball ships a stale `dist/`.
+
 **Prerelease Tag:** Use `@next` for prerelease versions when preparing future major releases.
 
 ---
@@ -203,6 +205,7 @@ pnpm publish --filter @waveform-playlist/NEW-PACKAGE --no-git-checks --access pu
 - Use Play/Pause/Stop buttons (not `keyboard.press('Space')`) for initial playback — AudioContext init is async and `Space` requires playlist focus
 - After clicking Play, wait for time to advance with retrying assertion: `await expect(async () => { expect(await timeDisplay.textContent()).not.toBe('00:00:00.000'); }).toPass({ timeout: 10000 })`
 - Refresh between scenarios when using `browser_evaluate` — the page persists across eval calls in one MCP session; state from prior interactions can silently invalidate assertions (e.g. "first M-click reports muted=false" because a prior eval already toggled it). Call `browser_navigate` to the same URL to reset before each independent reproduction.
+- Example pages that restore persisted state (e.g. dawcore-wam's localStorage chains) shift layout after load — pointer clicks can land on moved elements and silently miss. Drive verification with `element.click()` inside `browser_evaluate`, or clear storage / wait for restore before clicking.
 - Synthetic `dispatchEvent(new PointerEvent(...))` cannot drive `PointerHandler` interactions — `setPointerCapture` throws `NotFoundError` for fabricated pointerIds. Use real input (`page.mouse.click/move/wheel`) when verifying seek/drag/wheel behavior in a live browser.
 
 **Git Safety:** Always make intermediate commits before running `git stash` or switching branches. A failed `git stash pop` + `git checkout -- .` can destroy all uncommitted work permanently.
