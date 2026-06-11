@@ -1,6 +1,6 @@
 import { EffectsChainController } from './effects-chain-controller';
 import { createEffectInstance } from './effect-registry';
-import type { EffectState } from './types';
+import type { EffectState, SerializedEffectEntry } from './types';
 
 const PREFIX = '[waveform-playlist] ';
 
@@ -29,6 +29,8 @@ export class EffectsManager {
   private _masterTarget: EventTarget;
   private _masterChain: EffectsChainController | null = null;
   private _trackChains = new Map<string, EffectsChainController>();
+  /** Per-chain restore ownership — a newer setEffectsState supersedes a stale in-flight one. */
+  private _restoreTokens = new WeakMap<EffectsChainController, symbol>();
 
   constructor(getAdapter: () => AdapterLike | null, masterEventTarget: EventTarget) {
     this._getAdapter = getAdapter;
@@ -60,6 +62,15 @@ export class EffectsManager {
     return this._addWamToChain(chain, this._masterTarget, url, initialState);
   }
 
+  getMasterEffectsState(): Promise<SerializedEffectEntry[]> {
+    return this._masterChain?.serialize() ?? Promise.resolve([]);
+  }
+
+  async setMasterEffectsState(entries: SerializedEffectEntry[]): Promise<void> {
+    validateSerializedEntries(entries);
+    await this._restoreChain(this._ensureMasterChain(), this._masterTarget, entries);
+  }
+
   // --- Track chains ---
 
   addTrackEffect(
@@ -84,6 +95,19 @@ export class EffectsManager {
 
   trackEffects(trackId: string): EffectState[] {
     return this._trackChains.get(trackId)?.entries ?? [];
+  }
+
+  getTrackEffectsState(trackId: string): Promise<SerializedEffectEntry[]> {
+    return this._trackChains.get(trackId)?.serialize() ?? Promise.resolve([]);
+  }
+
+  async setTrackEffectsState(
+    trackId: string,
+    target: EventTarget,
+    entries: SerializedEffectEntry[]
+  ): Promise<void> {
+    validateSerializedEntries(entries);
+    await this._restoreChain(this._ensureTrackChain(trackId), target, entries);
   }
 
   trackOp(
@@ -265,6 +289,7 @@ export class EffectsManager {
             });
           },
           dispose: () => plugin.destroy(),
+          getState: () => plugin.getState(),
         },
         params: {},
       });
@@ -292,6 +317,82 @@ export class EffectsManager {
     return effectId;
   }
 
+  /**
+   * Replace a chain's contents with a persisted snapshot. Entries restore
+   * sequentially so chain order survives async WAM loads. A WAM url that
+   * fails to load becomes a bypassed passthrough placeholder at its saved
+   * position — the restore continues, a daw-effect-error fires, and the
+   * saved state is retained so a later snapshot/retry round-trips it.
+   */
+  private async _restoreChain(
+    chain: EffectsChainController,
+    target: EventTarget,
+    entries: SerializedEffectEntry[]
+  ): Promise<void> {
+    // Last writer wins: a newer restore takes ownership of the chain and the
+    // stale one aborts at its next checkpoint instead of interleaving entries.
+    const token = Symbol('restore');
+    this._restoreTokens.set(chain, token);
+    const superseded = () => this._restoreTokens.get(chain) !== token;
+
+    for (const existing of chain.entries) {
+      this._runOp(chain, target, 'remove', existing.id);
+    }
+    for (const entry of entries) {
+      if (superseded()) return;
+      if (entry.kind === 'native') {
+        const id = this._addToChain(chain, target, entry.type, entry.params);
+        if (entry.bypassed) {
+          this._runOp(chain, target, 'setBypassed', id, true);
+        }
+        continue;
+      }
+      try {
+        const id = await this._addWamToChain(chain, target, entry.url, entry.state);
+        if (superseded()) {
+          // A newer restore cleared the chain while this plugin loaded —
+          // remove (and thereby destroy) the late arrival.
+          this._runOp(chain, target, 'remove', id);
+          return;
+        }
+        if (entry.bypassed) {
+          this._runOp(chain, target, 'setBypassed', id, true);
+        }
+      } catch (err) {
+        if (superseded()) return;
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(
+          PREFIX + 'setEffectsState: plugin "' + entry.url + '" failed to restore: ' + message
+        );
+        const effectId = this._addWamPlaceholder(chain, entry, message);
+        this._dispatch(target, 'daw-effect-error', { effectId, url: entry.url, message });
+      }
+    }
+  }
+
+  /** A silent passthrough occupying the failed plugin's chain position. */
+  private _addWamPlaceholder(
+    chain: EffectsChainController,
+    entry: { url: string; bypassed: boolean; state?: unknown },
+    message: string
+  ): string {
+    const { audioContext } = this._requireWiring();
+    const node = audioContext.createGain();
+    const effectId = chain.add({
+      kind: 'wam',
+      type: 'wam',
+      url: entry.url,
+      label: entry.url,
+      error: message,
+      placeholder: { state: entry.state, bypassed: entry.bypassed },
+      instance: { input: node, output: node, applyParams: () => {} },
+      params: {},
+    });
+    // Placeholders pass audio through, bypassed-style (no wet param).
+    chain.setBypassed(effectId, true);
+    return effectId;
+  }
+
   private _runOp(
     chain: EffectsChainController | null,
     target: EventTarget,
@@ -304,6 +405,21 @@ export class EffectsManager {
     const fromIndex = entries.findIndex((e) => e.id === effectId);
     if (!chain || fromIndex === -1) {
       console.warn(PREFIX + 'effects.' + op + ': unknown effectId "' + effectId + '"');
+      return;
+    }
+    if (entries[fromIndex].error !== undefined && (op === 'setParams' || op === 'setBypassed')) {
+      // Error placeholders are inert passthroughs — silently "succeeding"
+      // would mislead the consumer into thinking the edit took effect.
+      console.warn(
+        PREFIX +
+          'effects.' +
+          op +
+          ': effect "' +
+          effectId +
+          '" is a failed-plugin placeholder (' +
+          entries[fromIndex].error +
+          ') — edit ignored. Remove it or retry the restore.'
+      );
       return;
     }
     switch (op) {
@@ -329,6 +445,37 @@ export class EffectsManager {
   private _dispatch(target: EventTarget, name: string, detail: Record<string, unknown>): void {
     target.dispatchEvent(new CustomEvent(name, { bubbles: true, composed: true, detail }));
   }
+}
+
+/** Fail fast on malformed persisted data — external input, never trusted. */
+function validateSerializedEntries(entries: unknown): asserts entries is SerializedEffectEntry[] {
+  if (!Array.isArray(entries)) {
+    throw new Error(PREFIX + 'setEffectsState: expected an array of serialized effect entries');
+  }
+  entries.forEach((entry, i) => {
+    const at = ' (entry ' + i + ')';
+    if (entry === null || typeof entry !== 'object') {
+      throw new Error(PREFIX + 'setEffectsState: entry must be an object' + at);
+    }
+    const e = entry as Record<string, unknown>;
+    if (e.kind === 'native') {
+      if (typeof e.type !== 'string' || e.type.length === 0) {
+        throw new Error(PREFIX + 'setEffectsState: native entry requires a type string' + at);
+      }
+      if (e.params === null || typeof e.params !== 'object') {
+        throw new Error(PREFIX + 'setEffectsState: native entry requires a params object' + at);
+      }
+    } else if (e.kind === 'wam') {
+      if (typeof e.url !== 'string' || e.url.length === 0) {
+        throw new Error(PREFIX + 'setEffectsState: wam entry requires a url string' + at);
+      }
+    } else {
+      throw new Error(PREFIX + 'setEffectsState: unknown entry kind "' + String(e.kind) + '"' + at);
+    }
+    if (typeof e.bypassed !== 'boolean') {
+      throw new Error(PREFIX + 'setEffectsState: entry requires a boolean bypassed flag' + at);
+    }
+  });
 }
 
 /** WAM setParameterValues takes a map of {id, value, normalized} records. */
