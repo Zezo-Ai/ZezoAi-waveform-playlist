@@ -36,7 +36,7 @@ import type { WaveformSegment } from './daw-waveform';
 // so the editor must guarantee they're defined. Without these side-effect
 // imports, importing daw-editor alone (not the package barrel) leaves the
 // elements un-upgraded — querySelector returns generic HTMLElements, and calls
-// like playhead.stopAnimation() throw "is not a function". (Module caching +
+// like playhead.setPosition() throw "is not a function". (Module caching +
 // @customElement make this safe to import here and from the index barrel.)
 import './daw-playhead';
 import './daw-waveform';
@@ -59,8 +59,14 @@ import type {
   DawClipIdDetail,
   DawClipErrorDetail,
   DawErrorDetail,
+  DawTimeFormatChangeDetail,
   LoadFilesResult,
 } from '../events';
+import {
+  isTimeDisplayFormat,
+  TIME_DISPLAY_FORMATS,
+  type TimeDisplayFormat,
+} from '../utils/time-display-format';
 import { loadFiles as loadFilesImpl } from '../interactions/file-loader';
 import {
   loadMidiImpl,
@@ -78,6 +84,7 @@ import type { EffectState, SerializedEffectEntry } from '../effects/types';
 import { loadWaveformDataFromUrl } from '../interactions/peaks-loader';
 import { extractPeaks } from '../workers/waveformDataUtils';
 import { ScrollSyncController } from '../controllers/scroll-sync-controller';
+import { PlaybackAnimationController } from '../controllers/playback-animation-controller';
 
 /** Height of the ruler band — single source for the ruler element and the header row. */
 const RULER_HEIGHT = 30;
@@ -120,6 +127,55 @@ export class DawEditorElement extends LitElement implements MidiLoaderHost {
     this.requestUpdate('samplesPerPixel', old);
   }
   private _samplesPerPixel = 1024;
+
+  private _timeFormat: TimeDisplayFormat = 'hh:mm:ss.sss';
+
+  /**
+   * Time display format used by <daw-time-display> and (future, #463) the
+   * selection inputs. Lives on the editor — the target element owns the
+   * state, the transport controls reflect it (native-form style).
+   */
+  @property({ attribute: 'time-format', reflect: true, noAccessor: true })
+  get timeFormat(): TimeDisplayFormat {
+    return this._timeFormat;
+  }
+  set timeFormat(value: TimeDisplayFormat) {
+    if (!isTimeDisplayFormat(value)) {
+      console.warn(
+        '[dawcore] timeFormat: invalid format "' +
+          String(value) +
+          '" ignored. Valid formats: ' +
+          TIME_DISPLAY_FORMATS.join(', ')
+      );
+      // Self-heal the DOM: a rejected attribute value would otherwise stick
+      // (reflection never runs for a rejected set), leaving attribute and
+      // property permanently divergent.
+      if (
+        this.hasAttribute('time-format') &&
+        this.getAttribute('time-format') !== this._timeFormat
+      ) {
+        this.setAttribute('time-format', this._timeFormat);
+      }
+      return;
+    }
+    if (value === this._timeFormat) return;
+    const old = this._timeFormat;
+    this._timeFormat = value;
+    this.requestUpdate('timeFormat', old);
+    this.dispatchEvent(
+      new CustomEvent<DawTimeFormatChangeDetail>('daw-time-format-change', {
+        bubbles: true,
+        composed: true,
+        detail: { format: value },
+      })
+    );
+  }
+
+  /** Set the time display format. Sugar over the `timeFormat` property. */
+  setTimeFormat(format: TimeDisplayFormat): void {
+    this.timeFormat = format;
+  }
+
   @property({ type: Number, attribute: 'wave-height' }) waveHeight = 128;
   @property({ type: Boolean }) timescale = false;
   @property({ type: Boolean }) mono = false;
@@ -537,6 +593,20 @@ export class DawEditorElement extends LitElement implements MidiLoaderHost {
   @property({ attribute: 'eager-resume' })
   eagerResume?: string;
   private _recordingController = new RecordingController(this);
+  // Closures (not direct references) — _timeToPixels/_getPlayhead are
+  // declared later in the class body; class-field init order would read
+  // `undefined` for a direct reference here.
+  private _playbackAnimation = new PlaybackAnimationController(this, {
+    timeToPixels: (time) => this._timeToPixels(time),
+    getPlayhead: () => this._getPlayhead(),
+  });
+  /**
+   * True while a seek-while-playing stop+play transition is in flight.
+   * Suppresses the transient settle dispatch from the engine 'stop' handler
+   * (which would otherwise leak a backward-jumping daw-timeupdate at the
+   * play-start position). Non-private: pointer-handler's seek path sets it.
+   */
+  _inSeekTransition = false;
   private _spectrogramController: SpectrogramController | null = null;
   private _clipPointer = new ClipPointerHandler(this);
   get _clipHandler() {
@@ -2319,8 +2389,16 @@ export class DawEditorElement extends LitElement implements MidiLoaderHost {
       return;
     }
     if (this._isPlaying) {
-      // Transport needs stop+play to reschedule audio sources at new position
-      this.stop();
+      // Transport needs stop+play to reschedule audio sources at new position.
+      // Suppress the transient settle dispatch — engine.stop() rewinds to the
+      // play-start position and consumers would see the time jump backward
+      // for one event before frames resume at the seek target.
+      this._inSeekTransition = true;
+      try {
+        this.stop();
+      } finally {
+        this._inSeekTransition = false;
+      }
       this.play(time);
     } else {
       this._engine.seek(time);
@@ -2387,6 +2465,14 @@ export class DawEditorElement extends LitElement implements MidiLoaderHost {
       return this._engine.getCurrentTime();
     }
     return this._currentTime;
+  }
+  /** Read-only: whether playback is running (HTMLMediaElement-adjacent). */
+  get isPlaying(): boolean {
+    return this._isPlaying;
+  }
+  /** Read-only: total content duration in seconds. */
+  get duration(): number {
+    return this._duration;
   }
   get isRecording(): boolean {
     return this._recordingController.isRecording;
@@ -2511,42 +2597,35 @@ export class DawEditorElement extends LitElement implements MidiLoaderHost {
       `;
     });
   }
-  // --- Playhead ---
+  // --- Playback animation (single RAF loop: playhead + daw-timeupdate) ---
+  /** Convert playback seconds to a timeline pixel offset for the active mode. */
+  private _timeToPixels = (time: number): number => {
+    if (this.scaleMode === 'beats') {
+      return this._secondsToTicks(time) / this.ticksPerPixel;
+    }
+    return (time * this.effectiveSampleRate) / this.samplesPerPixel;
+  };
+
   _startPlayhead() {
-    const playhead = this._getPlayhead();
-    if (!playhead || !this._engine) return;
+    if (!this._engine) return;
     const engine = this._engine;
     // engine.getAudibleTime(): while playing, engine time minus hardware DAC
     // latency (outputLatency) and scheduler lookahead (0.1s on Tone-backed
     // adapters, 0 native), held at the play-start position during the
     // pre-roll window. Without the subtraction the playhead leads audio by
     // ~100ms with the Tone adapter.
-    const audibleTime = (): number => engine.getAudibleTime();
-    if (this.scaleMode === 'beats') {
-      const secondsToTicksFn = (s: number) => this._secondsToTicks(s);
-      playhead.startBeatsAnimationWithMap(audibleTime, secondsToTicksFn, this.ticksPerPixel);
-    } else {
-      playhead.startAnimation(audibleTime, this.effectiveSampleRate, this.samplesPerPixel);
-    }
+    // Runs even when the playhead element isn't rendered (empty/indefinite
+    // editors) so daw-timeupdate consumers still get frames.
+    this._playbackAnimation.start(() => engine.getAudibleTime());
   }
   _stopPlayhead() {
-    const playhead = this._getPlayhead();
-    if (!playhead) return;
     // Resting playhead displays the raw position — latency compensation is a
     // playback-time concept (Transport scheduling vs audible output). A
     // seeked/stopped/paused cursor shows exactly the commanded position.
     // Storage (`_currentTime`) is already raw, so play() resumes correctly.
     const t = this._currentTime;
     const visualTime = Number.isFinite(t) ? Math.max(0, t) : 0;
-    if (this.scaleMode === 'beats') {
-      playhead.stopBeatsAnimationWithMap(
-        visualTime,
-        (s: number) => this._secondsToTicks(s),
-        this.ticksPerPixel
-      );
-    } else {
-      playhead.stopAnimation(visualTime, this.effectiveSampleRate, this.samplesPerPixel);
-    }
+    this._playbackAnimation.stop(visualTime, { dispatch: !this._inSeekTransition });
   }
   private _getPlayhead(): DawPlayheadElement | null {
     return this.shadowRoot?.querySelector('daw-playhead') as DawPlayheadElement | null;

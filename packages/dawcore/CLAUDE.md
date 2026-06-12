@@ -24,6 +24,7 @@
 - `editor.addTrack({ name, midi: { notes } })` is the lightweight way to get fully loaded tracks in editor template tests — no fetch/decode. See `daw-editor-layout.test.ts` `makeEditor()`.
 - Test cleanup (spy `mockRestore`, removing appended `daw-editor`s) belongs in `afterEach`, never as the last line of a test body — a failed assertion skips trailing cleanup and silently poisons subsequent tests in the file.
 - After refactoring test cleanup, run `pnpm typecheck` too — vitest passing doesn't catch newly-unused destructured bindings (`TS6133` under `noUnusedLocals`).
+- happy-dom doesn't model `<option>` selectedness dirtiness or pointer-event delivery to hosts of disabled shadow controls — `?selected` toggles that break after a real user pick, and host-level `pointerdown` warns on disabled controls, must be verified in a real browser. The fix pattern for selects: sync the IDL `select.value` in `updated()` (see `daw-time-format.ts`).
 - **Adding an export to `@dawcore/wam` (or `@dawcore/faust`) breaks every existing `vi.mock` of it** — vitest strict mocks throw "No X export is defined on the mock" on property access. Sweep all `vi.mock('@dawcore/wam', ...)` factories in `src/__tests__/` and add the new export (a `vi.fn()` stub suffices) whenever the real package's index grows.
 
 **Dev page:** `pnpm example:dawcore-native` starts Vite at `http://localhost:5173/` (config in `examples/dawcore-native/vite.config.ts`). Uses `website/static/` as publicDir for audio files.
@@ -44,7 +45,7 @@
 **Visual elements (Shadow DOM):**
 
 - `<daw-waveform>` — Chunked canvas rendering (1000px chunks). Receives peaks as JS properties. Uses dirty pixel tracking for incremental rendering — `updatePeaks(startIndex, endIndex)` marks a range dirty without full redraw. Bits derived from typed array (Int8Array→8, Int16Array→16). Drawing batched via `requestAnimationFrame`.
-- `<daw-playhead>` — RAF-animated vertical line via `AnimationController`.
+- `<daw-playhead>` — Pure visual element; exposes `setPosition(px)`. The editor's `PlaybackAnimationController` drives it each frame (single RAF loop that also dispatches `daw-timeupdate`).
 - `<daw-ruler>` — Temporal time scale with tick marks. Ported from `SmartScale` (temporal mode only, beats & bars deferred). Computes ticks once in `willUpdate()`, reused by both `render()` and `updated()`.
 
 **Control elements:**
@@ -53,6 +54,11 @@
 - `<daw-transport for="editor-id">` — Container that resolves target via `document.getElementById`. Light DOM.
 - `<daw-play-button>`, `<daw-pause-button>`, `<daw-stop-button>` — Walk up to closest `<daw-transport>` for target resolution. Warn when target is null.
 - `<daw-record-button>` — Transport button. Toggles `startRecording()`/`stopRecording()` on target editor. Listens for `daw-recording-start`/`daw-recording-complete` events to update visual state.
+- `<daw-time-display>` — Formatted playback time readout. Document-level `daw-timeupdate`/`daw-time-format-change` listeners filtered by `e.target === transport target` (tolerates late-upgrading targets; re-resolves per event). `role="status"`, `aria-live="off"`.
+- `<daw-time-format>` — Select that sets format ON the target (`target.setTimeFormat()`); target owns the state, all controls sync via the bubbled `daw-time-format-change` event (native-form style). Use this target-owned-state pattern for future transport inputs (#463 selection inputs, tempo, etc.).
+- **Transport capability detection (`utils/transport-capability.ts`)** — Button subclasses declare `static requiredTargetMethods`; non-button controls call `targetSupports()` directly. Benefit of the doubt: a missing or not-yet-upgraded custom-element target counts as supported (control stays ENABLED; click-time resolution warns via `warnNoTargetOnce`) — only a *defined* target lacking the methods renders disabled. `pointerenter` triggers `requestUpdate()` so late targets re-evaluate before the click. Warn dedup is per element per message (`warnOnce`).
+- **One playback RAF loop** — `PlaybackAnimationController` on the editor is the only per-frame playback loop (positions playhead + dispatches `daw-timeupdate`). Never add a second RAF loop for playback-time concerns; consume `daw-timeupdate` instead.
+- **Seek-while-playing settle suppression** — `seekTo`/pointer-handler set `_inSeekTransition` around the internal `stop()` so the transient engine-stop settle (which rewinds to play-start) doesn't leak a backward-jumping `daw-timeupdate`. Any new stop-adjacent code path must do the same.
 
 ## Embedding Gotchas
 
@@ -159,7 +165,7 @@ Custom properties on `<daw-editor>` or any ancestor, inherited through Shadow DO
 
 ## Reactive Controllers
 
-- `AnimationController` — Start/stop RAF loops, auto-cleanup on `hostDisconnected`. Used by `<daw-playhead>`.
+- `AnimationController` — Start/stop RAF loops, auto-cleanup on `hostDisconnected`. Used by `PlaybackAnimationController`.
 - `ViewportController` — Scroll-aware visible range with overscan buffer (1.5x). Attached to `.scroll-area` via `scrollSelector`. See Virtual Scrolling section.
 - `EngineController` — (Scaffolded, not yet wired) DOM traversal to find closest `<daw-editor>`. Will be used by sub-elements that need engine access.
 - `AudioResumeController` — One-shot AudioContext resume on first user gesture (`pointerdown`/`keydown`). Configurable target: host element (default), `'document'`, or CSS selector. Used by `<daw-editor eager-resume>`. Exported for standalone use.

@@ -1,9 +1,15 @@
 import { html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { DawTransportButton } from './daw-transport-button';
+import { warnNoTargetOnce } from '../utils/transport-capability';
 
 @customElement('daw-record-button')
 export class DawRecordButtonElement extends DawTransportButton {
+  protected static override requiredTargetMethods: readonly string[] = [
+    'startRecording',
+    'stopRecording',
+  ];
+
   @state() private _isRecording = false;
   private _targetRef: HTMLElement | null = null;
   private _onStart = () => {
@@ -58,7 +64,12 @@ export class DawRecordButtonElement extends DawTransportButton {
 
   render() {
     return html`
-      <button part="button" ?data-recording=${this._isRecording} @click=${this._onClick}>
+      <button
+        part="button"
+        ?disabled=${!this.targetSupported}
+        ?data-recording=${this._isRecording}
+        @click=${this._onClick}
+      >
         <slot>Record</slot>
       </button>
     `;
@@ -68,10 +79,9 @@ export class DawRecordButtonElement extends DawTransportButton {
     // Start-only — stop is handled by the stop button
     if (this._isRecording) return;
     const target = this.target;
+    // Stale-render race guard: the target can vanish between render and click.
     if (!target) {
-      console.warn(
-        '[dawcore] <daw-record-button> has no target. Check <daw-transport for="..."> references a valid <daw-editor> id.'
-      );
+      warnNoTargetOnce(this);
       return;
     }
     target.startRecording(target.recordingStream);
