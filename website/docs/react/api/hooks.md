@@ -18,8 +18,6 @@ import {
   usePlaybackAnimation,
 
   // Specialized hooks
-  useAudioTracks,
-  useDynamicTracks,
   useTimeFormat,
 
   // Engine-delegation hooks (internal, used by provider)
@@ -36,17 +34,20 @@ import {
   // Clip editing
   useClipSplitting,
 
-  // Effects
-  useDynamicEffects,
-  useTrackDynamicEffects,
-
   // Keyboard shortcuts
   useKeyboardShortcuts,
   usePlaybackShortcuts,
-
-  // Export
-  useExportWav,
 } from '@waveform-playlist/browser';
+
+// Tone.js batteries-included hooks (import from /tone to keep core bundle engine-free)
+import {
+  useAudioTracks,
+  useDynamicTracks,
+  useDynamicEffects,
+  useTrackDynamicEffects,
+  useExportWav,
+  useOutputMeter,
+} from '@waveform-playlist/browser/tone';
 
 // Recording primitives (lower-level hooks)
 import {
@@ -142,6 +143,10 @@ function usePlaybackAnimation(): {
    *  audible-latency calculation that must match the playhead. */
   getLookAhead: () => number;
 
+  /** AudioContext.currentTime from the playout adapter (raw hardware clock). */
+  getAudioContextTime: () => number;
+  /** AudioContext.outputLatency from the playout adapter. */
+  getOutputLatency: () => number;
   /** Register a per-frame callback driven by the shared animation loop. */
   registerFrameCallback: (id: string, cb: (data: FrameData) => void) => void;
   unregisterFrameCallback: (id: string) => void;
@@ -994,7 +999,7 @@ function useMicrophoneLevel(
 
 ### useOutputMeter
 
-*From `@waveform-playlist/browser`*
+*From `@waveform-playlist/browser/tone`*
 
 Monitor the master output level of the playlist. Must be used inside `WaveformPlaylistProvider`.
 
@@ -1026,7 +1031,7 @@ interface UseOutputMeterReturn {
 #### Example
 
 ```tsx
-import { useOutputMeter } from '@waveform-playlist/browser';
+import { useOutputMeter } from '@waveform-playlist/browser/tone';
 
 function OutputMeter() {
   const { levels, peakLevels, resetPeak } = useOutputMeter({ channelCount: 2 });
