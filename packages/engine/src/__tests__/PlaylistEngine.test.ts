@@ -447,7 +447,21 @@ describe('PlaylistEngine', () => {
       engine.dispose();
     });
 
-    it('does not increment on selection, zoom, volume, or loop changes', () => {
+    it('does NOT increment on per-track mixer setters (those bump mixerVersion)', () => {
+      const engine = new PlaylistEngine();
+      engine.setTracks([makeTrack('t1', [])]);
+      const version = engine.getState().tracksVersion;
+
+      engine.setTrackVolume('t1', 0.5);
+      engine.setTrackMute('t1', true);
+      engine.setTrackSolo('t1', true);
+      engine.setTrackPan('t1', -0.5);
+
+      expect(engine.getState().tracksVersion).toBe(version);
+      engine.dispose();
+    });
+
+    it('does not increment on selection, zoom, master volume, or loop changes', () => {
       const engine = new PlaylistEngine({ zoomLevels: [256, 512, 1024] });
       engine.setTracks([makeTrack('t1', [])]);
       const version = engine.getState().tracksVersion;
@@ -481,6 +495,82 @@ describe('PlaylistEngine', () => {
 
       warnSpy.mockRestore();
       expect(engine.getState().tracksVersion).toBe(version);
+      engine.dispose();
+    });
+  });
+
+  describe('mixerVersion counter', () => {
+    it('starts at 0', () => {
+      const engine = new PlaylistEngine();
+      expect(engine.getState().mixerVersion).toBe(0);
+      engine.dispose();
+    });
+
+    it('increments on each per-track mixer setter (volume, mute, solo, pan)', () => {
+      const engine = new PlaylistEngine();
+      engine.setTracks([makeTrack('t1', [])]);
+      const version = engine.getState().mixerVersion;
+
+      engine.setTrackVolume('t1', 0.5);
+      expect(engine.getState().mixerVersion).toBe(version + 1);
+
+      engine.setTrackMute('t1', true);
+      expect(engine.getState().mixerVersion).toBe(version + 2);
+
+      engine.setTrackSolo('t1', true);
+      expect(engine.getState().mixerVersion).toBe(version + 3);
+
+      engine.setTrackPan('t1', -0.5);
+      expect(engine.getState().mixerVersion).toBe(version + 4);
+      engine.dispose();
+    });
+
+    it('does not increment on structural mutations or other state changes', () => {
+      const engine = new PlaylistEngine({ zoomLevels: [256, 512, 1024] });
+      const clip = makeClip({ id: 'c1', startSample: 44100, durationSamples: 44100 });
+      engine.setTracks([makeTrack('t1', [clip])]);
+      const version = engine.getState().mixerVersion;
+
+      engine.addTrack(makeTrack('t2', []));
+      engine.moveClip('t1', 'c1', 1000);
+      engine.setMasterVolume(0.5);
+      engine.zoomIn();
+      engine.selectTrack('t1');
+
+      expect(engine.getState().mixerVersion).toBe(version);
+      engine.dispose();
+    });
+
+    it('bumps mixerVersion and emits even when the target track is absent', () => {
+      // The adapter forward (and the version bump + emit) are deliberately
+      // unconditional — a consumer may target a track the engine has not
+      // ingested yet. Guard against regressing the bump inside the `if (track)`.
+      const engine = new PlaylistEngine();
+      const listener = vi.fn();
+      engine.on('statechange', listener);
+      const version = engine.getState().mixerVersion;
+
+      engine.setTrackMute('ghost', true);
+
+      expect(engine.getState().mixerVersion).toBe(version + 1);
+      expect(listener).toHaveBeenCalledTimes(1);
+      engine.dispose();
+    });
+
+    it('advances independently from tracksVersion across interleaved changes', () => {
+      const engine = new PlaylistEngine();
+      const clip = makeClip({ id: 'c1', startSample: 0, durationSamples: 44100 });
+      engine.setTracks([makeTrack('t1', [clip])]);
+      const tracksV0 = engine.getState().tracksVersion;
+      const mixerV0 = engine.getState().mixerVersion;
+
+      engine.setTrackVolume('t1', 0.4); // mixer
+      engine.moveClip('t1', 'c1', 1000); // structural
+      engine.setTrackPan('t1', -0.2); // mixer
+
+      const state = engine.getState();
+      expect(state.mixerVersion).toBe(mixerV0 + 2);
+      expect(state.tracksVersion).toBe(tracksV0 + 1);
       engine.dispose();
     });
   });
@@ -687,6 +777,36 @@ describe('PlaylistEngine', () => {
       expect(track!.muted).toBe(true);
       expect(track!.soloed).toBe(true);
       expect(track!.pan).toBe(-0.7);
+
+      engine.dispose();
+    });
+
+    it('emits statechange carrying updated mixer state for each per-track setter', () => {
+      const adapter = createMockAdapter();
+      const engine = new PlaylistEngine({ adapter });
+      engine.setTracks([
+        makeTrack('t1', [makeClip({ id: 'c1', startSample: 0, durationSamples: 44100 })]),
+      ]);
+
+      const listener = vi.fn();
+      engine.on('statechange', listener);
+
+      engine.setTrackVolume('t1', 0.5);
+      engine.setTrackMute('t1', true);
+      engine.setTrackSolo('t1', true);
+      engine.setTrackPan('t1', -0.5);
+
+      expect(listener).toHaveBeenCalledTimes(4);
+
+      const lastState = listener.mock.calls[listener.mock.calls.length - 1][0] as {
+        tracks: ClipTrack[];
+      };
+      const track = lastState.tracks.find((t) => t.id === 't1');
+      expect(track).toBeDefined();
+      expect(track!.volume).toBe(0.5);
+      expect(track!.muted).toBe(true);
+      expect(track!.soloed).toBe(true);
+      expect(track!.pan).toBe(-0.5);
 
       engine.dispose();
     });

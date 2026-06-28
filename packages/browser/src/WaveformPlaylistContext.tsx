@@ -848,8 +848,11 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
           onUndoEngineState(state);
 
           // Mirror engine tracks changes to parent via onTracksChange.
-          // tracksVersion only increments on track mutations (move, trim, split,
-          // setTracks, addTrack, removeTrack), not on selection/zoom/volume changes.
+          // tracksVersion only increments on structural track mutations (move,
+          // trim, split, setTracks, addTrack, removeTrack), not on
+          // selection/zoom/volume changes. Per-track mixer edits bump the
+          // engine's separate mixerVersion (#501) and are persisted here via
+          // trackStates, so they intentionally do not flow through onTracksChange.
           if (!suppressTracksMirroring && state.tracksVersion !== lastTracksVersionRef.current) {
             lastTracksVersionRef.current = state.tracksVersion;
             engineTracksRef.current = state.tracks;
