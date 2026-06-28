@@ -543,12 +543,15 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
   const prevTracks = prevTracksRef.current;
   const isIncrementalAdd =
     engineRef.current !== null &&
-    prevTracks.length > 0 &&
     tracks.length > prevTracks.length &&
     prevTracks.every((pt) => {
       const current = tracks.find((t) => t.id === pt.id);
       return current === pt; // reference equality — existing tracks must be untouched
     });
+  // Note: prevTracks may be empty here (e.g. recording's first track on a
+  // persistent empty-timeline engine) — that's a valid 0→1 incremental add, so
+  // it must NOT require prevTracks.length > 0. The engineRef !== null guard keeps
+  // it correct: a lazy/no-engine consumer still takes the full build path.
 
   skipEngineDisposeRef.current = isEngineTracks || isDraggingRef.current || isIncrementalAdd;
 
@@ -699,18 +702,27 @@ export const WaveformPlaylistProvider: React.FC<WaveformPlaylistProviderProps> =
     setIsReady(false);
 
     if (tracks.length === 0) {
-      // Clear state when all tracks are removed
+      // Clear content state when all tracks are removed.
       setAudioBuffers([]);
       setDuration(0);
       setTrackStates([]);
       setPeaksDataArray([]);
+
+      // Always keep a persistent engine alive — even with no tracks — so the
+      // Transport is ready before playback/recording starts. Without this the
+      // engine is rebuilt asynchronously when the first track is added, and
+      // play() races that rebuild — intermittently no-opping (frozen
+      // playhead/time) and paying first-record latency. The engine is still
+      // created via dynamic import (lazy module load preserved, #510); only its
+      // lifecycle is eager.
       if (engineRef.current) {
-        engineRef.current.dispose();
-        engineRef.current = null;
-        adapterRef.current = null;
+        // Keep the existing engine; just clear its tracks.
+        engineRef.current.setTracks([]);
+        prevTracksRef.current = tracks;
+        return;
       }
-      prevTracksRef.current = tracks;
-      return;
+      // No engine yet (initial mount with no tracks): fall through to the
+      // loadAudio path below, which builds a persistent engine for 0 tracks.
     }
 
     // Capture playback state before rebuilding playout (read from ref, not state,
