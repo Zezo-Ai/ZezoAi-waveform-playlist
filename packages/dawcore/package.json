@@ -1,6 +1,6 @@
 {
   "name": "@dawcore/components",
-  "version": "0.0.24",
+  "version": "0.0.25",
   "description": "Web Components for multi-track audio editing \u2014 framework-agnostic",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -45,7 +45,7 @@
     "@dawcore/transport": ">=0.0.13",
     "@dawcore/wam": ">=0.0.1",
     "@waveform-playlist/core": ">=12.0.0",
-    "@waveform-playlist/engine": ">=13.3.0",
+    "@waveform-playlist/engine": ">=13.5.0",
     "@waveform-playlist/worklets": ">=12.0.0"
   },
   "peerDependenciesMeta": {
