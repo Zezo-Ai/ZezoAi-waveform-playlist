@@ -14,6 +14,7 @@ import type {
 } from '@waveform-playlist/core';
 import type {
   TrackDescriptor,
+  TrackWithId,
   ClipDescriptor,
   DomClipDescriptor,
   TrackConfig,
@@ -853,8 +854,11 @@ export class DawEditorElement extends LitElement implements MidiLoaderHost {
   _setSelectedTrackId(trackId: string | null) {
     this._selectedTrackId = trackId;
   }
-  get tracks(): TrackDescriptor[] {
-    return [...this._tracks.values()];
+  get tracks(): TrackWithId[] {
+    return [...this._tracks.entries()].map(([trackId, descriptor]) => ({
+      trackId,
+      ...descriptor,
+    }));
   }
   get selectedTrackId(): string | null {
     return this._selectedTrackId;
@@ -1050,6 +1054,9 @@ export class DawEditorElement extends LitElement implements MidiLoaderHost {
     this._loadTrack(trackId, descriptor);
   };
   private _onTrackRemoved(trackId: string) {
+    // Captured before the cleanup below mutates _tracks — gates the outbound
+    // event so it only fires for a track that was actually registered.
+    const existed = this._tracks.has(trackId);
     this._trackElements.delete(trackId);
     this._effectsManager?.disposeTrackChain(trackId);
     // Clean up per-clip data before removing the track (need clip IDs from engine tracks)
@@ -1081,6 +1088,19 @@ export class DawEditorElement extends LitElement implements MidiLoaderHost {
     if (nextEngine.size === 0) {
       this._currentTime = 0;
       this._stopPlayhead();
+    }
+    // Outbound notification (symmetric with daw-track-ready) — fired after
+    // _tracks is updated so handlers reading editor.tracks see the removal.
+    // Only for a track that was registered, and never on a detached editor
+    // (a bubbling/composed event can't reach ancestors — CLAUDE.md pattern #36).
+    if (existed && this.isConnected) {
+      this.dispatchEvent(
+        new CustomEvent<DawTrackIdDetail>('daw-track-removed', {
+          bubbles: true,
+          composed: true,
+          detail: { trackId },
+        })
+      );
     }
   }
   private _onTrackUpdate = (e: CustomEvent) => {
