@@ -48,6 +48,26 @@ export interface MediaElementTrackOptions {
 }
 
 /**
+ * Typed event map for MediaElementTrack's emitter. Mirrors the on()/off()
+ * pattern used by @waveform-playlist/engine's PlaylistEngine so consumers and
+ * the dawcore web-components layer can wire events uniformly across engines.
+ */
+export interface MediaElementTrackEvents {
+  /** Fired when the element's metadata (duration, dimensions) has loaded. */
+  loadedmetadata: () => void;
+  /** Fired when native playback starts/resumes. */
+  play: () => void;
+  /** Fired when native playback pauses (including at end-of-media). */
+  pause: () => void;
+  /** Fired on a media error; carries the element's MediaError (or null). */
+  error: (err: MediaError | null) => void;
+  /** Fired when playback reaches the end of the media. */
+  ended: () => void;
+  /** Fired on each native timeupdate; carries the current time in seconds. */
+  timeupdate: (time: number) => void;
+}
+
+/**
  * Single-track playback using HTMLAudioElement.
  *
  * Benefits over AudioBuffer/Tone.js:
@@ -70,6 +90,8 @@ export class MediaElementTrack {
   private _volume: number;
   private onStopCallback?: () => void;
   private onTimeUpdateCallback?: (time: number) => void;
+  private _listeners: Map<string, Set<MediaElementTrackEvents[keyof MediaElementTrackEvents]>> =
+    new Map();
 
   // Web Audio nodes (only when audioContext is provided)
   private _audioContext: AudioContext | null = null;
@@ -148,6 +170,10 @@ export class MediaElementTrack {
     // Set up event listeners
     this.audioElement.addEventListener('ended', this.handleEnded);
     this.audioElement.addEventListener('timeupdate', this.handleTimeUpdate);
+    this.audioElement.addEventListener('loadedmetadata', this.handleLoadedMetadata);
+    this.audioElement.addEventListener('play', this.handlePlay);
+    this.audioElement.addEventListener('pause', this.handlePause);
+    this.audioElement.addEventListener('error', this.handleError);
   }
 
   private handleEnded = () => {
@@ -155,12 +181,30 @@ export class MediaElementTrack {
     if (this.onStopCallback) {
       this.onStopCallback();
     }
+    this._emit('ended');
   };
 
   private handleTimeUpdate = () => {
     if (this.onTimeUpdateCallback) {
       this.onTimeUpdateCallback(this.audioElement.currentTime);
     }
+    this._emit('timeupdate', this.audioElement.currentTime);
+  };
+
+  private handleLoadedMetadata = () => {
+    this._emit('loadedmetadata');
+  };
+
+  private handlePlay = () => {
+    this._emit('play');
+  };
+
+  private handlePause = () => {
+    this._emit('pause');
+  };
+
+  private handleError = () => {
+    this._emit('error', this.audioElement.error);
   };
 
   /**
@@ -267,6 +311,51 @@ export class MediaElementTrack {
     } else {
       startPlayback();
     }
+  }
+
+  /**
+   * Resume playback from the current position without resetting currentTime.
+   * Reuses play()'s fade re-scheduling and AudioContext-resume machinery —
+   * passing the current position as the offset is a no-op seek that leaves
+   * playback where it was.
+   */
+  resume(): void {
+    this.play(this.currentTime);
+  }
+
+  /**
+   * Swap the audio source in place, reusing the existing <audio> element.
+   * Because the MediaElementAudioSourceNode is once-per-element, reusing the
+   * element preserves any Web Audio routing/effects across the swap.
+   *
+   * Only supported when this track owns its element (constructed from a URL
+   * string). A borrowed element (constructed from an HTMLAudioElement) warns
+   * and no-ops — swapping a consumer-owned element's src is out of contract.
+   *
+   * Peaks are coupled to the specific audio, so they are replaced (defaulting
+   * to null when omitted). Name is a label, so it updates only when provided.
+   */
+  load(source: string, opts: { peaks?: WaveformDataObject; name?: string } = {}): void {
+    if (!this.ownsElement) {
+      console.warn(
+        '[waveform-playlist] MediaElementTrack: load() is only supported for tracks that ' +
+          'own their audio element (constructed from a URL string). A track constructed from ' +
+          'an existing HTMLAudioElement cannot swap its source in place.'
+      );
+      return;
+    }
+    this._cancelFades();
+    this.audioElement.pause();
+    this.audioElement.src = source;
+    this.audioElement.load();
+    this.audioElement.currentTime = 0;
+    this._peaks = opts.peaks ?? null;
+    if (opts.name !== undefined) {
+      this._name = opts.name;
+    }
+    // The HTML load algorithm resets playbackRate to defaultPlaybackRate (1.0);
+    // re-apply the configured rate so it survives the source swap.
+    this.audioElement.playbackRate = this._playbackRate;
   }
 
   /**
@@ -391,11 +480,55 @@ export class MediaElementTrack {
   }
 
   /**
+   * Subscribe to a track lifecycle event. Multiple listeners per event are
+   * supported. Mirrors PlaylistEngine's on()/off() emitter.
+   */
+  on<K extends keyof MediaElementTrackEvents>(
+    event: K,
+    listener: MediaElementTrackEvents[K]
+  ): void {
+    if (!this._listeners.has(event)) {
+      this._listeners.set(event, new Set());
+    }
+    this._listeners.get(event)!.add(listener);
+  }
+
+  /**
+   * Unsubscribe a previously registered listener.
+   */
+  off<K extends keyof MediaElementTrackEvents>(
+    event: K,
+    listener: MediaElementTrackEvents[K]
+  ): void {
+    this._listeners.get(event)?.delete(listener);
+  }
+
+  private _emit(event: string, ...args: unknown[]): void {
+    const listeners = this._listeners.get(event);
+    if (listeners) {
+      for (const listener of listeners) {
+        try {
+          (listener as (...a: unknown[]) => void)(...args);
+        } catch (error) {
+          console.warn(
+            '[waveform-playlist] MediaElementTrack: error in event listener: ' + String(error)
+          );
+        }
+      }
+    }
+  }
+
+  /**
    * Clean up resources
    */
   dispose(): void {
     this.audioElement.removeEventListener('ended', this.handleEnded);
     this.audioElement.removeEventListener('timeupdate', this.handleTimeUpdate);
+    this.audioElement.removeEventListener('loadedmetadata', this.handleLoadedMetadata);
+    this.audioElement.removeEventListener('play', this.handlePlay);
+    this.audioElement.removeEventListener('pause', this.handlePause);
+    this.audioElement.removeEventListener('error', this.handleError);
+    this._listeners.clear();
     this._cancelFades();
     this.audioElement.pause();
 
